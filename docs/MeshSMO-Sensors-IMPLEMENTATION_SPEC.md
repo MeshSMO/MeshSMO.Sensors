@@ -2047,14 +2047,14 @@ connect -> command/stats -> local SQLite -> reconnect
 
 ### Tasks
 
-- [ ] sensor list;
-- [ ] sensor detail;
-- [ ] latest;
-- [ ] status;
+- [x] sensor list;
+- [x] sensor detail;
+- [x] latest;
+- [x] status;
 - [ ] historical query;
 - [ ] resolution=auto;
 - [ ] aggregation;
-- [ ] dashboard aggregate endpoint;
+- [x] dashboard aggregate endpoint;
 - [ ] validation;
 - [ ] rate limits;
 - [ ] OpenAPI;

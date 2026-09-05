@@ -1,5 +1,6 @@
 using MeshSMO.Sensors.Infrastructure;
 using MeshSMO.Sensors.Infrastructure.Persistence;
+using MeshSMO.Sensors.Web.Api;
 using MeshSMO.Sensors.Web.GatewayIngestion;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
@@ -75,6 +76,8 @@ app.MapGet("/api/v1/telemetry/snapshots", async Task<IResult> (
         .ToListAsync(cancellationToken);
     return Results.Ok(new { snapshots });
 });
+
+app.MapSensorApi();
 
 app.Map("/api/{**path}", () => Results.NotFound(new
 {

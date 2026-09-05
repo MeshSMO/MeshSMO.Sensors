@@ -39,7 +39,6 @@ public sealed class GatewayTelemetryApiTests : IDisposable
         builder.Services
             .AddOptions<GatewayApiOptions>()
             .Bind(builder.Configuration.GetSection(GatewayApiOptions.SectionName));
-        builder.Services.AddHostedService<Worker>();
         _app = builder.Build();
         _app.MapTelemetryApi();
         _app.StartAsync().GetAwaiter().GetResult();
