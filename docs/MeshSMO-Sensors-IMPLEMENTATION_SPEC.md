@@ -1073,6 +1073,8 @@ initial request
 
 ## 19.3. Dynamic sensor pages
 
+Реализация: registry читается на пребилде скриптом `src/web/scripts/generate-registry.mjs` (npm prebuild), который создаёт `src/web/app/generated/sensorRegistry.json`. Маршруты сенсоров рендерят контент из этого JSON напрямую — при `ssr:false` React Router запрещает `loader` в prerender-роутах.
+
 `prerender()` читает registry и генерирует URL для каждого:
 
 ```text
@@ -2070,21 +2072,21 @@ connect -> command/stats -> local SQLite -> reconnect
 
 ### Tasks
 
-- [ ] React Router Framework Mode;
-- [ ] `ssr:false`;
-- [ ] prerender;
-- [ ] sensor routes from registry;
-- [ ] SPA fallback;
-- [ ] route metadata;
-- [ ] canonical;
-- [ ] OpenGraph;
-- [ ] responsive layout;
-- [ ] semantic navigation;
-- [ ] sitemap;
-- [ ] robots.txt;
-- [ ] 404 behavior;
-- [ ] CI SEO assertions;
-- [ ] JavaScript-disabled e2e test.
+- [x] React Router Framework Mode;
+- [x] `ssr:false`;
+- [x] prerender;
+- [x] sensor routes from registry;
+- [x] SPA fallback;
+- [x] route metadata;
+- [x] canonical;
+- [x] OpenGraph;
+- [x] responsive layout;
+- [x] semantic navigation;
+- [x] sitemap;
+- [x] robots.txt;
+- [x] 404 behavior;
+- [x] CI SEO assertions;
+- [x] JavaScript-disabled e2e test.
 
 Это второй обязательный release gate.
 
