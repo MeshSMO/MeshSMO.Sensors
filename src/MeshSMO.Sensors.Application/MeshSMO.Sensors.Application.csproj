@@ -1,0 +1,7 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\MeshSMO.Sensors.Domain\MeshSMO.Sensors.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

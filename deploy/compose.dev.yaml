@@ -1,0 +1,4 @@
+services:
+  sensor-gateway:
+    devices:
+      - "${MESHCORE_HOST_DEVICE:?Set MESHCORE_HOST_DEVICE to a stable /dev/serial/by-id path}:/dev/meshcore"

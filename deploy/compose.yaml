@@ -1,0 +1,60 @@
+name: meshsmo-sensors
+
+services:
+  sensor-db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-meshsmo_sensors}
+      POSTGRES_USER: ${POSTGRES_USER:-meshsmo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - sensor-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  sensor-migrator:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.dbmigrator
+    environment:
+      ConnectionStrings__Sensors: Host=sensor-db;Port=5432;Database=${POSTGRES_DB:-meshsmo_sensors};Username=${POSTGRES_USER:-meshsmo};Password=${POSTGRES_PASSWORD}
+      Registry__Directory: config/sensors
+    depends_on:
+      sensor-db:
+        condition: service_healthy
+    restart: "no"
+
+  sensor-web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+    restart: unless-stopped
+    environment:
+      ConnectionStrings__Sensors: Host=sensor-db;Port=5432;Database=${POSTGRES_DB:-meshsmo_sensors};Username=${POSTGRES_USER:-meshsmo};Password=${POSTGRES_PASSWORD}
+      Public__BaseUrl: ${PUBLIC_BASE_URL:-https://sensors.meshsmo.ru}
+    depends_on:
+      sensor-migrator:
+        condition: service_completed_successfully
+    ports:
+      - "${SENSOR_WEB_PORT:-8080}:8080"
+
+  sensor-gateway:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.gateway
+    restart: unless-stopped
+    environment:
+      ConnectionStrings__Sensors: Host=sensor-db;Port=5432;Database=${POSTGRES_DB:-meshsmo_sensors};Username=${POSTGRES_USER:-meshsmo};Password=${POSTGRES_PASSWORD}
+      MeshCore__Device: /dev/meshcore
+      MeshCore__ReconnectDelay: 5s
+      Polling__MaxConcurrentPolls: 1
+    depends_on:
+      sensor-migrator:
+        condition: service_completed_successfully
+
+volumes:
+  sensor-db-data:

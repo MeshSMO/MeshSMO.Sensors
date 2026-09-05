@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/web/package-lock.json
+      - run: dotnet tool restore
+      - run: dotnet restore MeshSMO.Sensors.slnx
+      - run: dotnet build MeshSMO.Sensors.slnx --configuration Release --no-restore
+      - run: dotnet test MeshSMO.Sensors.slnx --configuration Release --no-build
+      - run: dotnet run --project src/MeshSMO.Sensors.DbMigrator --configuration Release --no-build -- --validate-registry
+      - run: npm ci
+        working-directory: src/web
+      - run: npm run typecheck
+        working-directory: src/web
+      - run: npm run lint
+        working-directory: src/web
+      - run: npm test
+        working-directory: src/web
+      - run: npm run build
+        working-directory: src/web
+
+  container-builds:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    strategy:
+      matrix:
+        dockerfile: [web, gateway, dbmigrator]
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker build --file deploy/Dockerfile.${{ matrix.dockerfile }} .

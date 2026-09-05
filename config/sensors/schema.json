@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sensors.meshsmo.ru/schemas/sensor-registry-v1.json",
+  "title": "MeshSMO sensor registry entry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "slug", "displayName", "mesh", "polling", "public", "metrics"],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "slug": { "type": "string", "pattern": "^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){1,61}[a-z0-9]$" },
+    "displayName": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "mesh": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["publicKey", "protocol"],
+      "properties": {
+        "publicKey": { "type": "string", "minLength": 1 },
+        "protocol": { "type": "string", "minLength": 1 }
+      }
+    },
+    "polling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["interval", "timeout", "maxAttempts", "enabled"],
+      "properties": {
+        "interval": { "$ref": "#/$defs/duration" },
+        "timeout": { "$ref": "#/$defs/duration" },
+        "maxAttempts": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "public": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["visible", "indexable"],
+      "properties": {
+        "visible": { "type": "boolean" },
+        "indexable": { "type": "boolean" }
+      }
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["latitude", "longitude", "precision"],
+      "properties": {
+        "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+        "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
+        "precision": { "type": "string", "minLength": 1 }
+      }
+    },
+    "metrics": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$" }
+    }
+  },
+  "$defs": {
+    "duration": {
+      "type": "string",
+      "pattern": "^[0-9]+(?:ms|s|m|h|d)$"
+    }
+  }
+}

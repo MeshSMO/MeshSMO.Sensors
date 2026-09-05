@@ -1,0 +1,107 @@
+using MeshSMO.Sensors.Application.Abstractions;
+using MeshSMO.Sensors.Application.Registry;
+using MeshSMO.Sensors.Domain.Sensors;
+using MeshSMO.Sensors.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+
+namespace MeshSMO.Sensors.Infrastructure.Registry;
+
+public sealed class SensorRegistrySynchronizer(
+    ISensorRegistry registry,
+    SensorsDbContext dbContext,
+    IClock clock) : ISensorRegistrySynchronizer
+{
+    public async Task<SensorRegistrySyncResult> SynchronizeAsync(CancellationToken cancellationToken)
+    {
+        var definitions = await registry.LoadAsync(cancellationToken);
+        var ids = definitions.Select(definition => definition.Id).ToArray();
+        var existing = await dbContext.Sensors
+            .Include(sensor => sensor.Metrics)
+            .Where(sensor => ids.Contains(sensor.Id))
+            .ToDictionaryAsync(sensor => sensor.Id, cancellationToken);
+
+        var added = 0;
+        var updated = 0;
+        var now = clock.UtcNow;
+
+        foreach (var definition in definitions)
+        {
+            if (!existing.TryGetValue(definition.Id, out var sensor))
+            {
+                sensor = CreateSensor(definition, now);
+                dbContext.Sensors.Add(sensor);
+                added++;
+                continue;
+            }
+
+            if (!Matches(sensor, definition))
+            {
+                Apply(sensor, definition, now);
+                updated++;
+            }
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return new SensorRegistrySyncResult(added, updated, definitions.Count);
+    }
+
+    private static Sensor CreateSensor(SensorDefinition definition, DateTimeOffset now) =>
+        new(
+            definition.Id,
+            definition.Slug,
+            definition.DisplayName,
+            definition.Description,
+            definition.MeshPublicKey,
+            definition.ProtocolId,
+            definition.PollInterval,
+            definition.PollTimeout,
+            definition.PollMaxAttempts,
+            definition.Enabled,
+            definition.PublicVisible,
+            definition.PublicIndexable,
+            definition.Latitude,
+            definition.Longitude,
+            definition.LocationPrecision,
+            definition.Metrics,
+            now);
+
+    private static void Apply(Sensor sensor, SensorDefinition definition, DateTimeOffset now) =>
+        sensor.ApplyConfiguration(
+            definition.Slug,
+            definition.DisplayName,
+            definition.Description,
+            definition.MeshPublicKey,
+            definition.ProtocolId,
+            definition.PollInterval,
+            definition.PollTimeout,
+            definition.PollMaxAttempts,
+            definition.Enabled,
+            definition.PublicVisible,
+            definition.PublicIndexable,
+            definition.Latitude,
+            definition.Longitude,
+            definition.LocationPrecision,
+            definition.Metrics,
+            now);
+
+    private static bool Matches(Sensor sensor, SensorDefinition definition) =>
+        sensor.Slug == definition.Slug
+        && sensor.DisplayName == definition.DisplayName.Trim()
+        && sensor.Description == Normalize(definition.Description)
+        && sensor.MeshPublicKey == definition.MeshPublicKey.Trim()
+        && sensor.ProtocolId == definition.ProtocolId.Trim()
+        && sensor.PollIntervalSeconds == (int)definition.PollInterval.TotalSeconds
+        && sensor.PollTimeoutSeconds == (int)definition.PollTimeout.TotalSeconds
+        && sensor.PollMaxAttempts == definition.PollMaxAttempts
+        && sensor.Enabled == definition.Enabled
+        && sensor.PublicVisible == definition.PublicVisible
+        && sensor.PublicIndexable == definition.PublicIndexable
+        && sensor.Latitude == definition.Latitude
+        && sensor.Longitude == definition.Longitude
+        && sensor.LocationPrecision == Normalize(definition.LocationPrecision)
+        && sensor.Metrics.Select(metric => metric.MetricKey).ToHashSet(StringComparer.Ordinal)
+            .SetEquals(definition.Metrics);
+
+    private static string? Normalize(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+}
