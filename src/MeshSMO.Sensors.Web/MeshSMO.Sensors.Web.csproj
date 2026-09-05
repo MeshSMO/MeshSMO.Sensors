@@ -1,10 +1,21 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
+  <PropertyGroup>
+    <TypeScriptCompileBlocked>true</TypeScriptCompileBlocked>
+    <SpaRoot>..\web\</SpaRoot>
+    <SpaProxyServerUrl>http://localhost:5173</SpaProxyServerUrl>
+    <SpaProxyLaunchCommand>npm run dev</SpaProxyLaunchCommand>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\MeshSMO.Sensors.Application\MeshSMO.Sensors.Application.csproj" />
     <ProjectReference Include="..\MeshSMO.Sensors.Infrastructure\MeshSMO.Sensors.Infrastructure.csproj" />
+    <ProjectReference Include="..\web\MeshSMO.Sensors.Web.Client.esproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.SpaProxy" />
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
   </ItemGroup>
 </Project>

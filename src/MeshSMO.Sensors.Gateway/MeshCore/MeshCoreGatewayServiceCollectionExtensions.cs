@@ -1,0 +1,97 @@
+using MeshSMO.Sensors.Gateway.LocalStorage;
+using Microsoft.Extensions.Options;
+
+namespace MeshSMO.Sensors.Gateway.MeshCore;
+
+public static class MeshCoreGatewayServiceCollectionExtensions
+{
+    public static IServiceCollection AddMeshCoreGateway(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services
+            .AddOptions<MeshCoreOptions>()
+            .Bind(configuration.GetSection(MeshCoreOptions.SectionName))
+            .Validate(
+                static options => options.ReconnectDelaySeconds > 0,
+                "MeshCore:ReconnectDelaySeconds must be greater than zero.")
+            .Validate(
+                static options => options.TelemetryCollectionIntervalSeconds >= 60,
+                "MeshCore:TelemetryCollectionIntervalSeconds must be at least 60 seconds.")
+            .Validate(
+                static options => options.Mode != MeshCoreConnectionMode.Http ||
+                    options.Http.BaseAddress is { IsAbsoluteUri: true },
+                "MeshCore:Http:BaseAddress must be an absolute URI in HTTP mode.")
+            .Validate(
+                static options => options.Mode != MeshCoreConnectionMode.Http ||
+                    options.Http.BaseAddress?.Scheme == Uri.UriSchemeHttps,
+                "MeshCore:Http:BaseAddress must use HTTPS in HTTP mode.")
+            .Validate(
+                static options => options.Mode != MeshCoreConnectionMode.Http ||
+                    !string.IsNullOrWhiteSpace(options.Http.AdminPassword),
+                "MeshCore:Http:AdminPassword is required in HTTP mode.")
+            .Validate(
+                static options => options.Http.TimeoutSeconds > 0,
+                "MeshCore:Http:TimeoutSeconds must be greater than zero.")
+            .Validate(
+                static options => options.Mode != MeshCoreConnectionMode.Serial ||
+                    !string.IsNullOrWhiteSpace(options.Serial.PortName),
+                "MeshCore:Serial:PortName is required in Serial mode.")
+            .Validate(
+                static options => options.Serial.BaudRate > 0,
+                "MeshCore:Serial:BaudRate must be greater than zero.")
+            .Validate(
+                static options => options.Serial.CommandTimeoutSeconds > 0,
+                "MeshCore:Serial:CommandTimeoutSeconds must be greater than zero.")
+            .ValidateOnStart();
+
+        services
+            .AddOptions<LocalTelemetryOptions>()
+            .Bind(configuration.GetSection(LocalTelemetryOptions.SectionName))
+            .Validate(
+                static options => !string.IsNullOrWhiteSpace(options.DatabasePath),
+                "LocalTelemetry:DatabasePath is required.")
+            .ValidateOnStart();
+        services.AddSingleton<ILocalTelemetryStore, SqliteLocalTelemetryStore>();
+
+        services
+            .AddHttpClient<IMeshCoreTelClient, MeshCoreTelHttpClient>((serviceProvider, client) =>
+            {
+                var options = serviceProvider.GetRequiredService<IOptions<MeshCoreOptions>>().Value.Http;
+                client.BaseAddress = NormalizeBaseAddress(options.BaseAddress ?? new Uri("https://127.0.0.1/"));
+                client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+            })
+            .ConfigurePrimaryHttpMessageHandler(serviceProvider =>
+            {
+                var options = serviceProvider.GetRequiredService<IOptions<MeshCoreOptions>>().Value.Http;
+                var handler = new HttpClientHandler();
+                if (options.AllowInvalidServerCertificate)
+                {
+                    handler.ServerCertificateCustomValidationCallback =
+                        HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+                }
+
+                return handler;
+            });
+
+        services.AddTransient<RepeaterSerialClient>();
+        services.AddTransient<DisabledRepeaterClient>();
+        services.AddTransient<IRepeaterClient>(serviceProvider =>
+        {
+            var mode = serviceProvider.GetRequiredService<IOptions<MeshCoreOptions>>().Value.Mode;
+            return mode switch
+            {
+                MeshCoreConnectionMode.Http => serviceProvider.GetRequiredService<IMeshCoreTelClient>(),
+                MeshCoreConnectionMode.Serial => serviceProvider.GetRequiredService<RepeaterSerialClient>(),
+                _ => serviceProvider.GetRequiredService<DisabledRepeaterClient>(),
+            };
+        });
+
+        return services;
+    }
+
+    private static Uri NormalizeBaseAddress(Uri baseAddress)
+    {
+        return new Uri($"{baseAddress.AbsoluteUri.TrimEnd('/')}/", UriKind.Absolute);
+    }
+}

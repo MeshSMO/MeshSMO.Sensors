@@ -11,6 +11,12 @@
     <Project Path="src/MeshSMO.Sensors.Infrastructure/MeshSMO.Sensors.Infrastructure.csproj" />
     <Project Path="src/MeshSMO.Sensors.Web/MeshSMO.Sensors.Web.csproj" />
   </Folder>
+  <Folder Name="/src/web/">
+    <Project Path="src/web/MeshSMO.Sensors.Web.Client.esproj">
+      <Build />
+      <Deploy />
+    </Project>
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/MeshSMO.Sensors.ProtocolTests/MeshSMO.Sensors.ProtocolTests.csproj" />
     <Project Path="tests/MeshSMO.Sensors.UnitTests/MeshSMO.Sensors.UnitTests.csproj" />

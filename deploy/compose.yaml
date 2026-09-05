@@ -36,6 +36,8 @@ services:
     environment:
       ConnectionStrings__Sensors: Host=sensor-db;Port=5432;Database=${POSTGRES_DB:-meshsmo_sensors};Username=${POSTGRES_USER:-meshsmo};Password=${POSTGRES_PASSWORD}
       Public__BaseUrl: ${PUBLIC_BASE_URL:-https://sensors.meshsmo.ru}
+      Gateway__BaseUrl: http://sensor-gateway:8080
+      Gateway__ApiKey: ${GATEWAY_API_KEY:-}
     depends_on:
       sensor-migrator:
         condition: service_completed_successfully
@@ -48,13 +50,19 @@ services:
       dockerfile: deploy/Dockerfile.gateway
     restart: unless-stopped
     environment:
-      ConnectionStrings__Sensors: Host=sensor-db;Port=5432;Database=${POSTGRES_DB:-meshsmo_sensors};Username=${POSTGRES_USER:-meshsmo};Password=${POSTGRES_PASSWORD}
-      MeshCore__Device: /dev/meshcore
-      MeshCore__ReconnectDelay: 5s
-      Polling__MaxConcurrentPolls: 1
-    depends_on:
-      sensor-migrator:
-        condition: service_completed_successfully
+      Gateway__ApiKey: ${GATEWAY_API_KEY:-}
+      MeshCore__Mode: ${MESHCORE_MODE:-Disabled}
+      MeshCore__ReconnectDelaySeconds: 5
+      MeshCore__TelemetryCollectionIntervalSeconds: 60
+      MeshCore__Http__BaseAddress: ${MESHCORE_HTTP_BASE_ADDRESS:-}
+      MeshCore__Http__AdminPassword: ${MESHCORE_HTTP_ADMIN_PASSWORD:-}
+      MeshCore__Http__AllowInvalidServerCertificate: ${MESHCORE_HTTP_ALLOW_INVALID_CERTIFICATE:-false}
+      MeshCore__Serial__PortName: /dev/meshcore
+      MeshCore__Serial__BaudRate: 115200
+      LocalTelemetry__DatabasePath: /app/data/gateway-telemetry.db
+    volumes:
+      - sensor-gateway-data:/app/data
 
 volumes:
   sensor-db-data:
+  sensor-gateway-data:

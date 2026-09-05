@@ -22,12 +22,12 @@ jobs:
           cache: npm
           cache-dependency-path: src/web/package-lock.json
       - run: dotnet tool restore
+      - run: npm ci
+        working-directory: src/web
       - run: dotnet restore MeshSMO.Sensors.slnx
       - run: dotnet build MeshSMO.Sensors.slnx --configuration Release --no-restore
       - run: dotnet test MeshSMO.Sensors.slnx --configuration Release --no-build
       - run: dotnet run --project src/MeshSMO.Sensors.DbMigrator --configuration Release --no-build -- --validate-registry
-      - run: npm ci
-        working-directory: src/web
       - run: npm run typecheck
         working-directory: src/web
       - run: npm run lint

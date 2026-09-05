@@ -39,7 +39,7 @@ export default function Home() {
           </div>
           <p>
             Реестр датчиков и хранилище уже заложены в архитектуру. Публичные
-            измерения появятся после подключения первого MeshCore Companion.
+            измерения появятся после подключения первого MeshCoreTel Repeater.
           </p>
         </section>
       </main>

@@ -15,11 +15,13 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        var connectionString = configuration.GetConnectionString("Sensors")
-            ?? throw new InvalidOperationException("Connection string 'Sensors' is required.");
-
         services.AddSensorRegistry(configuration);
-        services.AddDbContext<SensorsDbContext>(options => options.UseNpgsql(connectionString));
+        services.AddDbContext<SensorsDbContext>(options =>
+        {
+            var connectionString = configuration.GetConnectionString("Sensors")
+                ?? throw new InvalidOperationException("Connection string 'Sensors' is required when the database is accessed.");
+            options.UseNpgsql(connectionString);
+        });
         services.AddScoped<ISensorRegistrySynchronizer, SensorRegistrySynchronizer>();
         services.AddScoped<ISensorRepository, SensorRepository>();
         services.AddScoped<IMeasurementRepository, MeasurementRepository>();

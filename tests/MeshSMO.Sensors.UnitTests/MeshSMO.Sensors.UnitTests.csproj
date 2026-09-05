@@ -1,11 +1,15 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
@@ -18,6 +22,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\MeshSMO.Sensors.Domain\MeshSMO.Sensors.Domain.csproj" />
     <ProjectReference Include="..\..\src\MeshSMO.Sensors.Application\MeshSMO.Sensors.Application.csproj" />
+    <ProjectReference Include="..\..\src\MeshSMO.Sensors.Gateway\MeshSMO.Sensors.Gateway.csproj" />
+    <ProjectReference Include="..\..\src\MeshSMO.Sensors.Web\MeshSMO.Sensors.Web.csproj" />
     <ProjectReference Include="..\..\src\MeshSMO.Sensors.Infrastructure\MeshSMO.Sensors.Infrastructure.csproj" />
   </ItemGroup>
 

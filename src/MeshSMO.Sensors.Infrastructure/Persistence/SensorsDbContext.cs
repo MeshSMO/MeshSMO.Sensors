@@ -13,6 +13,8 @@ public sealed class SensorsDbContext(DbContextOptions<SensorsDbContext> options)
     public DbSet<MeasurementValue> MeasurementValues => Set<MeasurementValue>();
     public DbSet<PollAttempt> PollAttempts => Set<PollAttempt>();
     public DbSet<SensorStatusSnapshot> SensorStatuses => Set<SensorStatusSnapshot>();
+    public DbSet<GatewayTelemetrySnapshot> GatewayTelemetrySnapshots => Set<GatewayTelemetrySnapshot>();
+    public DbSet<GatewayTelemetryReading> GatewayTelemetryReadings => Set<GatewayTelemetryReading>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -20,6 +22,7 @@ public sealed class SensorsDbContext(DbContextOptions<SensorsDbContext> options)
         ConfigureMeasurements(modelBuilder);
         ConfigurePollAttempts(modelBuilder);
         ConfigureSensorStatus(modelBuilder);
+        ConfigureGatewayTelemetry(modelBuilder);
     }
 
     private static void ConfigureSensor(ModelBuilder modelBuilder)
@@ -138,5 +141,32 @@ public sealed class SensorsDbContext(DbContextOptions<SensorsDbContext> options)
         status.Property(entity => entity.LastSnr).HasColumnName("last_snr");
         status.Property(entity => entity.UpdatedAt).HasColumnName("updated_at");
         status.HasOne<Sensor>().WithOne().HasForeignKey<SensorStatusSnapshot>(entity => entity.SensorId).OnDelete(DeleteBehavior.Cascade);
+    }
+    private static void ConfigureGatewayTelemetry(ModelBuilder modelBuilder)
+    {
+        var snapshot = modelBuilder.Entity<GatewayTelemetrySnapshot>();
+        snapshot.ToTable("gateway_telemetry_snapshots");
+        snapshot.HasKey(entity => entity.Id);
+        snapshot.Property(entity => entity.Id).HasColumnName("id");
+        snapshot.Property(entity => entity.GatewaySnapshotId).HasColumnName("gateway_snapshot_id");
+        snapshot.Property(entity => entity.CapturedAt).HasColumnName("captured_at");
+        snapshot.Property(entity => entity.ImportedAt).HasColumnName("imported_at");
+        snapshot.Property(entity => entity.Transport).HasColumnName("transport").HasMaxLength(64);
+        snapshot.Property(entity => entity.PayloadJson).HasColumnName("payload_json").HasColumnType("jsonb");
+        snapshot.HasIndex(entity => entity.GatewaySnapshotId).IsUnique().HasDatabaseName("ux_gateway_telemetry_gateway_snapshot_id");
+        snapshot.HasIndex(entity => entity.CapturedAt).HasDatabaseName("ix_gateway_telemetry_snapshots_captured_at");
+
+        var reading = modelBuilder.Entity<GatewayTelemetryReading>();
+        reading.ToTable("gateway_telemetry_readings");
+        reading.HasKey(entity => new { entity.SnapshotId, entity.MetricKey });
+        reading.Property(entity => entity.SnapshotId).HasColumnName("snapshot_id");
+        reading.Property(entity => entity.MetricKey).HasColumnName("metric_key").HasMaxLength(128);
+        reading.Property(entity => entity.NumericValue).HasColumnName("numeric_value");
+        reading.Property(entity => entity.TextValue).HasColumnName("text_value");
+        reading.HasIndex(entity => entity.MetricKey).HasDatabaseName("ix_gateway_telemetry_readings_metric_key");
+        snapshot.HasMany(entity => entity.Readings)
+            .WithOne()
+            .HasForeignKey(entity => entity.SnapshotId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

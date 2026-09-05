@@ -11,8 +11,8 @@
 
 Система состоит из трёх постоянно работающих контейнеров:
 
-1. **`sensor-gateway`** — .NET Worker, единственный компонент с доступом к физическому MeshCore Companion устройству. Планирует опрос датчиков, отправляет pull-запросы через LoRa MeshCore, разбирает ответы и пишет измерения в PostgreSQL.
-2. **`sensor-web`** — ASP.NET Core BFF + собранный React frontend. Отдаёт API, статические/prerendered HTML-файлы React Router и SPA fallback.
+1. **`sensor-gateway`** — .NET Worker, единственный компонент с доступом к MeshCoreTel Repeater. Собирает телеметрию через локальный HTTPS API либо USB Serial CLI, сохраняет её в локальную SQLite outbox и отдаёт накопленные snapshots по внутреннему HTTP API сервису `sensor-web`. **PostgreSQL-доступа у gateway нет.**
+2. **`sensor-web`** — ASP.NET Core BFF + собранный React frontend. Забирает телеметрию из gateway по внутреннему API, сохраняет её в PostgreSQL и отдаёт API, статические/prerendered HTML-файлы React Router и SPA fallback.
 3. **`sensor-db`** — PostgreSQL.
 
 React **не имеет отдельного production runtime**. Node.js используется только на этапе build.
@@ -35,20 +35,18 @@ React **не имеет отдельного production runtime**. Node.js ис�
                       | PostgreSQL        |
                       +---------^---------+
                                 |
-                         write  |
+                         flush  |
                   +-------------+-------------+
                   | sensor-gateway            |
                   | .NET Worker               |
-                  | Polling + MeshCore I/O    |
+                  | Polling + SQLite outbox   |
                   +-------------+-------------+
                                 |
-                        USB / Serial
+                         HTTPS / USB
                                 |
-                         MeshCore Companion
+                       MeshCoreTel Repeater
                                 |
-                             LoRa Mesh
-                     /          |          \
-                  Sensor A   Sensor B   Sensor C
+                    local stats / sensors
 ```
 
 Архитектурная идея: **LoRa/serial никогда не протекают в BFF**, frontend никогда не общается с gateway напрямую, а web можно обновлять/перезапускать без остановки сбора телеметрии.
@@ -63,7 +61,8 @@ React **не имеет отдельного production runtime**. Node.js ис�
 
 - хранить реестр датчиков;
 - регулярно опрашивать pull-only датчики;
-- работать с MeshCore Companion через физическое serial/USB устройство;
+- работать с MeshCoreTel Repeater через HTTPS API или физический serial/USB CLI;
+- сохранять полученные snapshots и показания в локальную durable SQLite outbox;
 - коррелировать запросы и ответы;
 - иметь timeout/retry/backoff;
 - хранить историю измерений;
@@ -249,8 +248,9 @@ Gateway-specific orchestration можно держать либо здесь, л
 
 - `BackgroundService`;
 - poll scheduler;
-- MeshCore Companion transport;
-- serial framing;
+- MeshCoreTel HTTPS transport;
+- MeshCoreTel serial CLI transport;
+- локальную SQLite outbox;
 - request correlation;
 - sensor protocol codecs;
 - retry/timeout;
@@ -342,41 +342,100 @@ metrics:
 
 ---
 
-# 7. Mesh transport и sensor protocol
+# 7. Repeater transport и sensor protocol
 
 Критическая граница:
 
 ```text
-MeshCore transport != Sensor protocol
+Repeater transport != Sensor protocol
 ```
 
-## 7.1. `IMeshTransport`
+## 7.1. `IRepeaterClient`
 
 Пример контракта:
 
 ```csharp
-public interface IMeshTransport
+public interface IRepeaterClient
 {
-    Task StartAsync(CancellationToken cancellationToken);
+    string TransportName { get; }
 
-    Task<SendResult> SendAsync(
-        MeshNodeAddress destination,
-        ReadOnlyMemory<byte> payload,
+    Task ConnectAsync(CancellationToken cancellationToken);
+    Task DisconnectAsync(CancellationToken cancellationToken);
+
+    Task<string> ExecuteCommandAsync(
+        string command,
         CancellationToken cancellationToken);
 
-    IAsyncEnumerable<MeshInboundPacket> ReadPacketsAsync(
+    Task<JsonDocument> GetTelemetryAsync(
         CancellationToken cancellationToken);
 }
 ```
 
-Реализация:
+Реализации:
 
 ```text
-MeshCoreCompanionTransport
-    -> SerialPort
-    -> MeshCore Companion framing
-    -> inbound event stream
+MeshCoreTelHttpClient
+    -> HTTPS API
+
+RepeaterSerialClient
+    -> USB SerialPort
+    -> text CLI
 ```
+
+### 7.1.1. MeshCoreTel HTTP mode
+
+Для устройств с MeshCoreTel-firmware Gateway также поддерживает локальный HTTPS API прошивки:
+
+```text
+MeshCoreTelHttpClient
+    -> POST /login
+    -> X-Auth-Token
+    -> POST /api/command
+    -> GET /api/stats
+```
+
+Этот режим предназначен для удалённого CLI, диагностики и статистики. Клиент:
+
+- выполняет не более одного HTTP-запроса к устройству одновременно;
+- повторно аутентифицируется и повторяет запрос один раз после `401`;
+- поддерживает self-signed сертификат только через явную настройку;
+- ограничивает размер команды согласно буферу прошивки;
+- не публикует пароль или session token в логах.
+
+### 7.1.2. MeshCoreTel Serial mode
+
+Serial mode отправляет CLI-команду, завершённую `CR`, и читает ответ после маркера `->`. Телеметрия собирается командами `stats-core`, `stats-radio`, `stats-packets` и `sensor list`. Многостраничный `sensor list` дочитывается по маркеру `... next:<index>`.
+
+### 7.1.3. Ограничение Repeater API
+
+Текущие HTTP и serial CLI интерфейсы репитера не предоставляют Companion binary request/response API. Они подходят для телеметрии самого репитера и встроенных датчиков. Исходное требование опроса удалённых pull-only LoRa sensors нельзя реализовать только через эти интерфейсы: для него потребуется специальный endpoint в прошивке либо отдельное устройство, способное инициировать MeshCore requests.
+
+### 7.1.4. Локальная SQLite outbox
+
+Каждый опрос атомарно сохраняется в:
+
+- `telemetry_snapshots` — время, transport и исходный JSON;
+- `telemetry_readings` — плоские numeric/text значения с ключами наподобие `core.battery_mv` и `sensors.temperature`.
+
+Записи удаляются только после успешной публикации в основное хранилище (`AcknowledgeAsync`). Незавершённая очередь переживает рестарт Gateway.
+
+### 7.1.5. Gateway telemetry API
+
+Gateway не имеет доступа к PostgreSQL. Забирает данные из outbox основной backend (`sensor-web`) по внутреннему HTTP API gateway:
+
+```text
+GET  /api/telemetry/pending?maxCount=N   -> { pendingCount, snapshots: [{ id, capturedAt, transport, payloadJson, readings[] }] }
+POST /api/telemetry/ack                  -> { ids: [...] } — удалить подтверждённые snapshot'ы из outbox
+GET  /health/live, /health/ready
+```
+
+Правила канала:
+
+- gateway слушает только внутреннюю Docker network, наружу порт не публикуется;
+- опциональный общий секрет `Gateway:ApiKey` проверяется по заголовку `X-Api-Key`;
+- batch ограничен `Gateway:MaximumBatchSize`;
+- ack отправляется только после успешной записи батча в PostgreSQL;
+- идемпотентность обеспечивается уникальным `gateway_snapshot_id` в PostgreSQL: повторно доставленный snapshot пропускается, а не дублируется.
 
 ## 7.2. `ISensorProtocol`
 
@@ -1431,8 +1490,27 @@ PostgreSQL порт наружу по умолчанию не публикова
 
 ```text
 ConnectionStrings__Sensors=...
-MeshCore__Device=/dev/meshcore
-MeshCore__ReconnectDelay=5s
+MeshCore__Mode=Http
+MeshCore__ReconnectDelaySeconds=5
+MeshCore__TelemetryCollectionIntervalSeconds=60
+MeshCore__Http__BaseAddress=https://192.168.1.123
+MeshCore__Http__AdminPassword=...
+MeshCore__Http__AllowInvalidServerCertificate=true
+MeshCore__Http__TimeoutSeconds=15
+MeshCore__Serial__PortName=/dev/serial/by-id/usb-...
+MeshCore__Serial__BaudRate=115200
+MeshCore__Serial__CommandTimeoutSeconds=10
+LocalTelemetry__DatabasePath=data/gateway-telemetry.db
+Gateway__ApiKey=...
+```
+
+sensor-web:
+
+```text
+ConnectionStrings__Sensors=...
+Gateway__BaseUrl=http://sensor-gateway:8080
+Gateway__ApiKey=...
+Gateway__PollIntervalSeconds=15
 Polling__MaxConcurrentPolls=1
 Public__BaseUrl=https://sensors.meshsmo.ru
 ```
@@ -1461,23 +1539,11 @@ Ready проверяет:
 
 ## `sensor-gateway`
 
-Liveness не должен падать только потому, что один датчик offline.
-
-Отдельные health components:
+Liveness не должен падать только потому, что один датчик offline. Слушает только внутреннюю сеть.
 
 ```text
-process
-database
-meshcore_serial
-meshcore_session
-```
-
-Итого можно иметь:
-
-```text
-Healthy
-Degraded
-Unhealthy
+/health/live
+/health/ready
 ```
 
 Container restart полезен при зависшем gateway process, но не должен запускать restart loop из-за временного отсутствия LoRa sensor.
@@ -1744,7 +1810,7 @@ malformed payload -> expected error
 Обязателен fake transport:
 
 ```text
-FakeMeshTransport
+FakeRepeaterClient
 ```
 
 Сценарии:
@@ -1812,11 +1878,13 @@ JavaScript disabled
 
 Решение: один repo, два deployable .NET apps + React + migrator.
 
-## ADR-002 — Direct DB access
+## ADR-002 — Gateway без прямого доступа к БД
 
-Gateway пишет напрямую в PostgreSQL, BFF читает напрямую.
+Gateway не подключается к PostgreSQL: он пишет только в локальную SQLite outbox и отдаёт snapshots по внутреннему API. `sensor-web` забирает телеметрию из gateway фоновым ingestion-сервисом и пишет в PostgreSQL.
 
-Причина: сбор данных не зависит от availability web слоя.
+Причина: gateway остаётся изолированным от основного хранилища (меньше поверхности атаки и прав доступа), а надёжность доставки обеспечивает outbox + ack с идемпотентной записью на стороне web.
+
+Пересмотреть при: multiple gateways / заметных накладных расходах pull-модели.
 
 ## ADR-003 — No broker in v1
 
@@ -1916,27 +1984,29 @@ Sensor registry загружается и синхронизируется с Po
 
 ---
 
-# 52. Phase 3 — MeshCore gateway spike
+# 52. Phase 3 — MeshCoreTel Repeater gateway spike
 
 ### Результат
 
 Console/Worker может:
 
 ```text
-connect -> send -> receive -> reconnect
+connect -> command/stats -> local SQLite -> reconnect
 ```
 
-с реальным MeshCore Companion.
+с реальным MeshCoreTel Repeater.
 
 ### Tasks
 
-- [ ] serial discovery/config;
-- [ ] stable device path;
-- [ ] Companion framing;
-- [ ] packet receive loop;
-- [ ] reconnect;
-- [ ] cancellation;
-- [ ] fake transport;
+- [x] HTTP configuration/client;
+- [x] HTTP session and `401` reauthentication;
+- [x] serial configuration/client;
+- [x] stable device path configuration;
+- [x] serial CLI response parsing;
+- [x] reconnect;
+- [x] cancellation;
+- [x] local SQLite outbox;
+- [x] fake transport test;
 - [ ] integration test с реальным hardware вручную;
 - [ ] записать hardware setup в `operations.md`.
 
@@ -2099,7 +2169,7 @@ connect -> send -> receive -> reconnect
 MVP считается готовым, если:
 
 1. один или больше реальных датчиков описаны в registry;
-2. gateway после запуска самостоятельно соединяется с MeshCore Companion;
+2. gateway после запуска самостоятельно соединяется с MeshCoreTel Repeater;
 3. датчики регулярно опрашиваются;
 4. timeout одного датчика не ломает polling остальных;
 5. успешные measurements пишутся в PostgreSQL;
@@ -2166,11 +2236,11 @@ MVP считается готовым, если:
 
 # 63. Критические технические риски
 
-## Risk A — MeshCore transport semantics
+## Risk A — Repeater transport semantics
 
-Самая неизвестная часть — реальное поведение Companion transport, framing, inbound events и correlation.
+HTTP и serial CLI репитера не умеют инициировать произвольный Companion binary request к удалённому pull-only sensor.
 
-**Mitigation:** отдельный spike до scheduler.
+**Mitigation:** сначала подтвердить acquisition path на реальном железе; при необходимости добавить endpoint в прошивку либо отдельный request-capable radio.
 
 ## Risk B — LoRa airtime
 
@@ -2214,7 +2284,7 @@ Gateway и Web могут несколько секунд работать на 
 real sensor
     |
     v
-MeshCore Companion
+MeshCoreTel Repeater
     |
     v
 Gateway
@@ -2260,9 +2330,9 @@ SENS-005 Create initial EF schema
 SENS-006 Implement DbMigrator
 SENS-007 Define sensor binary protocol v1
 SENS-008 Add protocol golden tests
-SENS-009 Implement IMeshTransport
-SENS-010 Implement FakeMeshTransport
-SENS-011 MeshCore Companion hardware spike
+SENS-009 Implement IRepeaterClient
+SENS-010 Implement fake repeater client
+SENS-011 MeshCoreTel Repeater hardware spike
 SENS-012 Implement request correlation
 SENS-013 Implement poll scheduler
 SENS-014 Persist measurements
@@ -2348,19 +2418,24 @@ Frontend rendering:
   no Node SSR runtime
 
 Storage:
-  PostgreSQL
+  PostgreSQL (только sensor-web)
+
+Gateway storage:
+  SQLite outbox, выдаётся sensor-web по внутреннему HTTP API
 
 Sensor registry:
   GitOps YAML
 
 Transport:
-  MeshCore Companion behind IMeshTransport
+  MeshCoreTel Repeater HTTP/Serial behind IRepeaterClient
 
 Sensor payload:
   versioned binary protocol
 
 Data flow:
-  Sensor -> LoRa -> MeshCore -> Gateway -> PostgreSQL -> BFF -> React
+  Sensor -> LoRa -> MeshCore -> Gateway (SQLite outbox)
+        -> internal API -> sensor-web (ingestion, PostgreSQL)
+        -> BFF -> React
 ```
 
 Главный принцип реализации: **сначала надёжность acquisition pipeline, затем API, затем визуализация; SEO строится в rendering architecture с самого начала, а не добавляется react-helmet'ом в конце.**

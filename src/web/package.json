@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "react-router build",
+    "build:dotnet": "npm run typecheck && npm run build",
     "dev": "react-router dev",
     "lint": "tsc --noEmit",
     "test": "node --test",
