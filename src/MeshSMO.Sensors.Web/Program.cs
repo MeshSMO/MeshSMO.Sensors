@@ -79,6 +79,9 @@ app.MapGet("/api/v1/telemetry/snapshots", async Task<IResult> (
 
 app.MapSensorApi();
 
+app.MapSitemap();
+app.MapSensorFallbacks();
+
 app.Map("/api/{**path}", () => Results.NotFound(new
 {
     error = "NotFound",

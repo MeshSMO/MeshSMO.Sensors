@@ -3,6 +3,7 @@ WORKDIR /src/src/web
 COPY src/web/package.json src/web/package-lock.json ./
 RUN npm ci
 COPY src/web/ ./
+COPY config/ /src/config/
 RUN npm run build
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS backend

@@ -7,6 +7,9 @@ const backendUrl =
 
 export default defineConfig({
   plugins: [reactRouter()],
+  define: {
+    "process.env.PUBLIC_BASE_URL": JSON.stringify(process.env.PUBLIC_BASE_URL ?? "https://sensors.meshsmo.ru"),
+  },
   resolve: {
     tsconfigPaths: true,
   },
