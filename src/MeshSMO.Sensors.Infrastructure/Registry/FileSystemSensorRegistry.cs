@@ -176,13 +176,13 @@ public sealed partial class FileSystemSensorRegistry(
         var resolved = raw.Contains('$')
             ? EnvironmentReferenceRegex().Replace(raw, match =>
             {
-                var name = match.Groups[1].Value;
+                var name = match.Groups["name"].Value;
                 var value = _environmentVariableLookup(name);
                 if (value is not null)
                     return value;
 
-                if (match.Groups[2].Success)
-                    return match.Groups[2].Value;
+                if (match.Groups["default"].Success)
+                    return match.Groups["default"].Value;
 
                 errors.Add(
                     $"{source}: mesh.loginPassword references environment variable '{name}' that is not set. " +
@@ -305,7 +305,7 @@ public sealed partial class FileSystemSensorRegistry(
     private static partial Regex MetricKeyPattern();
 
 #pragma warning disable MA0009
-    [GeneratedRegex(@"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}", RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture)]
+    [GeneratedRegex(@"\$\{(?<name>[A-Za-z_][A-Za-z0-9_]*)(?::-(?<default>[^}]*))?\}", RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture)]
 #pragma warning restore MA0009
     private static partial Regex EnvironmentReferenceRegex();
 
