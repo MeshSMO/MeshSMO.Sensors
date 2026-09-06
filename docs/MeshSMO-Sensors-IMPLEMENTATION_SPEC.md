@@ -2021,20 +2021,23 @@ connect -> command/stats -> local SQLite -> reconnect
 ### Результат
 
 Один реальный датчик регулярно опрашивается, measurements появляются в PostgreSQL.
+Реализовано (частично, см. чекбоксы): опрос идёт через acquisition API прошивки
+(`POST /api/request`, контракт — `docs/repeater-firmware-acquisition-spec.md`), protocol_id =
+`meshcore-req-lpp`: REQ = `timestamp(4 LE) + 0x03 + 0x00`, ответ = `timestamp(4) + Cayenne LPP`.
 
 ### Tasks
 
-- [ ] priority queue scheduler;
-- [ ] deterministic jitter;
-- [ ] single concurrent request;
-- [ ] timeout;
-- [ ] retry;
-- [ ] request correlation;
-- [ ] poll attempts;
-- [ ] measurement persistence;
-- [ ] graceful shutdown;
+- [ ] priority queue scheduler (сейчас — sequential round-robin по due-time);
+- [x] deterministic jitter;
+- [x] single concurrent request;
+- [x] timeout;
+- [ ] retry (сейчас один запрос на цикл);
+- [ ] request correlation (request_id = монотонный счётчик от unix time; идемпотентность через unique (sensor_id, request_id));
+- [ ] poll attempts (таблица poll_attempts пока не заполняется);
+- [x] measurement persistence;
+- [x] graceful shutdown;
 - [ ] gateway health;
-- [ ] structured logs;
+- [x] structured logs;
 - [ ] fake scenarios.
 
 Это первый end-to-end milestone.
