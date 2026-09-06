@@ -1,3 +1,4 @@
+using MeshSMO.Sensors.Application.Registry;
 using MeshSMO.Sensors.Infrastructure.Registry;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
@@ -22,12 +23,138 @@ public sealed class FileSystemSensorRegistryTests
             Assert.Equal("smolensk-center", sensor.Slug.Value);
             Assert.Equal(TimeSpan.FromMinutes(5), sensor.PollInterval);
             Assert.Equal(["temperature", "humidity"], sensor.Metrics);
+            Assert.Null(sensor.LoginPassword);
         }
         finally
         {
             Directory.Delete(directory, recursive: true);
         }
     }
+
+    [Fact]
+    public async Task LoadAsync_keeps_explicit_empty_login_password()
+    {
+        var definitions = await LoadSingleWithLoginPassword(@"loginPassword: """"");
+
+        Assert.Equal(string.Empty, definitions.LoginPassword);
+    }
+
+    [Fact]
+    public async Task LoadAsync_resolves_login_password_environment_reference()
+    {
+        var definitions = await LoadSingleWithLoginPassword(
+            @"loginPassword: ""${TEST_SENSOR_NODE_PASSWORD}""",
+            new Dictionary<string, string?> { ["TEST_SENSOR_NODE_PASSWORD"] = "hello" });
+
+        Assert.Equal("hello", definitions.LoginPassword);
+    }
+
+    [Fact]
+    public async Task LoadAsync_uses_login_password_environment_default()
+    {
+        var definitions = await LoadSingleWithLoginPassword(
+            @"loginPassword: ""${TEST_SENSOR_NODE_PASSWORD:-fallback-pass}""",
+            new Dictionary<string, string?> { ["TEST_SENSOR_NODE_PASSWORD"] = null });
+
+        Assert.Equal("fallback-pass", definitions.LoginPassword);
+    }
+
+    [Fact]
+    public async Task LoadAsync_reports_missing_login_password_environment_variable()
+    {
+        var directory = CreateTemporaryDirectory();
+        try
+        {
+            await File.WriteAllTextAsync(
+                Path.Combine(directory, "sensor.yaml"),
+                WithLoginPassword(@"loginPassword: ""${TEST_SENSOR_NODE_PASSWORD_MISSING}"""));
+            var registry = CreateRegistry(directory, new Dictionary<string, string?>());
+
+            var exception = await Assert.ThrowsAsync<SensorRegistryValidationException>(
+                () => registry.LoadAsync(CancellationToken.None));
+
+            Assert.Contains(
+                exception.Errors,
+                error => error.Contains("environment variable 'TEST_SENSOR_NODE_PASSWORD_MISSING' that is not set", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task LoadAsync_reports_login_password_exceeding_wire_limit()
+    {
+        var directory = CreateTemporaryDirectory();
+        try
+        {
+            await File.WriteAllTextAsync(
+                Path.Combine(directory, "sensor.yaml"),
+                WithLoginPassword(@"loginPassword: ""sixteen-bytes-xy"""));
+            var registry = CreateRegistry(directory, new Dictionary<string, string?>());
+
+            var exception = await Assert.ThrowsAsync<SensorRegistryValidationException>(
+                () => registry.LoadAsync(CancellationToken.None));
+
+            Assert.Contains(
+                exception.Errors,
+                error => error.Contains("must be at most 15 bytes", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task LoadAsync_reports_malformed_login_password_reference()
+    {
+        var directory = CreateTemporaryDirectory();
+        try
+        {
+            await File.WriteAllTextAsync(
+                Path.Combine(directory, "sensor.yaml"),
+                WithLoginPassword(@"loginPassword: ""${unclosed"""));
+            var registry = CreateRegistry(directory, new Dictionary<string, string?>());
+
+            var exception = await Assert.ThrowsAsync<SensorRegistryValidationException>(
+                () => registry.LoadAsync(CancellationToken.None));
+
+            Assert.Contains(
+                exception.Errors,
+                error => error.Contains("malformed or unresolved '${...}'", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static async Task<SensorDefinition> LoadSingleWithLoginPassword(
+        string loginPasswordLine,
+        Dictionary<string, string?>? environment = null)
+    {
+        var directory = CreateTemporaryDirectory();
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(directory, "sensor.yaml"), WithLoginPassword(loginPasswordLine));
+            var registry = CreateRegistry(directory, environment ?? new Dictionary<string, string?>());
+
+            return Assert.Single(await registry.LoadAsync(CancellationToken.None));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static string WithLoginPassword(string loginPasswordLine) =>
+        ValidYaml().Replace(
+            @"protocol: ""meshsmo-weather-v1""",
+            $@"protocol: ""meshsmo-weather-v1""
+  {loginPasswordLine}",
+            StringComparison.Ordinal);
 
     [Fact]
     public async Task LoadAsync_reports_duplicate_slug_before_database_write()
@@ -79,10 +206,11 @@ public sealed class FileSystemSensorRegistryTests
         }
     }
 
-    private static FileSystemSensorRegistry CreateRegistry(string directory) =>
+    private static FileSystemSensorRegistry CreateRegistry(string directory, Dictionary<string, string?>? environment = null) =>
         new(
             Options.Create(new SensorRegistryOptions { Directory = directory }),
-            new TestHostEnvironment { ContentRootPath = directory });
+            new TestHostEnvironment { ContentRootPath = directory },
+            environment is null ? null : name => environment.GetValueOrDefault(name));
 
     private static string CreateTemporaryDirectory()
     {

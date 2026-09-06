@@ -20,7 +20,13 @@ public sealed record SensorDefinition(
     string? LocationPrecision,
     IReadOnlyList<string> Metrics,
     string Source,
-    IReadOnlyList<TelemetryChannelMapping> Channels)
+    IReadOnlyList<TelemetryChannelMapping> Channels,
+    /// <summary>
+    /// Per-sensor node password for the ANON login bootstrap. <c>null</c> means
+    /// "not configured — fall back to the global SensorPolling:LoginPassword";
+    /// an empty string means "this node has no password".
+    /// </summary>
+    string? LoginPassword = null)
 {
     public SensorDefinition(
         SensorId id,
@@ -42,7 +48,7 @@ public sealed record SensorDefinition(
         string source)
         : this(id, slug, displayName, description, meshPublicKey, protocolId, pollInterval, pollTimeout,
             pollMaxAttempts, enabled, publicVisible, publicIndexable, latitude, longitude, locationPrecision,
-            metrics, source, [])
+            metrics, source, [], null)
     {
     }
 }

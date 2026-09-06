@@ -23,6 +23,10 @@ services:
     environment:
       ConnectionStrings__Sensors: Host=sensor-db;Port=5432;Database=${POSTGRES_DB:-meshsmo_sensors};Username=${POSTGRES_USER:-meshsmo};Password=${POSTGRES_PASSWORD}
       Registry__Directory: config/sensors
+    # mesh.loginPassword в config/sensors/*.yaml может ссылаться на переменные из .env (${NODE_..._PASSWORD})
+    env_file:
+      - path: .env
+        required: false
     depends_on:
       sensor-db:
         condition: service_healthy
@@ -69,6 +73,10 @@ services:
       Registry__Directory: /app/config/sensors
       SensorPolling__LoginPassword: ${SENSOR_LOGIN_PASSWORD:-}
       SensorPolling__IntervalOverrideSeconds: ${SENSOR_POLL_INTERVAL_OVERRIDE:-60}
+    # Переменные из .env нужны для ${VAR}-подстановки в mesh.loginPassword (config/sensors/*.yaml)
+    env_file:
+      - path: .env
+        required: false
     volumes:
       - sensor-gateway-data:/app/data
       - ../config:/app/config:ro

@@ -16,7 +16,12 @@
       "required": ["publicKey", "protocol"],
       "properties": {
         "publicKey": { "type": "string", "minLength": 1 },
-        "protocol": { "type": "string", "minLength": 1 }
+        "protocol": { "type": "string", "minLength": 1 },
+        "loginPassword": {
+          "type": "string",
+          "description": "Node login password; ${VAR} / ${VAR:-default} are substituted from the environment. Empty string = node has no password; omitted = fall back to the global SensorPolling:LoginPassword. Max 15 bytes of UTF-8.",
+          "maxLength": 128
+        }
       }
     },
     "polling": {
@@ -54,6 +59,30 @@
       "minItems": 1,
       "uniqueItems": true,
       "items": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$" }
+    },
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "channels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["channel", "metric"],
+            "properties": {
+              "channel": { "type": "integer", "minimum": 0, "maximum": 255 },
+              "type": {
+                "type": "string",
+                "description": "Cayenne LPP type key (e.g. 'voltage', 'temperature') or '*' for any type."
+              },
+              "metric": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$" },
+              "displayName": { "type": "string" },
+              "unit": { "type": "string" }
+            }
+          }
+        }
+      }
     }
   },
   "$defs": {

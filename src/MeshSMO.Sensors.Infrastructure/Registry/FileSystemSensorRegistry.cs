@@ -11,8 +11,16 @@ namespace MeshSMO.Sensors.Infrastructure.Registry;
 
 public sealed partial class FileSystemSensorRegistry(
     IOptions<SensorRegistryOptions> options,
-    IHostEnvironment hostEnvironment) : ISensorRegistry
+    IHostEnvironment hostEnvironment,
+    Func<string, string?>? environmentVariableLookup = null) : ISensorRegistry
 {
+    /// <summary>Wire limit: the node login password travels inside ANON_REQ as
+    /// timestamp(4) + password, 15 bytes max (docs/repeater-firmware-acquisition-spec.md §8.2).</summary>
+    private const int MaximumLoginPasswordBytes = 15;
+
+    private readonly Func<string, string?> _environmentVariableLookup =
+        environmentVariableLookup ?? Environment.GetEnvironmentVariable;
+
     private readonly IDeserializer _deserializer = new DeserializerBuilder()
         .WithNamingConvention(CamelCaseNamingConvention.Instance)
         .Build();
@@ -70,7 +78,7 @@ public sealed partial class FileSystemSensorRegistry(
         return definitions;
     }
 
-    private static SensorDefinition Parse(SensorYaml yaml, string source, ICollection<string> errors)
+    private SensorDefinition Parse(SensorYaml yaml, string source, ICollection<string> errors)
     {
         var startErrorCount = errors.Count;
 
@@ -147,6 +155,7 @@ public sealed partial class FileSystemSensorRegistry(
         }
 
         var channels = ParseTelemetryChannels(yaml.Telemetry?.Channels, source, errors);
+        var loginPassword = ResolveLoginPassword(yaml.Mesh?.LoginPassword, source, errors);
 
         var visible = yaml.Public?.Visible ?? false;
         var indexable = yaml.Public?.Indexable ?? false;
@@ -171,7 +180,59 @@ public sealed partial class FileSystemSensorRegistry(
             new SensorId(id), slug, yaml.DisplayName!.Trim(), yaml.Description,
             yaml.Mesh!.PublicKey!.Trim(), yaml.Mesh.Protocol!.Trim(), interval, timeout,
             maxAttempts, yaml.Polling!.Enabled, visible, indexable, latitude, longitude,
-            yaml.Location?.Precision, metrics, source, channels);
+            yaml.Location?.Precision, metrics, source, channels, loginPassword);
+    }
+
+    /// <summary>
+    /// Resolves <c>mesh.loginPassword</c>: <c>null</c> stays <c>null</c> (the poller
+    /// falls back to the global <c>SensorPolling:LoginPassword</c>), <c>${VAR}</c> and
+    /// <c>${VAR:-default}</c> references are substituted from the environment, anything
+    /// else is used verbatim as the node password.
+    /// </summary>
+    private string? ResolveLoginPassword(string? raw, string source, ICollection<string> errors)
+    {
+        if (raw is null)
+        {
+            return null;
+        }
+
+        var resolved = raw.Contains('$')
+            ? EnvironmentReferenceRegex().Replace(raw, match =>
+            {
+                var name = match.Groups[1].Value;
+                var value = _environmentVariableLookup(name);
+                if (value is not null)
+                {
+                    return value;
+                }
+
+                if (match.Groups[2].Success)
+                {
+                    return match.Groups[2].Value;
+                }
+
+                errors.Add(
+                    $"{source}: mesh.loginPassword references environment variable '{name}' that is not set. " +
+                    $"Set it for the gateway/dbmigrator processes (e.g. in deploy/.env) or use ${{{name}:-default}}.");
+                return string.Empty;
+            })
+            : raw;
+
+        if (resolved.Contains("${"))
+        {
+            errors.Add(
+                $"{source}: mesh.loginPassword contains a malformed or unresolved '${{...}}' reference. " +
+                "Expected format: ${VARIABLE_NAME} or ${VARIABLE_NAME:-default}.");
+        }
+
+        if (System.Text.Encoding.UTF8.GetByteCount(resolved) > MaximumLoginPasswordBytes)
+        {
+            errors.Add(
+                $"{source}: mesh.loginPassword must be at most {MaximumLoginPasswordBytes} bytes of UTF-8 " +
+                "(the node login wire limit).");
+        }
+
+        return resolved;
     }
 
     private static List<TelemetryChannelMapping> ParseTelemetryChannels(
@@ -283,6 +344,9 @@ public sealed partial class FileSystemSensorRegistry(
     [GeneratedRegex("^[a-z][a-z0-9_-]{0,63}$", RegexOptions.CultureInvariant)]
     private static partial Regex MetricKeyPattern();
 
+    [GeneratedRegex(@"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}", RegexOptions.CultureInvariant)]
+    private static partial Regex EnvironmentReferenceRegex();
+
     private sealed class SensorYaml
     {
         public string? Id { get; set; }
@@ -315,6 +379,7 @@ public sealed partial class FileSystemSensorRegistry(
     {
         public string? PublicKey { get; set; }
         public string? Protocol { get; set; }
+        public string? LoginPassword { get; set; }
     }
 
     private sealed class PollingYaml

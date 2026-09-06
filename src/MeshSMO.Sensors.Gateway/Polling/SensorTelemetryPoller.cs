@@ -193,15 +193,17 @@ public sealed class SensorTelemetryPoller(
             return;
         }
 
+        var password = ResolveLoginPassword(sensor, options);
         logger.LogInformation(
-            "Attempting ANON login bootstrap for sensor {Slug} (password {Configured})",
+            "Attempting ANON login bootstrap for sensor {Slug} ({Source} password, {Configured})",
             sensor.Slug.Value,
-            options.LoginPassword.Length > 0 ? "configured" : "empty");
+            sensor.LoginPassword is null ? "global" : "per-sensor",
+            password.Length > 0 ? "configured" : "empty");
         try
         {
             using var login = await client.SendAcquisitionLoginAsync(
                 sensor.MeshPublicKey,
-                options.LoginPassword,
+                password,
                 options.LoginTimeoutMs,
                 cancellationToken);
             var loginStatus = login.RootElement.TryGetProperty("status", out var statusElement)
@@ -217,6 +219,14 @@ public sealed class SensorTelemetryPoller(
             logger.LogWarning(exception, "ANON login attempt for sensor {Slug} failed", sensor.Slug.Value);
         }
     }
+
+    /// <summary>
+    /// The node password for the ANON login bootstrap: the per-sensor
+    /// <c>mesh.loginPassword</c> when set in the registry (an empty string counts as
+    /// "node has no password"), otherwise the global <c>SensorPolling:LoginPassword</c>.
+    /// </summary>
+    internal static string ResolveLoginPassword(SensorDefinition sensor, SensorPollingOptions options) =>
+        sensor.LoginPassword ?? options.LoginPassword;
 
     internal static byte[] BuildTelemetryRequestPayload(long requestId)
     {

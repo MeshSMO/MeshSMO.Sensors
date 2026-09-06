@@ -102,10 +102,58 @@ public sealed class SensorTelemetryPollerTests : IDisposable
                 Assert.Equal("°C", reading.GetProperty("unit").GetString());
             });
 
-        // The sensor that did not answer triggered exactly one ANON login bootstrap.
-        Assert.Equal([new string('b', 8)], client.LoginAttempts);
+        // The sensor that did not answer triggered exactly one ANON login bootstrap with the global password.
+        Assert.Equal([(new string('b', 8), "hello")], client.LoginAttempts);
         Assert.Equal(2, client.Requests.Count);
         Assert.All(client.Requests, request => Assert.EndsWith("0300", request.PayloadHex));
+    }
+
+    [Fact]
+    public async Task Poller_PerSensorEmptyLoginPassword_OverridesGlobal()
+    {
+        var node = new SensorDefinition(
+            SensorId.New(), new SensorSlug("nopass-node"), "NoPass", null,
+            new string('d', 64), "meshcore-req-lpp", TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(8), 2,
+            Enabled: true, PublicVisible: true, PublicIndexable: false, null, null, null,
+            ["temperature"], "nopass.yaml", [], LoginPassword: "");
+
+        var client = new FakeMeshCoreTelClient(requestStatuses: ["timeout"]);
+        var store = new SqliteLocalTelemetryStore(Options.Create(new LocalTelemetryOptions { DatabasePath = _storePath }));
+        await store.InitializeAsync(CancellationToken.None);
+
+        var poller = new SensorTelemetryPoller(
+            client,
+            new FakeRegistry([node]),
+            store,
+            Options.Create(new MeshCoreOptions { Mode = MeshCoreConnectionMode.Http }),
+            Options.Create(new SensorPollingOptions
+            {
+                Enabled = true,
+                RequestTimeoutMs = 1000,
+                LoginPassword = "hello",
+                IntervalOverrideSeconds = 3600,
+            }),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<SensorTelemetryPoller>.Instance);
+
+        using var source = new CancellationTokenSource();
+        var run = poller.StartAsync(source.Token);
+        try
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(15);
+            while (client.LoginAttempts.Count < 1 && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(100);
+            }
+        }
+        finally
+        {
+            source.Cancel();
+            await poller.StopAsync(CancellationToken.None);
+            await run;
+        }
+
+        // The registry explicitly says "node has no password"; the global one must not be used.
+        Assert.Equal([(new string('d', 8), "")], client.LoginAttempts);
     }
 
     [Fact]
@@ -154,7 +202,7 @@ public sealed class SensorTelemetryPollerTests : IDisposable
     {
         private int _requestIndex;
         public List<(string DestinationHex, string PayloadHex)> Requests { get; } = [];
-        public List<string> LoginAttempts { get; } = [];
+        public List<(string DestinationHex, string Password)> LoginAttempts { get; } = [];
 
         public Task<JsonDocument> SendAcquisitionRequestAsync(
             string destinationHex, string payloadHex, int timeoutMilliseconds, CancellationToken cancellationToken)
@@ -170,7 +218,7 @@ public sealed class SensorTelemetryPollerTests : IDisposable
         public Task<JsonDocument> SendAcquisitionLoginAsync(
             string destinationHex, string password, int timeoutMilliseconds, CancellationToken cancellationToken)
         {
-            LoginAttempts.Add(destinationHex[..8]);
+            LoginAttempts.Add((destinationHex[..8], password));
             return Task.FromResult(JsonDocument.Parse(
                 """{"status":"timeout","responseHex":null,"rssi":null,"snr":null,"elapsedMs":1000}"""));
         }
