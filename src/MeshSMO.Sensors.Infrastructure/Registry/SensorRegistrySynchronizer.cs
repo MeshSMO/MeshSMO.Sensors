@@ -26,26 +26,53 @@ public sealed class SensorRegistrySynchronizer(
 
         foreach (var definition in definitions)
         {
+            var effectiveMetrics = EffectiveMetrics(definition);
             if (!existing.TryGetValue(definition.Id, out var sensor))
             {
-                sensor = CreateSensor(definition, now);
+                sensor = CreateSensor(definition, effectiveMetrics, now);
+                ApplyChannelMetadata(sensor, definition);
                 dbContext.Sensors.Add(sensor);
                 added++;
                 continue;
             }
 
-            if (!Matches(sensor, definition))
+            if (!Matches(sensor, definition, effectiveMetrics))
             {
-                Apply(sensor, definition, now);
+                Apply(sensor, definition, effectiveMetrics, now);
                 updated++;
             }
+
+            ApplyChannelMetadata(sensor, definition);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return new SensorRegistrySyncResult(added, updated, definitions.Count);
     }
 
-    private static Sensor CreateSensor(SensorDefinition definition, DateTimeOffset now) =>
+    /// <summary>Metric keys advertised by the sensor: the `metrics` list plus every channel mapping target.</summary>
+    private static IReadOnlyList<string> EffectiveMetrics(SensorDefinition definition) =>
+        definition.Metrics
+            .Concat(definition.Channels.Select(channel => channel.Metric))
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+    private static void ApplyChannelMetadata(Sensor sensor, SensorDefinition definition)
+    {
+        foreach (var channel in definition.Channels)
+        {
+            var metric = sensor.Metrics.FirstOrDefault(candidate => candidate.MetricKey == channel.Metric);
+            if (metric is null)
+            {
+                continue;
+            }
+
+            metric.DisplayName = channel.DisplayName ?? metric.DisplayName;
+            metric.Unit = channel.Unit ?? metric.Unit;
+        }
+    }
+
+    private static Sensor CreateSensor(SensorDefinition definition, IReadOnlyList<string> metrics, DateTimeOffset now) =>
         new(
             definition.Id,
             definition.Slug,
@@ -62,10 +89,10 @@ public sealed class SensorRegistrySynchronizer(
             definition.Latitude,
             definition.Longitude,
             definition.LocationPrecision,
-            definition.Metrics,
+            metrics,
             now);
 
-    private static void Apply(Sensor sensor, SensorDefinition definition, DateTimeOffset now) =>
+    private static void Apply(Sensor sensor, SensorDefinition definition, IReadOnlyList<string> metrics, DateTimeOffset now) =>
         sensor.ApplyConfiguration(
             definition.Slug,
             definition.DisplayName,
@@ -81,10 +108,10 @@ public sealed class SensorRegistrySynchronizer(
             definition.Latitude,
             definition.Longitude,
             definition.LocationPrecision,
-            definition.Metrics,
+            metrics,
             now);
 
-    private static bool Matches(Sensor sensor, SensorDefinition definition) =>
+    private static bool Matches(Sensor sensor, SensorDefinition definition, IReadOnlyList<string> effectiveMetrics) =>
         sensor.Slug == definition.Slug
         && sensor.DisplayName == definition.DisplayName.Trim()
         && sensor.Description == Normalize(definition.Description)
@@ -100,8 +127,18 @@ public sealed class SensorRegistrySynchronizer(
         && sensor.Longitude == definition.Longitude
         && sensor.LocationPrecision == Normalize(definition.LocationPrecision)
         && sensor.Metrics.Select(metric => metric.MetricKey).ToHashSet(StringComparer.Ordinal)
-            .SetEquals(definition.Metrics);
+            .SetEquals(effectiveMetrics)
+        && ChannelsMatch(sensor, definition);
 
     private static string? Normalize(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static bool ChannelsMatch(Sensor sensor, SensorDefinition definition) =>
+        definition.Channels.All(channel =>
+        {
+            var metric = sensor.Metrics.FirstOrDefault(candidate => candidate.MetricKey == channel.Metric);
+            return metric is not null
+                && metric.DisplayName == (channel.DisplayName ?? metric.DisplayName)
+                && metric.Unit == (channel.Unit ?? metric.Unit);
+        });
 }

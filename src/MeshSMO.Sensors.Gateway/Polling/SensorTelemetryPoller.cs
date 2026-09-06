@@ -137,9 +137,7 @@ public sealed class SensorTelemetryPoller(
             return;
         }
 
-        var readings = telemetry
-            .GroupBy(value => value.MetricKey)
-            .ToDictionary(group => group.Key, group => group.First().Value);
+        var readings = ResolveReadings(sensor, telemetry);
         var payloadJson = JsonSerializer.Serialize(new Dictionary<string, object?>
         {
             ["type"] = "sensor_poll",
@@ -150,7 +148,7 @@ public sealed class SensorTelemetryPoller(
             ["snr"] = ReadNullableDouble(response.RootElement, "snr"),
             ["elapsedMs"] = ReadNullableDouble(response.RootElement, "elapsedMs"),
             ["responseHex"] = responseHex,
-            ["readings"] = readings,
+            ["readings"] = readings.Select(reading => new { metric = reading.metric, value = reading.value, unit = reading.unit }).ToArray(),
         });
 
         var snapshotId = await store.AppendAsync(capturedAt, client.TransportName, payloadJson, cancellationToken);
@@ -158,8 +156,33 @@ public sealed class SensorTelemetryPoller(
             "Sensor {Slug} answered request {RequestId}: {Metrics}; outbox snapshot {SnapshotId}",
             sensor.Slug.Value,
             requestId,
-            string.Join(", ", telemetry.Select(value => $"{value.MetricKey}={value.Value.ToString(CultureInfo.InvariantCulture)}{value.Unit}")),
+            string.Join(", ", readings.Select(reading => $"{reading.metric}={reading.value.ToString(CultureInfo.InvariantCulture)}{reading.unit}")),
             snapshotId);
+    }
+
+    internal static IReadOnlyList<(string metric, double value, string unit)> ResolveReadings(
+        SensorDefinition sensor,
+        IReadOnlyList<LppValue> telemetry)
+    {
+        var mappings = sensor.Channels
+            .GroupBy(channel => (channel.Channel, channel.Type ?? "*"))
+            .ToDictionary(group => group.Key, group => group.First().Metric);
+        var repeatedTypes = telemetry
+            .GroupBy(value => value.TypeKey)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToHashSet(StringComparer.Ordinal);
+
+        return telemetry
+            .Select(value => (
+                Metric: CayenneLppDecoder.ResolveMetricKey(value, mappings, repeatedTypes),
+                value.Value,
+                value.Unit))
+            .GroupBy(resolved => resolved.Metric, StringComparer.Ordinal)
+            .Select(group => (group.Key, group.First().Value, group.First().Unit))
+            .OrderBy(resolved => resolved.Item1, StringComparer.Ordinal)
+            .Select(resolved => (resolved.Item1, resolved.Item2, resolved.Item3))
+            .ToArray();
     }
 
     private async Task TryLoginOnceAsync(SensorDefinition sensor, HashSet<string> loginAttempted, CancellationToken cancellationToken)
@@ -222,7 +245,7 @@ public sealed class SensorTelemetryPoller(
     {
         // Deterministic jitter so restarts do not synchronise all sensors.
         var hash = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(sensor.Slug.Value));
-        var jitterSeconds = BitConverter.ToUInt32(hash, 0) % 20;
+        var jitterSeconds = BitConverter.ToUInt32(hash, 0) % 5 + 1;
         return TimeSpan.FromSeconds(jitterSeconds);
     }
 

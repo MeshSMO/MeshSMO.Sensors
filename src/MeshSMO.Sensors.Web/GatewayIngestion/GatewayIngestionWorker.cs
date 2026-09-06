@@ -216,10 +216,11 @@ public sealed class GatewayIngestionWorker(
                 sample.Values.Add(new MeasurementValue(
                     sample.Id,
                     sensor.Id,
-                    reading.Key,
+                    reading.Metric,
                     entity.CapturedAt)
                 {
                     NumericValue = reading.Value,
+                    Unit = reading.Unit,
                 });
             }
 
@@ -251,8 +252,10 @@ public sealed class GatewayIngestionWorker(
         double? Rssi,
         double? Snr,
         string? ResponseHex,
-        IReadOnlyDictionary<string, double> Readings)
+        IReadOnlyList<SensorPollPayload.MetricReading> Readings)
     {
+        public sealed record MetricReading(string Metric, double Value, string? Unit);
+
         public static SensorPollPayload? TryParse(string payloadJson)
         {
             JsonDocument document;
@@ -280,14 +283,22 @@ public sealed class GatewayIngestionWorker(
                     root.TryGetProperty("requestId", out var requestIdElement) &&
                     requestIdElement.TryGetInt64(out var requestId) &&
                     root.TryGetProperty("readings", out var readingsElement) &&
-                    readingsElement.ValueKind == JsonValueKind.Object)
+                    readingsElement.ValueKind == JsonValueKind.Array)
                 {
-                    var readings = new Dictionary<string, double>();
-                    foreach (var reading in readingsElement.EnumerateObject())
+                    var readings = new List<MetricReading>();
+                    foreach (var reading in readingsElement.EnumerateArray())
                     {
-                        if (reading.Value.ValueKind == JsonValueKind.Number && reading.Value.TryGetDouble(out var value))
+                        if (reading.TryGetProperty("metric", out var metricElement) &&
+                            metricElement.ValueKind == JsonValueKind.String &&
+                            reading.TryGetProperty("value", out var valueElement) &&
+                            valueElement.ValueKind == JsonValueKind.Number &&
+                            valueElement.TryGetDouble(out var value))
                         {
-                            readings[reading.Name] = value;
+                            string? unit = reading.TryGetProperty("unit", out var unitElement) &&
+                                unitElement.ValueKind == JsonValueKind.String
+                                    ? unitElement.GetString()
+                                    : null;
+                            readings.Add(new MetricReading(metricElement.GetString()!, value, unit));
                         }
                     }
 

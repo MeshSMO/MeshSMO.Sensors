@@ -123,15 +123,33 @@ public static class SensorApiEndpoints
                 return Results.NotFound(new { error = "NotFound" });
             }
 
+            var metricMeta = await dbContext.SensorMetrics
+                .AsNoTracking()
+                .Where(metric => metric.SensorId == sensor.Id)
+                .ToDictionaryAsync(
+                    metric => metric.MetricKey,
+                    metric => new { metric.DisplayName, metric.Unit },
+                    cancellationToken);
             var values = await dbContext.MeasurementValues
                 .AsNoTracking()
                 .Where(value => value.SensorId == sensor.Id && value.Timestamp == dbContext.MeasurementValues
                     .Where(inner => inner.SensorId == sensor.Id && inner.MetricKey == value.MetricKey)
                     .Max(inner => inner.Timestamp))
                 .OrderBy(value => value.MetricKey)
-                .Select(value => new { metric = value.MetricKey, timestamp = value.Timestamp, value.NumericValue, value.TextValue, value.Unit })
+                .Select(value => new { value.MetricKey, value.Timestamp, value.NumericValue, value.TextValue, value.Unit })
                 .ToListAsync(cancellationToken);
-            return Results.Json(new { values });
+            return Results.Json(new
+            {
+                values = values.Select(value => new
+                {
+                    metric = value.MetricKey,
+                    displayName = metricMeta.TryGetValue(value.MetricKey, out var meta) ? meta.DisplayName : null,
+                    timestamp = value.Timestamp,
+                    value.NumericValue,
+                    value.TextValue,
+                    unit = value.Unit ?? (metricMeta.TryGetValue(value.MetricKey, out meta) ? meta.Unit : null),
+                }),
+            });
         });
 
         app.MapGet("/api/v1/dashboard", async Task<IResult> (

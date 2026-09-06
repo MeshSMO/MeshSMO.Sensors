@@ -146,6 +146,8 @@ public sealed partial class FileSystemSensorRegistry(
             errors.Add($"{source}: metric '{duplicate.Key}' is listed more than once.");
         }
 
+        var channels = ParseTelemetryChannels(yaml.Telemetry?.Channels, source, errors);
+
         var visible = yaml.Public?.Visible ?? false;
         var indexable = yaml.Public?.Indexable ?? false;
         if (indexable && !visible)
@@ -162,14 +164,81 @@ public sealed partial class FileSystemSensorRegistry(
                 timeout == TimeSpan.Zero ? TimeSpan.FromSeconds(30) : timeout,
                 Math.Clamp(maxAttempts, 1, 10), yaml.Polling?.Enabled ?? false,
                 visible, indexable, latitude, longitude, yaml.Location?.Precision,
-                metrics.Length == 0 ? ["invalid"] : metrics, source);
+                metrics.Length == 0 ? ["invalid"] : metrics, source, channels);
         }
 
         return new SensorDefinition(
             new SensorId(id), slug, yaml.DisplayName!.Trim(), yaml.Description,
             yaml.Mesh!.PublicKey!.Trim(), yaml.Mesh.Protocol!.Trim(), interval, timeout,
             maxAttempts, yaml.Polling!.Enabled, visible, indexable, latitude, longitude,
-            yaml.Location?.Precision, metrics, source);
+            yaml.Location?.Precision, metrics, source, channels);
+    }
+
+    private static List<TelemetryChannelMapping> ParseTelemetryChannels(
+        List<TelemetryChannelYaml>? channels,
+        string source,
+        ICollection<string> errors)
+    {
+        if (channels is null || channels.Count == 0)
+        {
+            return [];
+        }
+
+        var parsed = new List<TelemetryChannelMapping>(channels.Count);
+        foreach (var channel in channels)
+        {
+            if (channel.Channel is null or < 0 or > 255)
+            {
+                errors.Add($"{source}: telemetry channel number must be between 0 and 255.");
+                continue;
+            }
+
+            var metric = channel.Metric?.Trim();
+            if (string.IsNullOrWhiteSpace(metric))
+            {
+                errors.Add($"{source}: telemetry channel {channel.Channel}: metric is required.");
+                continue;
+            }
+
+            if (!MetricKeyPattern().IsMatch(metric))
+            {
+                errors.Add($"{source}: telemetry channel {channel.Channel}: metric '{metric}' has an invalid key.");
+                continue;
+            }
+
+            var type = channel.Type?.Trim();
+            if (!string.IsNullOrEmpty(type) && !TelemetryTypes.KnownTypes.Contains(type))
+            {
+                errors.Add(
+                    $"{source}: telemetry channel {channel.Channel}: unknown type '{type}'. " +
+                    "Use an LPP type key such as 'voltage' or 'temperature', or '*' for any type.");
+                continue;
+            }
+
+            parsed.Add(new TelemetryChannelMapping(
+                channel.Channel.Value,
+                string.IsNullOrEmpty(type) ? null : type,
+                metric,
+                string.IsNullOrWhiteSpace(channel.DisplayName) ? null : channel.DisplayName.Trim(),
+                string.IsNullOrWhiteSpace(channel.Unit) ? null : channel.Unit.Trim()));
+        }
+
+        foreach (var duplicate in parsed
+                     .GroupBy(mapping => (mapping.Channel, mapping.Type ?? "*"))
+                     .Where(group => group.Count() > 1))
+        {
+            errors.Add(
+                $"{source}: telemetry channel {duplicate.Key.Channel} (type '{duplicate.Key.Item2}') is mapped more than once.");
+        }
+
+        foreach (var duplicate in parsed
+                     .GroupBy(mapping => mapping.Metric, StringComparer.Ordinal)
+                     .Where(group => group.Count() > 1))
+        {
+            errors.Add($"{source}: telemetry metric '{duplicate.Key}' is mapped more than once.");
+        }
+
+        return parsed;
     }
 
     private static TimeSpan ParseDuration(string? value, string source, string field, ICollection<string> errors)
@@ -225,6 +294,21 @@ public sealed partial class FileSystemSensorRegistry(
         public PublicYaml? Public { get; set; }
         public LocationYaml? Location { get; set; }
         public List<string>? Metrics { get; set; }
+        public TelemetryYaml? Telemetry { get; set; }
+    }
+
+    private sealed class TelemetryYaml
+    {
+        public List<TelemetryChannelYaml>? Channels { get; set; }
+    }
+
+    private sealed class TelemetryChannelYaml
+    {
+        public int? Channel { get; set; }
+        public string? Type { get; set; }
+        public string? Metric { get; set; }
+        public string? DisplayName { get; set; }
+        public string? Unit { get; set; }
     }
 
     private sealed class MeshYaml

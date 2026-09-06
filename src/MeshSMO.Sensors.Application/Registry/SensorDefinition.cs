@@ -19,4 +19,30 @@ public sealed record SensorDefinition(
     double? Longitude,
     string? LocationPrecision,
     IReadOnlyList<string> Metrics,
-    string Source);
+    string Source,
+    IReadOnlyList<TelemetryChannelMapping> Channels)
+{
+    public SensorDefinition(
+        SensorId id,
+        SensorSlug slug,
+        string displayName,
+        string? description,
+        string meshPublicKey,
+        string protocolId,
+        TimeSpan pollInterval,
+        TimeSpan pollTimeout,
+        int pollMaxAttempts,
+        bool enabled,
+        bool publicVisible,
+        bool publicIndexable,
+        double? latitude,
+        double? longitude,
+        string? locationPrecision,
+        IReadOnlyList<string> metrics,
+        string source)
+        : this(id, slug, displayName, description, meshPublicKey, protocolId, pollInterval, pollTimeout,
+            pollMaxAttempts, enabled, publicVisible, publicIndexable, latitude, longitude, locationPrecision,
+            metrics, source, [])
+    {
+    }
+}

@@ -323,7 +323,31 @@ metrics:
   - humidity
   - pressure
   - battery
+
+telemetry:
+  channels:
+    - channel: 1
+      type: voltage
+      metric: battery_voltage
+      displayName: "Напряжение батареи"
+      unit: "В"
+    - channel: 2
+      type: voltage
+      metric: solar_panel_voltage
+      displayName: "Напряжение солнечной панели"
+      unit: "В"
+    - channel: 3
+      type: temperature
+      metric: temperature
+      displayName: "Температура"
+      unit: "°C"
 ```
+
+`telemetry.channels` — опциональный маппинг декодированных Cayenne LPP значений
+(`channel` + LPP `type`, либо `*` для любого типа на канале) в публичные metric keys
+с человекочитаемым `displayName` и `unit`. Значения без маппинга получают ключ LPP-типа
+(с суффиксом канала, если тип встречается на нескольких каналах: `voltage_2`).
+Маппинги синхронизируются в `sensor_metrics` (display_name, unit) и отдаются через API.
 
 ## Почему GitOps
 

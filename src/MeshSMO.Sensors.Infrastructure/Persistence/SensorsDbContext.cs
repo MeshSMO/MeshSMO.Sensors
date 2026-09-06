@@ -55,6 +55,8 @@ public sealed class SensorsDbContext(DbContextOptions<SensorsDbContext> options)
         metric.HasKey(entity => new { entity.SensorId, entity.MetricKey });
         metric.Property(entity => entity.SensorId).HasColumnName("sensor_id").HasConversion(id => id.Value, value => new SensorId(value));
         metric.Property(entity => entity.MetricKey).HasColumnName("metric_key").HasMaxLength(64);
+        metric.Property(entity => entity.DisplayName).HasColumnName("display_name").HasMaxLength(128);
+        metric.Property(entity => entity.Unit).HasColumnName("unit").HasMaxLength(16);
         sensor.HasMany(entity => entity.Metrics)
             .WithOne()
             .HasForeignKey(entity => entity.SensorId)
