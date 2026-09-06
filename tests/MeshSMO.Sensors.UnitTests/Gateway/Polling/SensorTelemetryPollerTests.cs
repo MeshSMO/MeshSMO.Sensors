@@ -59,7 +59,9 @@ public sealed class SensorTelemetryPollerTests : IDisposable
                 Enabled = true,
                 RequestTimeoutMs = 1000,
                 LoginPassword = "hello",
-                IntervalOverrideSeconds = 3600, // one poll per sensor within the test window
+                IntervalOverrideSeconds = 3600, // one poll cycle per sensor within the test window
+                RetryBackoffMinMs = 10,
+                RetryBackoffMaxMs = 50,
             }),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<SensorTelemetryPoller>.Instance);
 
@@ -67,8 +69,10 @@ public sealed class SensorTelemetryPollerTests : IDisposable
         var run = poller.StartAsync(source.Token);
         try
         {
-            var deadline = DateTime.UtcNow.AddSeconds(15);
-            while ((await store.CountPendingAsync(CancellationToken.None) < 1 || client.LoginAttempts.Count < 1) &&
+            // Alpha answers immediately; bravo times out, bootstraps the ANON
+            // login and retries once (request 3).
+            var deadline = DateTime.UtcNow.AddSeconds(30);
+            while ((client.Requests.Count < 3 || client.LoginAttempts.Count < 1) &&
                    DateTime.UtcNow < deadline)
             {
                 await Task.Delay(100);
@@ -87,6 +91,7 @@ public sealed class SensorTelemetryPollerTests : IDisposable
 
         Assert.Equal("sensor_poll", payload.GetProperty("type").GetString());
         Assert.Equal("alpha-node", payload.GetProperty("sensor").GetString());
+        Assert.Equal(1, payload.GetProperty("attemptNumber").GetInt32());
         var readings = payload.GetProperty("readings");
         Assert.Collection(
             readings.EnumerateArray(),
@@ -103,10 +108,15 @@ public sealed class SensorTelemetryPollerTests : IDisposable
                 Assert.Equal("°C", reading.GetProperty("unit").GetString());
             });
 
-        // The sensor that did not answer triggered exactly one ANON login bootstrap with the global password.
+        // The sensor that did not answer triggered exactly one ANON login bootstrap
+        // with the global password, then one retry that timed out again.
         Assert.Equal([(new string('b', 8), "hello")], client.LoginAttempts);
-        Assert.Equal(2, client.Requests.Count);
+        Assert.Equal(3, client.Requests.Count);
         Assert.All(client.Requests, request => Assert.EndsWith("0300", request.PayloadHex));
+        var attemptSnapshots = pending
+            .Where(snapshot => snapshot.PayloadJson.Contains("\"poll_attempt\""))
+            .ToArray();
+        Assert.True(attemptSnapshots.Length == 2, $"expected 2 attempt snapshots, got {attemptSnapshots.Length}");
     }
 
     [Fact]
@@ -155,6 +165,170 @@ public sealed class SensorTelemetryPollerTests : IDisposable
 
         // The registry explicitly says "node has no password"; the global one must not be used.
         Assert.Equal([(new string('d', 8), "")], client.LoginAttempts);
+    }
+
+    [Fact]
+    public async Task Poller_RetriesAfterTimeout_AndRecordsEveryAttempt()
+    {
+        var node = new SensorDefinition(
+            SensorId.New(), new SensorSlug("retry-node"), "Retry", null,
+            new string('e', 64), "meshcore-req-lpp", TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(8), 2,
+            Enabled: true, PublicVisible: true, PublicIndexable: false, null, null, null,
+            ["temperature"], "retry.yaml", []);
+
+        var client = new FakeMeshCoreTelClient(requestStatuses: ["timeout", "ok"]);
+        var store = new SqliteLocalTelemetryStore(Options.Create(new LocalTelemetryOptions { DatabasePath = _storePath }));
+        await store.InitializeAsync(CancellationToken.None);
+
+        var poller = new SensorTelemetryPoller(
+            client,
+            ScopeFactory(new FakeRegistry([node])),
+            store,
+            Options.Create(new MeshCoreOptions { Mode = MeshCoreConnectionMode.Http }),
+            Options.Create(new SensorPollingOptions
+            {
+                Enabled = true,
+                LoginPassword = "hello",
+                IntervalOverrideSeconds = 3600,
+                RetryBackoffMinMs = 10,
+                RetryBackoffMaxMs = 50,
+            }),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<SensorTelemetryPoller>.Instance);
+
+        using var source = new CancellationTokenSource();
+        var run = poller.StartAsync(source.Token);
+        try
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(30);
+            while (await store.CountPendingAsync(CancellationToken.None) < 2 && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(50);
+            }
+        }
+        finally
+        {
+            source.Cancel();
+            await poller.StopAsync(CancellationToken.None);
+            await run;
+        }
+
+        Assert.Equal(2, client.Requests.Count);
+        var pending = await store.ReadPendingAsync(10, CancellationToken.None);
+        var attemptSnapshot = pending.Single(snapshot => snapshot.PayloadJson.Contains("\"poll_attempt\""));
+        var attemptPayload = JsonDocument.Parse(attemptSnapshot.PayloadJson).RootElement;
+        Assert.Equal("TimedOut", attemptPayload.GetProperty("status").GetString());
+        Assert.Equal(1, attemptPayload.GetProperty("attemptNumber").GetInt32());
+
+        var pollSnapshot = pending.Single(snapshot => snapshot.PayloadJson.Contains("\"sensor_poll\""));
+        var pollPayload = JsonDocument.Parse(pollSnapshot.PayloadJson).RootElement;
+        Assert.Equal(2, pollPayload.GetProperty("attemptNumber").GetInt32());
+        Assert.NotEqual(
+            attemptPayload.GetProperty("requestId").GetInt64(),
+            pollPayload.GetProperty("requestId").GetInt64());
+    }
+
+    [Fact]
+    public async Task Poller_ExhaustsRetries_LeavesOnlyAttemptRecords()
+    {
+        var node = new SensorDefinition(
+            SensorId.New(), new SensorSlug("quiet-node"), "Quiet", null,
+            new string('f', 64), "meshcore-req-lpp", TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(8), 2,
+            Enabled: true, PublicVisible: true, PublicIndexable: false, null, null, null,
+            ["temperature"], "quiet.yaml", []);
+
+        var client = new FakeMeshCoreTelClient(requestStatuses: ["timeout"]);
+        var store = new SqliteLocalTelemetryStore(Options.Create(new LocalTelemetryOptions { DatabasePath = _storePath }));
+        await store.InitializeAsync(CancellationToken.None);
+
+        var poller = new SensorTelemetryPoller(
+            client,
+            ScopeFactory(new FakeRegistry([node])),
+            store,
+            Options.Create(new MeshCoreOptions { Mode = MeshCoreConnectionMode.Http }),
+            Options.Create(new SensorPollingOptions
+            {
+                Enabled = true,
+                IntervalOverrideSeconds = 3600,
+                RetryBackoffMinMs = 10,
+                RetryBackoffMaxMs = 50,
+            }),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<SensorTelemetryPoller>.Instance);
+
+        using var source = new CancellationTokenSource();
+        var run = poller.StartAsync(source.Token);
+        try
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(30);
+            while (await store.CountPendingAsync(CancellationToken.None) < 2 && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(50);
+            }
+        }
+        finally
+        {
+            source.Cancel();
+            await poller.StopAsync(CancellationToken.None);
+            await run;
+        }
+
+        Assert.Equal(2, client.Requests.Count);
+        var pending = await store.ReadPendingAsync(10, CancellationToken.None);
+        Assert.Equal(2, pending.Count);
+        Assert.All(pending, snapshot => Assert.Contains("\"poll_attempt\"", snapshot.PayloadJson));
+    }
+
+    [Fact]
+    public async Task Poller_UndecodableBody_IsRecordedWithoutRetry()
+    {
+        var node = new SensorDefinition(
+            SensorId.New(), new SensorSlug("garbled-node"), "Garbled", null,
+            new string('1', 64), "meshcore-req-lpp", TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(8), 2,
+            Enabled: true, PublicVisible: true, PublicIndexable: false, null, null, null,
+            ["temperature"], "garbled.yaml", []);
+
+        var client = new FakeMeshCoreTelClient(requestStatuses: ["garbage"]);
+        var store = new SqliteLocalTelemetryStore(Options.Create(new LocalTelemetryOptions { DatabasePath = _storePath }));
+        await store.InitializeAsync(CancellationToken.None);
+
+        var poller = new SensorTelemetryPoller(
+            client,
+            ScopeFactory(new FakeRegistry([node])),
+            store,
+            Options.Create(new MeshCoreOptions { Mode = MeshCoreConnectionMode.Http }),
+            Options.Create(new SensorPollingOptions
+            {
+                Enabled = true,
+                IntervalOverrideSeconds = 3600,
+                RetryBackoffMinMs = 10,
+                RetryBackoffMaxMs = 50,
+            }),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<SensorTelemetryPoller>.Instance);
+
+        using var source = new CancellationTokenSource();
+        var run = poller.StartAsync(source.Token);
+        try
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(30);
+            while (await store.CountPendingAsync(CancellationToken.None) < 1 && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(50);
+            }
+
+            await Task.Delay(300); // give a (wrongful) retry a chance to surface
+        }
+        finally
+        {
+            source.Cancel();
+            await poller.StopAsync(CancellationToken.None);
+            await run;
+        }
+
+        Assert.Single(client.Requests);
+        var pending = await store.ReadPendingAsync(10, CancellationToken.None);
+        var snapshot = Assert.Single(pending);
+        var payload = JsonDocument.Parse(snapshot.PayloadJson).RootElement;
+        Assert.Equal("poll_attempt", payload.GetProperty("type").GetString());
+        Assert.Equal("undecodable_response", payload.GetProperty("errorCode").GetString());
     }
 
     [Fact]
@@ -217,9 +391,12 @@ public sealed class SensorTelemetryPollerTests : IDisposable
         {
             var status = _requestIndex < requestStatuses.Length ? requestStatuses[_requestIndex++] : "timeout";
             Requests.Add((destinationHex, payloadHex));
-            var response = status == "ok"
-                ? """{"status":"ok","responseHex":"000000000174018C03670109","rssi":-30.0,"snr":12.0,"elapsedMs":900}"""
-                : """{"status":"timeout","responseHex":null,"rssi":null,"snr":null,"elapsedMs":1000}""";
+            var response = status switch
+            {
+                "ok" => """{"status":"ok","responseHex":"000000000174018C03670109","rssi":-30.0,"snr":12.0,"elapsedMs":900}""",
+                "garbage" => """{"status":"ok","responseHex":"00000000","rssi":-30.0,"snr":12.0,"elapsedMs":50}""",
+                _ => """{"status":"timeout","responseHex":null,"rssi":null,"snr":null,"elapsedMs":1000}""",
+            };
             return Task.FromResult(JsonDocument.Parse(response));
         }
 

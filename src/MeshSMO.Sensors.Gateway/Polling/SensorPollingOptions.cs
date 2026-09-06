@@ -25,4 +25,13 @@ public sealed class SensorPollingOptions
     public string LoginPassword { get; set; } = string.Empty;
 
     public bool LoginOnTimeout { get; set; } = true;
+
+    /// <summary>
+    /// Lower/upper bound (ms) of the small randomized backoff between poll
+    /// attempts of one failed cycle. Randomized so a whole batch of nodes that
+    /// went quiet at once does not answer in lock-step.
+    /// </summary>
+    public int RetryBackoffMinMs { get; set; } = 2_000;
+
+    public int RetryBackoffMaxMs { get; set; } = 6_000;
 }

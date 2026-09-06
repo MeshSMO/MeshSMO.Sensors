@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using MeshSMO.Sensors.Gateway;
+using MeshSMO.Sensors.Gateway.Health;
 using MeshSMO.Sensors.Infrastructure;
 using MeshSMO.Sensors.Gateway.Api;
 using MeshSMO.Sensors.Gateway.MeshCore;
@@ -13,7 +14,9 @@ builder.Logging.AddSimpleConsole(options =>
     options.SingleLine = true;
     options.TimestampFormat = "yyyy-MM-dd HH:mm:ss ";
 });
-builder.Services.AddHealthChecks();
+builder.Services.AddHealthChecks()
+    .AddCheck<LocalOutboxHealthCheck>("local-outbox", tags: ["ready"])
+    .AddCheck<SensorRegistryHealthCheck>("sensor-registry", tags: ["ready"]);
 builder.Services.AddSensorRegistry(builder.Configuration);
 builder.Services.AddMeshCoreGateway(builder.Configuration);
 builder.Services.AddHostedService<Worker>();
@@ -29,6 +32,11 @@ builder.Services
     .Validate(
         static options => options.LoginTimeoutMs is > 0 and <= 10_000,
         "SensorPolling:LoginTimeoutMs must be between 1 and 10000.")
+    .Validate(
+        static options => options.RetryBackoffMinMs is >= 0 and <= 60_000
+            && options.RetryBackoffMaxMs is >= 0 and <= 60_000
+            && options.RetryBackoffMinMs <= options.RetryBackoffMaxMs,
+        "SensorPolling:RetryBackoffMinMs/MaxMs must be between 0 and 60000, MinMs <= MaxMs.")
     .ValidateOnStart();
 
 builder.Services.ConfigureHttpJsonOptions(options =>

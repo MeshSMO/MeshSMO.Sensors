@@ -28,7 +28,10 @@ public static class TelemetryEndpoints
         }
 
         app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
-        app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = _ => false });
+        app.MapHealthChecks("/health/ready", new HealthCheckOptions
+        {
+            Predicate = registration => registration.Tags.Contains("ready"),
+        });
 
         app.MapGet("/api/telemetry/pending", async Task<IResult> (
             int? maxCount,

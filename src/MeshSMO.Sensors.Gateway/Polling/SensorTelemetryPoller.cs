@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
 using MeshSMO.Sensors.Application.Registry;
+using MeshSMO.Sensors.Domain.Polling;
 using MeshSMO.Sensors.Gateway.LocalStorage;
 using MeshSMO.Sensors.Gateway.MeshCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,6 +17,12 @@ namespace MeshSMO.Sensors.Gateway.Polling;
 /// Request payload: timestamp(4 LE) + 0x03 (GET_TELEMETRY_DATA) + inverse
 /// permission mask 0x00; the reply body after the reflected timestamp is
 /// Cayenne LPP.
+/// Scheduling follows the spec: deterministic jitter on start, a due-time
+/// priority queue with MaxConcurrentPolls = 1, and a bounded retry policy —
+/// a failed poll cycle retries up to the registry's pollMaxAttempts with a
+/// small randomized backoff; LoRa airtime is never hammered (spec §8.4).
+/// Every attempt (success or failure) is appended to the outbox so the main
+/// API can persist poll_attempts.
 /// </summary>
 public sealed class SensorTelemetryPoller(
     IMeshCoreTelClient client,
@@ -25,6 +32,9 @@ public sealed class SensorTelemetryPoller(
     IOptions<SensorPollingOptions> pollingOptions,
     ILogger<SensorTelemetryPoller> logger) : BackgroundService
 {
+    /// <summary>Airtime guard: registry allows up to 10, we never fire more than 3 requests per cycle.</summary>
+    private const int MaxAttemptsPerCycle = 3;
+
     private long _requestIdSeed = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -58,25 +68,29 @@ public sealed class SensorTelemetryPoller(
             sensors.Length,
             string.Join(", ", sensors.Select(sensor => sensor.Slug.Value)));
 
-        var nextDue = sensors.ToDictionary(
-            sensor => sensor.Slug.Value,
-            sensor => DateTimeOffset.UtcNow + NextStartDelay(sensor));
+        var queue = new PriorityQueue<(SensorDefinition Sensor, DateTimeOffset Due), DateTimeOffset>();
+        var now = DateTimeOffset.UtcNow;
+        foreach (var sensor in sensors)
+        {
+            var due = now + NextStartDelay(sensor);
+            queue.Enqueue((sensor, due), due);
+        }
         var loginAttempted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            var (slug, due) = nextDue.MinBy(pair => pair.Value);
-            var now = DateTimeOffset.UtcNow;
+            var due = queue.Peek().Due;
+            now = DateTimeOffset.UtcNow;
             if (due > now)
             {
                 await Task.Delay(TimeSpan.FromTicks(Math.Min((due - now).Ticks, TimeSpan.FromSeconds(5).Ticks)), stoppingToken);
                 continue;
             }
 
-            var sensor = sensors.Single(candidate => candidate.Slug.Value == slug);
+            var (sensor, _) = queue.Dequeue();
             try
             {
-                await PollSensorAsync(sensor, loginAttempted, stoppingToken);
+                await PollCycleAsync(sensor, loginAttempted, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -86,28 +100,95 @@ public sealed class SensorTelemetryPoller(
             {
                 logger.LogWarning(
                     exception,
-                    "Poll of sensor {Slug} failed; scheduling retry",
-                    slug);
+                    "Poll cycle of sensor {Slug} failed unexpectedly; scheduling retry on the next interval",
+                    sensor.Slug.Value);
             }
 
-            nextDue[slug] = DateTimeOffset.UtcNow + PollInterval(sensor);
+            var nextDue = DateTimeOffset.UtcNow + PollInterval(sensor);
+            queue.Enqueue((sensor, nextDue), nextDue);
         }
     }
 
-    private async Task PollSensorAsync(
-        SensorDefinition sensor,
-        HashSet<string> loginAttempted,
-        CancellationToken cancellationToken)
+    private async Task PollCycleAsync(SensorDefinition sensor, HashSet<string> loginAttempted, CancellationToken cancellationToken)
     {
         var options = pollingOptions.Value;
-        var requestId = Interlocked.Increment(ref _requestIdSeed);
+        var timeoutMs = ResolveRequestTimeoutMs(sensor, options);
+        var maxAttempts = Math.Clamp(sensor.PollMaxAttempts, 1, MaxAttemptsPerCycle);
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            var requestId = Interlocked.Increment(ref _requestIdSeed);
+            var startedAt = DateTimeOffset.UtcNow;
+            PollAttemptOutcome outcome;
+            try
+            {
+                outcome = await PollOnceAsync(sensor, requestId, startedAt, timeoutMs, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                logger.LogWarning(
+                    exception,
+                    "Request {RequestId} to sensor {Slug} failed (attempt {Attempt}/{MaxAttempts})",
+                    requestId,
+                    sensor.Slug.Value,
+                    attempt,
+                    maxAttempts);
+                outcome = PollAttemptOutcome.Failure(
+                    PollAttemptStatus.Failed,
+                    "transport_error",
+                    exception.Message,
+                    (int)(DateTimeOffset.UtcNow - startedAt).TotalMilliseconds);
+            }
+
+            await RecordAttemptAsync(sensor, requestId, attempt, startedAt, outcome, cancellationToken);
+
+            if (outcome.Telemetry is not null)
+            {
+                break;
+            }
+
+            if (attempt >= maxAttempts)
+            {
+                break;
+            }
+
+            // An empty or undecodable body is a deterministic answer; retrying
+            // would only burn LoRa airtime. Timeouts and transport errors are
+            // transient and are retried.
+            if (outcome.ErrorCode is "empty_response" or "undecodable_response")
+            {
+                break;
+            }
+
+            if (outcome.Status == PollAttemptStatus.TimedOut)
+            {
+                // The node most likely has not added this repeater to its ACL
+                // yet; bootstrap the ANON login once before the retry.
+                await TryLoginOnceAsync(sensor, loginAttempted, cancellationToken);
+            }
+
+            var backoffMs = Random.Shared.Next(options.RetryBackoffMinMs, options.RetryBackoffMaxMs + 1);
+            await Task.Delay(TimeSpan.FromMilliseconds(backoffMs), cancellationToken);
+        }
+    }
+
+    private async Task<PollAttemptOutcome> PollOnceAsync(
+        SensorDefinition sensor,
+        long requestId,
+        DateTimeOffset startedAt,
+        int timeoutMs,
+        CancellationToken cancellationToken)
+    {
         var payload = ToRequestHex(BuildTelemetryRequestPayload(requestId));
-        var capturedAt = DateTimeOffset.UtcNow;
 
         using var response = await client.SendAcquisitionRequestAsync(
             sensor.MeshPublicKey,
             payload,
-            options.RequestTimeoutMs,
+            timeoutMs,
             cancellationToken);
         var status = response.RootElement.TryGetProperty("status", out var statusElement)
             ? statusElement.GetString()
@@ -118,10 +199,13 @@ public sealed class SensorTelemetryPoller(
             logger.LogWarning(
                 "Sensor {Slug} did not answer within {TimeoutMs} ms (request {RequestId})",
                 sensor.Slug.Value,
-                options.RequestTimeoutMs,
+                timeoutMs,
                 requestId);
-            await TryLoginOnceAsync(sensor, loginAttempted, cancellationToken);
-            return;
+            return PollAttemptOutcome.Failure(
+                PollAttemptStatus.TimedOut,
+                "timeout",
+                null,
+                ReadNullableInt(response.RootElement, "elapsedMs"));
         }
 
         var responseHex = response.RootElement.TryGetProperty("responseHex", out var hexElement) &&
@@ -131,7 +215,7 @@ public sealed class SensorTelemetryPoller(
         if (string.IsNullOrEmpty(responseHex))
         {
             logger.LogWarning("Sensor {Slug} replied without a response body (request {RequestId})", sensor.Slug.Value, requestId);
-            return;
+            return PollAttemptOutcome.Failure("empty_response", "The node answered without a response body.");
         }
 
         var lpp = Convert.FromHexString(responseHex);
@@ -143,55 +227,83 @@ public sealed class SensorTelemetryPoller(
                 sensor.Slug.Value,
                 requestId,
                 responseHex[..Math.Min(responseHex.Length, 64)]);
-            return;
+            return PollAttemptOutcome.Failure(
+                "undecodable_response",
+                $"The node reply could not be decoded as Cayenne LPP: {responseHex[..Math.Min(responseHex.Length, 64)]}");
         }
 
         var readings = ResolveReadings(sensor, telemetry);
-        var payloadJson = JsonSerializer.Serialize(new Dictionary<string, object?>
-        {
-            ["type"] = "sensor_poll",
-            ["sensor"] = sensor.Slug.Value,
-            ["requestId"] = requestId,
-            ["protocol"] = "meshcore-req-lpp",
-            ["rssi"] = ReadNullableDouble(response.RootElement, "rssi"),
-            ["snr"] = ReadNullableDouble(response.RootElement, "snr"),
-            ["elapsedMs"] = ReadNullableDouble(response.RootElement, "elapsedMs"),
-            ["responseHex"] = responseHex,
-            ["readings"] = readings.Select(reading => new { metric = reading.metric, value = reading.value, unit = reading.unit }).ToArray(),
-        });
-
-        var snapshotId = await store.AppendAsync(capturedAt, client.TransportName, payloadJson, cancellationToken);
         logger.LogInformation(
-            "Sensor {Slug} answered request {RequestId}: {Metrics}; outbox snapshot {SnapshotId}",
+            "Sensor {Slug} answered request {RequestId}: {Metrics}",
             sensor.Slug.Value,
             requestId,
-            string.Join(", ", readings.Select(reading => $"{reading.metric}={reading.value.ToString(CultureInfo.InvariantCulture)}{reading.unit}")),
-            snapshotId);
+            string.Join(", ", readings.Select(reading => $"{reading.metric}={reading.value.ToString(CultureInfo.InvariantCulture)}{reading.unit}")));
+        return PollAttemptOutcome.Success(
+            readings,
+            responseHex,
+            ReadNullableDouble(response.RootElement, "rssi"),
+            ReadNullableDouble(response.RootElement, "snr"),
+            ReadNullableInt(response.RootElement, "elapsedMs"));
     }
 
-    internal static IReadOnlyList<(string metric, double value, string unit)> ResolveReadings(
+    /// <summary>
+    /// Appends the attempt to the local outbox: successful polls as
+    /// <c>sensor_poll</c> snapshots (extended with attempt metadata), failures
+    /// as <c>poll_attempt</c> records. The main API maps both to poll_attempts.
+    /// </summary>
+    private async Task RecordAttemptAsync(
         SensorDefinition sensor,
-        IReadOnlyList<LppValue> telemetry)
+        long requestId,
+        int attemptNumber,
+        DateTimeOffset startedAt,
+        PollAttemptOutcome outcome,
+        CancellationToken cancellationToken)
     {
-        var mappings = sensor.Channels
-            .GroupBy(channel => (channel.Channel, channel.Type ?? "*"))
-            .ToDictionary(group => group.Key, group => group.First().Metric);
-        var repeatedTypes = telemetry
-            .GroupBy(value => value.TypeKey)
-            .Where(group => group.Count() > 1)
-            .Select(group => group.Key)
-            .ToHashSet(StringComparer.Ordinal);
+        var completedAt = DateTimeOffset.UtcNow;
+        string payloadJson;
+        if (outcome.Telemetry is { } readings)
+        {
+            payloadJson = JsonSerializer.Serialize(new Dictionary<string, object?>
+            {
+                ["type"] = "sensor_poll",
+                ["sensor"] = sensor.Slug.Value,
+                ["requestId"] = requestId,
+                ["protocol"] = "meshcore-req-lpp",
+                ["attemptNumber"] = attemptNumber,
+                ["startedAt"] = startedAt,
+                ["rssi"] = outcome.Rssi,
+                ["snr"] = outcome.Snr,
+                ["elapsedMs"] = outcome.RoundTripMilliseconds,
+                ["responseHex"] = outcome.ResponseHex,
+                ["readings"] = readings.Select(reading => new { metric = reading.metric, value = reading.value, unit = reading.unit }).ToArray(),
+            });
+        }
+        else
+        {
+            payloadJson = JsonSerializer.Serialize(new Dictionary<string, object?>
+            {
+                ["type"] = "poll_attempt",
+                ["sensor"] = sensor.Slug.Value,
+                ["requestId"] = requestId,
+                ["protocol"] = "meshcore-req-lpp",
+                ["attemptNumber"] = attemptNumber,
+                ["startedAt"] = startedAt,
+                ["completedAt"] = completedAt,
+                ["status"] = outcome.Status.ToString(),
+                ["errorCode"] = outcome.ErrorCode,
+                ["errorMessage"] = outcome.ErrorMessage,
+                ["roundTripMs"] = outcome.RoundTripMilliseconds,
+            });
+        }
 
-        return telemetry
-            .Select(value => (
-                Metric: CayenneLppDecoder.ResolveMetricKey(value, mappings, repeatedTypes),
-                value.Value,
-                value.Unit))
-            .GroupBy(resolved => resolved.Metric, StringComparer.Ordinal)
-            .Select(group => (group.Key, group.First().Value, group.First().Unit))
-            .OrderBy(resolved => resolved.Item1, StringComparer.Ordinal)
-            .Select(resolved => (resolved.Item1, resolved.Item2, resolved.Item3))
-            .ToArray();
+        var snapshotId = await store.AppendAsync(startedAt, client.TransportName, payloadJson, cancellationToken);
+        logger.LogInformation(
+            "Poll attempt {Attempt} of sensor {Slug} (request {RequestId}) recorded as outbox snapshot {SnapshotId}: {Status}",
+            attemptNumber,
+            sensor.Slug.Value,
+            requestId,
+            snapshotId,
+            outcome.Telemetry is null ? outcome.Status.ToString() : "Succeeded");
     }
 
     private async Task TryLoginOnceAsync(SensorDefinition sensor, HashSet<string> loginAttempted, CancellationToken cancellationToken)
@@ -237,6 +349,12 @@ public sealed class SensorTelemetryPoller(
     internal static string ResolveLoginPassword(SensorDefinition sensor, SensorPollingOptions options) =>
         sensor.LoginPassword ?? options.LoginPassword;
 
+    internal static int ResolveRequestTimeoutMs(SensorDefinition sensor, SensorPollingOptions options)
+    {
+        var timeoutMs = (int)sensor.PollTimeout.TotalMilliseconds;
+        return timeoutMs > 0 ? timeoutMs : options.RequestTimeoutMs;
+    }
+
     internal static byte[] BuildTelemetryRequestPayload(long requestId)
     {
         var timestamp = (uint)requestId;
@@ -248,6 +366,31 @@ public sealed class SensorTelemetryPoller(
     }
 
     internal static string ToRequestHex(byte[] payload) => Convert.ToHexString(payload).ToLowerInvariant();
+
+    internal static IReadOnlyList<(string metric, double value, string unit)> ResolveReadings(
+        SensorDefinition sensor,
+        IReadOnlyList<LppValue> telemetry)
+    {
+        var mappings = sensor.Channels
+            .GroupBy(channel => (channel.Channel, channel.Type ?? "*"))
+            .ToDictionary(group => group.Key, group => group.First().Metric);
+        var repeatedTypes = telemetry
+            .GroupBy(value => value.TypeKey)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToHashSet(StringComparer.Ordinal);
+
+        return telemetry
+            .Select(value => (
+                Metric: CayenneLppDecoder.ResolveMetricKey(value, mappings, repeatedTypes),
+                value.Value,
+                value.Unit))
+            .GroupBy(resolved => resolved.Metric, StringComparer.Ordinal)
+            .Select(group => (group.Key, group.First().Value, group.First().Unit))
+            .OrderBy(resolved => resolved.Item1, StringComparer.Ordinal)
+            .Select(resolved => (resolved.Item1, resolved.Item2, resolved.Item3))
+            .ToArray();
+    }
 
     private TimeSpan PollInterval(SensorDefinition sensor)
     {
@@ -275,4 +418,38 @@ public sealed class SensorTelemetryPoller(
         element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Number
             ? value.GetDouble()
             : null;
+
+    private static int? ReadNullableInt(JsonElement element, string property) =>
+        element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Number
+            && value.TryGetInt32(out var intValue)
+                ? intValue
+                : null;
+
+    private sealed record PollAttemptOutcome(
+        PollAttemptStatus Status,
+        string? ErrorCode,
+        string? ErrorMessage,
+        int? RoundTripMilliseconds,
+        IReadOnlyList<(string metric, double value, string unit)>? Telemetry,
+        string? ResponseHex,
+        double? Rssi,
+        double? Snr)
+    {
+        public static PollAttemptOutcome Success(
+            IReadOnlyList<(string metric, double value, string unit)> readings,
+            string responseHex,
+            double? rssi,
+            double? snr,
+            int? roundTripMs) => new(
+                PollAttemptStatus.Succeeded, null, null, roundTripMs, readings, responseHex, rssi, snr);
+
+        public static PollAttemptOutcome Failure(string errorCode, string errorMessage) => new(
+            PollAttemptStatus.Failed, errorCode, errorMessage, null, null, null, null, null);
+
+        public static PollAttemptOutcome Failure(
+            PollAttemptStatus status,
+            string? errorCode,
+            string? errorMessage,
+            int? roundTripMs) => new(status, errorCode, errorMessage, roundTripMs, null, null, null, null);
+    }
 }
