@@ -24,3 +24,4 @@ data/
 # Sensor registry: deployment-local, may contain node credentials
 # (mesh.loginPassword references). Only schema.json is tracked.
 config/sensors/*.yaml
+src/MeshSMO.Sensors.Gateway/config/sensors/*.yaml

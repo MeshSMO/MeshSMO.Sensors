@@ -99,6 +99,8 @@ SQLite (`telemetry_snapshots.payload_json`) и далее `GatewayIngestionWorke
   "sensor": "smolensk-center",
   "requestId": 1788693122,
   "protocol": "meshcore-req-lpp",
+  "attemptNumber": 1,
+  "startedAt": "2026-09-06T12:00:00.000+00:00",
   "rssi": -25.0,
   "snr": 12.5,
   "elapsedMs": 1723,
@@ -107,7 +109,27 @@ SQLite (`telemetry_snapshots.payload_json`) и далее `GatewayIngestionWorke
 }
 ```
 
-Ingestion: `readings[]` → `measurement_values` (numeric + unit); `rssi`/`snr` → `measurement_samples`; `responseHex` (после отрезания 4-байтового тега) → `raw_payload`. Идемпотентность — unique `(sensor_id, request_id)`; повторные снапшоты outbox — unique `gateway_snapshot_id`.
+**Неудачная попытка опроса** (`type: "poll_attempt"`) — timeout, транспортная ошибка, пустое или нерасшифруемое тело. Успех не ретраится как «попытка»: каждая попытка цикла (включая успешную) попадает в outbox отдельным снапшотом.
+
+```json
+{
+  "type": "poll_attempt",
+  "sensor": "smolensk-center",
+  "requestId": 1788693123,
+  "protocol": "meshcore-req-lpp",
+  "attemptNumber": 1,
+  "startedAt": "2026-09-06T12:05:00.000+00:00",
+  "completedAt": "2026-09-06T12:05:08.100+00:00",
+  "status": "TimedOut",
+  "errorCode": "timeout",
+  "errorMessage": null,
+  "roundTripMs": 8000
+}
+```
+
+`status` ∈ `TimedOut` | `Failed` (Succeeded приезжает только внутри `sensor_poll`); `errorCode` ∈ `timeout` | `transport_error` | `empty_response` | `undecodable_response`.
+
+Ingestion: `readings[]` → `measurement_values` (numeric + unit); `rssi`/`snr` → `measurement_samples`; `responseHex` (после отрезания 4-байтового тега) → `raw_payload`; `elapsedMs` → `measurement_samples.round_trip_ms`. И `sensor_poll`, и `poll_attempt` → `poll_attempts` (started_at/completed_at/attempt_number/status/error_code/round_trip_ms). Идемпотентность: samples — unique `(sensor_id, request_id)`; attempts — unique `(sensor_id, request_id, attempt_number)`; повторные снапшоты outbox — unique `gateway_snapshot_id`. Неудачные попытки двигают materialized `sensor_status`: `consecutive_failures++`, состояние Degraded (порог `Gateway:DegradedAfterFailures`, default 1) / Offline (`Gateway:OfflineAfterFailures`, default 6); успех сбрасывает в Online/0.
 
 ## 7. Ошибки acquisition
 

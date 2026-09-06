@@ -2102,24 +2102,24 @@ connect -> command/stats -> local SQLite -> reconnect
 ### Результат
 
 Один реальный датчик регулярно опрашивается, measurements появляются в PostgreSQL.
-Реализовано (частично, см. чекбоксы): опрос идёт через acquisition API прошивки
+Реализовано: опрос идёт через acquisition API прошивки
 (`POST /api/request`, контракт — `docs/repeater-firmware-acquisition-spec.md`), protocol_id =
 `meshcore-req-lpp`: REQ = `timestamp(4 LE) + 0x03 + 0x00`, ответ = `timestamp(4) + Cayenne LPP`.
 
 ### Tasks
 
-- [ ] priority queue scheduler (сейчас — sequential round-robin по due-time);
+- [x] priority queue scheduler (due-time priority queue, MaxConcurrentPolls = 1, deterministic jitter);
 - [x] deterministic jitter;
 - [x] single concurrent request;
-- [x] timeout;
-- [ ] retry (сейчас один запрос на цикл);
-- [ ] request correlation (request_id = монотонный счётчик от unix time; идемпотентность через unique (sensor_id, request_id));
-- [ ] poll attempts (таблица poll_attempts пока не заполняется);
+- [x] timeout (на попытку: pollTimeout из registry, fallback SensorPolling:RequestTimeoutMs);
+- [x] retry (до pollMaxAttempts на цикл, clamped 1..3; randomized backoff SensorPolling:RetryBackoff{Min,Max}Ms; timeout/transport-ошибки ретраятся, пустой/нерасшифруемый ответ — нет, детерминированный);
+- [x] request correlation (request_id = монотонный счётчик от unix time; идемпотентность через unique (sensor_id, request_id));
+- [x] poll attempts (каждая попытка пишется gateway в SQLite outbox (`sensor_poll` с attemptNumber/startedAt либо `poll_attempt`), web-импортер кладёт в poll_attempts; идемпотентность — unique (sensor_id, request_id, attempt_number)); неудачные попытки двигают sensor_status (Degraded/Offline, пороги Gateway:Degraded/OfflineAfterFailures);
 - [x] measurement persistence;
 - [x] graceful shutdown;
-- [ ] gateway health;
+- [x] gateway health (/health/ready = SQLite outbox writable + YAML registry; недоступность LoRa/репитера не влияет, спека §36);
 - [x] structured logs;
-- [ ] fake scenarios.
+- [x] fake scenarios (fake-транспорт: retry после timeout, исчерпание попыток, undecodable body — в SensorTelemetryPollerTests).
 
 Это первый end-to-end milestone.
 
@@ -2137,14 +2137,14 @@ connect -> command/stats -> local SQLite -> reconnect
 - [x] sensor detail;
 - [x] latest;
 - [x] status;
-- [ ] historical query;
-- [ ] resolution=auto;
-- [ ] aggregation;
+- [x] historical query (`GET /api/v1/sensors/{slug}/measurements?metric&from&to&resolution`, ответ по §14.2);
+- [x] resolution=auto (≤6h → raw; ≤24h → 5m; ≤7d → 15m; ≤31d → 1h; ≤180d → 6h; >180d → 1d; диапазон ≤400 дней);
+- [x] aggregation (min/avg/max/count в UTC-aligned бакетах; PG date_bin, SQLite strftime — для тестов);
 - [x] dashboard aggregate endpoint;
-- [ ] validation;
-- [ ] rate limits;
-- [ ] OpenAPI;
-- [ ] integration tests.
+- [x] validation (400 ValidationError: metric/from/to/resolution, бюджет точек; 404 на неизвестный/скрытый датчик);
+- [x] rate limits (per-IP fixed window 120 req/min на /api/v1/sensors/* и /dashboard, политика `public-api`);
+- [x] OpenAPI (`/openapi/v1.json`, Microsoft.AspNetCore.OpenApi);
+- [x] integration tests (SQLite-провайдер: бакеты, raw, фильтр по метрике, validation; rate limit + OpenAPI smoke).
 
 ---
 
