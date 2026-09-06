@@ -36,8 +36,10 @@ services:
     environment:
       ConnectionStrings__Sensors: Host=sensor-db;Port=5432;Database=${POSTGRES_DB:-meshsmo_sensors};Username=${POSTGRES_USER:-meshsmo};Password=${POSTGRES_PASSWORD}
       Public__BaseUrl: ${PUBLIC_BASE_URL:-https://sensors.meshsmo.ru}
-      Gateway__BaseUrl: http://sensor-gateway:8080
+      Gateway__Mode: ${GATEWAY_MODE:-Pull}
+      Gateway__BaseUrl: ${GATEWAY_BASE_URL:-http://sensor-gateway:8080}
       Gateway__ApiKey: ${GATEWAY_API_KEY:-}
+      Gateway__Ingest__ApiKey: ${GATEWAY_INGEST_API_KEY:-}
     depends_on:
       sensor-migrator:
         condition: service_completed_successfully
@@ -51,6 +53,10 @@ services:
     restart: unless-stopped
     environment:
       Gateway__ApiKey: ${GATEWAY_API_KEY:-}
+      Push__ApiUrl: ${GATEWAY_PUSH_API_URL:-}
+      Push__ApiKey: ${GATEWAY_PUSH_API_KEY:-}
+      Push__IntervalSeconds: ${GATEWAY_PUSH_INTERVAL_SECONDS:-15}
+      Push__AllowInsecureHttp: ${GATEWAY_PUSH_ALLOW_INSECURE_HTTP:-false}
       MeshCore__Mode: ${MESHCORE_MODE:-Disabled}
       MeshCore__ReconnectDelaySeconds: 5
       MeshCore__TelemetryCollectionIntervalSeconds: 60

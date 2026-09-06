@@ -24,7 +24,22 @@ builder.Services
     .Validate(
         static options => options.BatchSize > 0,
         "Gateway:BatchSize must be greater than zero.")
+    .Validate(
+        static options => Enum.IsDefined(options.Mode),
+        "Gateway:Mode must be either Pull or Push.")
+    .Validate<GatewayIngestOptions>(
+        static (options, ingest) => options.Mode != GatewayDeliveryMode.Push ||
+            !string.IsNullOrWhiteSpace(ingest.ApiKey),
+        "Gateway:Ingest:ApiKey is required when Gateway:Mode is Push.")
     .ValidateOnStart();
+builder.Services
+    .AddOptions<GatewayIngestOptions>()
+    .Bind(builder.Configuration.GetSection(GatewayIngestOptions.SectionName))
+    .Validate(
+        static options => options.MaximumBatchSize > 0,
+        "Gateway:Ingest:MaximumBatchSize must be greater than zero.")
+    .ValidateOnStart();
+builder.Services.AddScoped<GatewayTelemetryImporter>();
 builder.Services.AddHttpClient<GatewayTelemetryClient>((serviceProvider, client) =>
 {
     var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<GatewayIngestionOptions>>().Value;
@@ -78,6 +93,8 @@ app.MapGet("/api/v1/telemetry/snapshots", async Task<IResult> (
 });
 
 app.MapSensorApi();
+
+app.MapGatewayIngestApi();
 
 app.MapSitemap();
 app.MapSensorFallbacks();

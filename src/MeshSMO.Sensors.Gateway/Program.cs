@@ -4,6 +4,7 @@ using MeshSMO.Sensors.Infrastructure;
 using MeshSMO.Sensors.Gateway.Api;
 using MeshSMO.Sensors.Gateway.MeshCore;
 using MeshSMO.Sensors.Gateway.Polling;
+using MeshSMO.Sensors.Gateway.Push;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
@@ -13,6 +14,7 @@ builder.Services.AddSensorRegistry(builder.Configuration);
 builder.Services.AddMeshCoreGateway(builder.Configuration);
 builder.Services.AddHostedService<Worker>();
 builder.Services.AddHostedService<SensorTelemetryPoller>();
+builder.Services.AddHostedService<TelemetryPushWorker>();
 
 builder.Services
     .AddOptions<SensorPollingOptions>()
@@ -37,6 +39,37 @@ builder.Services
         static options => options.MaximumBatchSize > 0,
         "Gateway:MaximumBatchSize must be greater than zero.")
     .ValidateOnStart();
+
+builder.Services
+    .AddOptions<TelemetryPushOptions>()
+    .Bind(builder.Configuration.GetSection(TelemetryPushOptions.SectionName))
+    .Validate(
+        static options => options.ApiUrl is null || options.ApiUrl.IsAbsoluteUri,
+        "Push:ApiUrl must be an absolute URI when configured.")
+    .Validate(
+        static options => options.ApiUrl is null || !string.IsNullOrWhiteSpace(options.ApiKey),
+        "Push:ApiKey is required when Push:ApiUrl is configured.")
+    .Validate(
+        static options => options.ApiUrl is null || options.AllowInsecureHttp ||
+            options.ApiUrl.Scheme == Uri.UriSchemeHttps,
+        "Push:ApiUrl must use HTTPS unless Push:AllowInsecureHttp is enabled.")
+    .Validate(
+        static options => options.BatchSize > 0,
+        "Push:BatchSize must be greater than zero.")
+    .Validate(
+        static options => options.IntervalSeconds > 0,
+        "Push:IntervalSeconds must be greater than zero.")
+    .ValidateOnStart();
+
+builder.Services.AddHttpClient<TelemetryPushClient>((serviceProvider, client) =>
+{
+    var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<TelemetryPushOptions>>().Value;
+    if (options.ApiUrl is not null)
+    {
+        client.BaseAddress = new Uri($"{options.ApiUrl.AbsoluteUri.TrimEnd('/')}/");
+    }
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
 
 var app = builder.Build();
 

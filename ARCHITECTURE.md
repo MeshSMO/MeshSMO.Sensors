@@ -29,6 +29,8 @@
 
 Плюс **sensor-migrator** (one-shot: EF-миграции + sync registry) и **sensor-db** (PostgreSQL, не публикуется наружу).
 
+Доставка outbox → PostgreSQL — два режима (спека §7.1.5/§7.1.6): **pull** (по умолчанию; web опрашивает gateway по `GET /api/telemetry/pending`) или **push** (`Gateway:Mode=Push` у web + `Push:ApiUrl` у gateway; gateway сам постит батчи на `POST /api/telemetry/ingest` web'а с общим секретом `X-Api-Key`). Контракт payload'ов и идемпотентность у режимов идентичны; push позволяет разнести gateway и web по серверам, не публикуя порты gateway.
+
 Принципы границ (см. спека §5, §66):
 
 - **BFF не знает про MeshCore**: ни serial, ни пакетный формат не протекают в `Web`. Web оперирует снапшотами outbox.
@@ -58,13 +60,18 @@ Wire-детали: [docs/protocol.md](./docs/protocol.md).
 
 ### 2.3. Ingestion в PostgreSQL
 
-`GatewayIngestionWorker` (в web): раз в `Gateway:PollIntervalSeconds` → `GET /api/telemetry/pending?maxCount=N` у gateway → атомарно в одном SaveChanges:
+Доставка из outbox — pull или push (см. §1); запись в БД общая — `GatewayTelemetryImporter` (в web, `GatewayIngestion/`):
+
+- pull: `GatewayIngestionWorker` раз в `Gateway:PollIntervalSeconds` → `GET /api/telemetry/pending?maxCount=N` у gateway;
+- push: `TelemetryPushWorker` (в gateway) раз в `Push:IntervalSeconds` постит батч на `POST /api/telemetry/ingest` web'а; web хэндлер делает тот же импорт и отвечает 2xx, после чего gateway ack-ает (удаляет) снапшоты у себя.
+
+Атомарно в одном SaveChanges:
 
 - `gateway_telemetry_snapshots`/`_readings` (raw архив, идемпотентно по unique `gateway_snapshot_id`);
 - для `sensor_poll`-payload: `measurement_samples` + `measurement_values` (идемпотентно по unique `(sensor_id, request_id)`), `unit` из payload;
 - upsert `sensor_status` → `Online` + RSSI/SNR.
 
-Только после коммита транзакции → `POST /api/telemetry/ack` (gateway удаляет снапшоты). Сбой на любом шаге = повторная доставка без дублей.
+Ack — только после коммита транзакции (pull: `POST /api/telemetry/ack`; push: локальное удаление после 2xx). Сбой на любом шаге = повторная доставка без дублей.
 
 ### 2.4. Чтение (BFF)
 
@@ -96,7 +103,7 @@ Wire-детали: [docs/protocol.md](./docs/protocol.md).
 | # | Решение | Почему |
 |---|---|---|
 | 1 | Monorepo, bounded context | один домен, атомарные изменения контрактов |
-| 2 | Gateway без PostgreSQL; pull через внутренний API | изоляция радиочасти от БД, ack/idempotency дают ровно-однажды запись |
+| 2 | Gateway без PostgreSQL; доставка из outbox — pull (внутренний API) или push (gateway сам шлёт на web) | изоляция радиочасти от БД; ack/idempotency дают ровно-однажды запись; push позволяет раздельный деплой без published-портов gateway |
 | 3 | SQLite outbox в gateway | переживает рестарты, простая эксплуатация, no-broker |
 | 4 | Опрос нод через acquisition API прошивки (REQ + ANON login), не через свой radio | Risk A из спеки решён кастомной прошивкой репитера; gateway не держит радио |
 | 5 | Cayenne LPP как формат ответов датчиков | стандарт MeshCore; свой бинарный envelope (Phase 2) отложен до собственной прошивки датчиков |

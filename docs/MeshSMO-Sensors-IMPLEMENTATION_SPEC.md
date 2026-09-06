@@ -461,6 +461,59 @@ GET  /health/live, /health/ready
 - ack отправляется только после успешной записи батча в PostgreSQL;
 - идемпотентность обеспечивается уникальным `gateway_snapshot_id` в PostgreSQL: повторно доставленный snapshot пропускается, а не дублируется.
 
+### 7.1.6. Push-режим доставки (gateway → основной API)
+
+Альтернатива pull для раздельного деплоя: gateway и `sensor-web` на разных серверах, при этом gateway не должен быть доступен извне. Основной backend сам не опрашивает gateway — gateway самостоятельно доставляет батчи из локальной outbox на ingest-эндпоинт `sensor-web`. Наружу смотрит только `sensor-web` (он и так публичный), gateway входящих портов не имеет.
+
+Контракт повторяет pull 1-в-1: тот же JSON `pendingCount` + `snapshots[]` с `readings[]`, тот же `X-Api-Key`, та же идемпотентность (`gateway_snapshot_id`, `(sensor_id, request_id)`).
+
+```text
+sensor-web (Push mode):
+POST /api/telemetry/ingest
+     body: { pendingCount, snapshots: [{ id, capturedAt, transport, payloadJson, readings[] }] }
+     -> 200 { accepted: N }   (N — новых записанных снимков; 2xx = весь батч записан или уже был известен)
+     -> 401 {"error":"Unauthorized"} — нет/неверен X-Api-Key
+     -> 400 {"error":"BatchTooLarge"} — батч больше Gateway:Ingest:MaximumBatchSize
+```
+
+Выбор режима — на стороне `sensor-web`, ключ `Gateway:Mode`:
+
+- `Pull` (по умолчанию) — текущее поведение: `GatewayIngestionWorker` опрашивает gateway по `Gateway:BaseUrl`;
+- `Push` — pull-воркер выключен, маппится `POST /api/telemetry/ingest`.
+
+На стороне gateway push включается наличием `Push:ApiUrl` — приложение продолжает обслуживать pull API (`/api/telemetry/pending` + `/ack`), поэтому переходный период, когда gateway уже пушит, а старый `sensor-web` ещё тянет, безопасен: обе стороны идемпотентны и делят одну outbox.
+
+Конфигурация:
+
+```text
+# gateway
+Push__ApiUrl=https://sensors.example.com   # наличие ключа включает push
+Push__ApiKey=...                            # = Gateway__Ingest__ApiKey на sensor-web
+Push__BatchSize=200
+Push__IntervalSeconds=15
+Push__AllowInsecureHttp=false               # http разрешён только явно (изолированные сети)
+
+# sensor-web
+Gateway__Mode=Push
+Gateway__Ingest__ApiKey=...                 # обязателен в Push-режиме, иначе старт падает
+Gateway__Ingest__MaximumBatchSize=500
+```
+
+Семантика надёжности:
+
+- gateway читает батч из SQLite outbox (`ReadPendingAsync(BatchSize)`), отправляет его и удаляет снимки (`AcknowledgeAsync`) **только после 2xx** ответа;
+- при сетевой ошибке, 5xx или 401 батч остаётся в outbox и повторяется на следующем тике `IntervalSeconds` — потери данных нет, ошибки видны в логах;
+- повторная доставка не создаёт дублей: пропускаются уже сохранённые `gateway_snapshot_id`;
+- битый `payloadJson` или неизвестный slug не ломают батч: снимок сохраняется как telemetry-only с warning в логе (как в pull), ответ всё равно 2xx.
+
+Предохранители:
+
+- `sensor-web` стартует с ошибкой, если `Gateway:Mode=Push`, но не задан `Gateway:Ingest:ApiKey` (иначе эндпоинт остался бы открытым);
+- gateway стартует с ошибкой, если `Push:ApiUrl` задан, но `Push:ApiKey` пуст, URI не абсолютный или схема http без явного `Push:AllowInsecureHttp`;
+- `Push:ApiUrl` по умолчанию должен быть HTTPS (прецедент — валидация `MeshCore:Http:BaseAddress`).
+
+Рассинхрон конфигураций: если `sensor-web` в `Pull`, а gateway уже настроен на push, gateway будет бесконечно ретраить 404 — это видно в логах и не теряет данные. Сравнение заголовка `X-Api-Key` на ingest-эндпоинте — constant-time (`CryptographicOperations.FixedTimeEquals`).
+
 ## 7.2. `ISensorProtocol`
 
 ```csharp
@@ -1528,14 +1581,18 @@ MeshCore__Serial__BaudRate=115200
 MeshCore__Serial__CommandTimeoutSeconds=10
 LocalTelemetry__DatabasePath=data/gateway-telemetry.db
 Gateway__ApiKey=...
+Push__ApiUrl=...          # опционально: включает push-доставку телеметрии на основной API
+Push__ApiKey=...          # обязателен, если задан Push__ApiUrl
 ```
 
 sensor-web:
 
 ```text
 ConnectionStrings__Sensors=...
+Gateway__Mode=Pull          # Pull (по умолчанию) | Push
 Gateway__BaseUrl=http://sensor-gateway:8080
 Gateway__ApiKey=...
+Gateway__Ingest__ApiKey=... # обязателен в Gateway__Mode=Push
 Gateway__PollIntervalSeconds=15
 Polling__MaxConcurrentPolls=1
 Public__BaseUrl=https://sensors.meshsmo.ru
@@ -1711,7 +1768,7 @@ Raw payload может занимать больше места и нужен г
 
 ## Gateway
 
-Не слушает публичный TCP port без необходимости.
+Не слушает публичный TCP port без необходимости. В push-режиме gateway остаётся без входящих портов: он сам обращается к публичному ingest-эндпоинту `sensor-web` с общим секретом `Push:ApiKey` / `Gateway:Ingest:ApiKey` (см. 7.1.6).
 
 ## Database
 
