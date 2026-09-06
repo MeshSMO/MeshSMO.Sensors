@@ -15,6 +15,8 @@ WORKDIR /app
 ENV ASPNETCORE_HTTP_PORTS=8080
 EXPOSE 8080
 COPY --from=build /app/publish ./
+# curl is needed by the compose healthcheck (/health/ready).
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 # /app/data hosts the SQLite outbox volume; it must be writable by APP_UID.
 RUN mkdir -p /app/data && chown -R $APP_UID /app/data
 USER $APP_UID

@@ -26,6 +26,8 @@ WORKDIR /app
 COPY --from=backend /app/publish ./
 COPY --from=frontend /src/src/web/.output/public ./wwwroot
 ENV ASPNETCORE_HTTP_PORTS=8080
+# curl is needed by the compose healthcheck (/health/ready).
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 USER $APP_UID
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "MeshSMO.Sensors.Web.dll"]

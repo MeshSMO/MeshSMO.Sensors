@@ -52,6 +52,12 @@ services:
         condition: service_completed_successfully
     ports:
       - "${SENSOR_WEB_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health/ready || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   sensor-gateway:
     build:
@@ -83,6 +89,14 @@ services:
     volumes:
       - sensor-gateway-data:/app/data
       - ../config:/app/config:ro
+    healthcheck:
+      # Ready = локальные ресурсы (SQLite outbox, YAML registry). Недоступность
+      # LoRa-датчиков или репитера не должна ронять health (см. спеку §36).
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health/ready || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
 volumes:
   sensor-db-data:
