@@ -40,7 +40,16 @@
 
 ## Фронтенд (`src/web`)
 
-.editorconfig задаёт только универсальное (LF, отступы 2). Семантику (кавычки, точки с запятой, trailing commas) ведут ESLint/Prettier.
+Канонический форматтер — **Prettier** (`src/web/.prettierrc`): printWidth 100, semi, двойные кавычки, trailing commas, `endOfLine: lf`. `.editorconfig` задаёт только универсальное (LF, отступы 2, `max_line_length = 100` для JS/TS — для линейки редактора).
+
+Единый пайплайн (все способы форматирования дают одинаковый результат):
+
+- `npm run format` — переписать, `npm run format:check` — проверить (шаг в CI, job `frontend`).
+- `npm run lint` — ESLint c `eslint-plugin-prettier`: расхождение с Prettier = error.
+- ts/tsx руками не форматировать: править код и запускать `npm run format`. Ручное форматирование «по .editorconfig» проверку не проходит — Prettier ведёт переносы/кавычки, которые .editorconfig не выражает.
+- EOL = LF на трёх уровнях: `.gitattributes` (`* text=auto eol=lf`, источник истины для git), `.prettierrc` (`endOfLine`), `.vscode/settings.json` (`files.eol`, format on save, Prettier как форматтер веб-файлов — настройки коммитятся).
+- `src/generated/` (вывод `scripts/generate-registry.mjs`) — в `.prettierignore`: формат генерированного JSON принадлежит генератору, Prettier его не трогает и не проверяет.
+- `src/components/ui/**` (shadcn) — исключение из `react-refresh/only-export-components`, это генерируемый код.
 
 ## Если анализатор мешает легитимному коду
 
