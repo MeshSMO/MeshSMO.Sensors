@@ -10,7 +10,11 @@ var validateRegistryOnly = args.Contains("--validate-registry", StringComparer.O
 var hostArgs = args.Where(argument => !string.Equals(argument, "--validate-registry", StringComparison.Ordinal)).ToArray();
 var builder = Host.CreateApplicationBuilder(hostArgs);
 builder.Logging.ClearProviders();
-builder.Logging.AddJsonConsole();
+builder.Logging.AddSimpleConsole(options =>
+{
+    options.SingleLine = true;
+    options.TimestampFormat = "yyyy-MM-dd HH:mm:ss ";
+});
 if (validateRegistryOnly)
 {
     builder.Services.AddSensorRegistry(builder.Configuration);

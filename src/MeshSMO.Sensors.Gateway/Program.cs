@@ -8,7 +8,11 @@ using MeshSMO.Sensors.Gateway.Push;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
-builder.Logging.AddJsonConsole();
+builder.Logging.AddSimpleConsole(options =>
+{
+    options.SingleLine = true;
+    options.TimestampFormat = "yyyy-MM-dd HH:mm:ss ";
+});
 builder.Services.AddHealthChecks();
 builder.Services.AddSensorRegistry(builder.Configuration);
 builder.Services.AddMeshCoreGateway(builder.Configuration);
