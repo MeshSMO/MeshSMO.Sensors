@@ -8,7 +8,7 @@
                      sensors.meshsmo.ru (prod) / localhost:8080 (dev-docker)
                                       |
                               +---------------+
-                              |  sensor-web   |  ASP.NET Core BFF + React static/prerender
+                              |  sensor-web   |  ASP.NET Core BFF + TanStack Start SPA static/prerender
                               |  (Kestrel)    |  PostgreSQL <-- единственный владелец БД
                               +---+-------^---+
                         internal |       |  internal HTTP
@@ -108,7 +108,7 @@ Ack — только после коммита транзакции (pull: `POST
 | 4 | Опрос нод через acquisition API прошивки (REQ + ANON login), не через свой radio | Risk A из спеки решён кастомной прошивкой репитера; gateway не держит радио |
 | 5 | Cayenne LPP как формат ответов датчиков | стандарт MeshCore; свой бинарный envelope (Phase 2) отложен до собственной прошивки датчиков |
 | 6 | Registry-маппинг каналов (`telemetry.channels`) в YAML | канал ≠ смысл; имена/юниты/отображение — версионируются в Git, а не в БД |
-| 7 | React Router `ssr:false` + prerender из registry + JSON-снапшот на prebuild | SEO без Node-SSR runtime; reproducible builds |
+| 7 | TanStack Start в SPA-режиме (без SSR) + prerender статикой из registry + JSON-снапшот на prebuild | SEO без Node-SSR runtime; reproducible builds (старый фронт на React Router 8 сохранён в `src/web_bak`) |
 | 8 | TLS 1.2 + static-RSA cipher pinning в HTTP-клиенте репитера | ESP32-firmware не поднимает TLS 1.3/ECDHE; из Linux-контейнеров иначе не подключиться |
 
 ## 6. Известные ограничения / что дальше

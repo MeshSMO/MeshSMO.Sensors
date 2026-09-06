@@ -41,9 +41,9 @@ dotnet run --project src/MeshSMO.Sensors.DbMigrator -- --validate-registry
 dotnet run --project src/MeshSMO.Sensors.Web --launch-profile http
 ```
 
-`dotnet publish src/MeshSMO.Sensors.Web` также собирает frontend и включает `build/client` в `wwwroot`; Node.js в production runtime не нужен.
+`dotnet publish src/MeshSMO.Sensors.Web` также собирает frontend и включает `.output/public` в `wwwroot`; Node.js в production runtime не нужен.
 
-Отдельные frontend-команды по-прежнему доступны из `src/web` для быстрых проверок `npm run typecheck`, `npm test` и `npm run build`.
+Отдельные frontend-команды по-прежнему доступны из `src/web` для быстрых проверок `npm run lint`, `npm run typecheck` и `npm run build`.
 
 ## Gateway и MeshCoreTel Repeater
 
