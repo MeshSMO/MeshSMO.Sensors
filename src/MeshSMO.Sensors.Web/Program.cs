@@ -1,8 +1,11 @@
+using System.Threading.RateLimiting;
 using MeshSMO.Sensors.Infrastructure;
 using MeshSMO.Sensors.Infrastructure.Persistence;
 using MeshSMO.Sensors.Web.Api;
+using MeshSMO.Sensors.Web.Api.MeasurementHistory;
 using MeshSMO.Sensors.Web.GatewayIngestion;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -32,6 +35,10 @@ builder.Services
     .Validate(
         static options => Enum.IsDefined(options.Mode),
         "Gateway:Mode must be either Pull or Push.")
+    .Validate(
+        static options => options.DegradedAfterFailures >= 1 &&
+            options.OfflineAfterFailures >= options.DegradedAfterFailures,
+        "Gateway:DegradedAfterFailures must be >= 1 and Gateway:OfflineAfterFailures must be >= DegradedAfterFailures.")
     .Validate<GatewayIngestOptions>(
         static (options, ingest) => options.Mode != GatewayDeliveryMode.Push ||
             !string.IsNullOrWhiteSpace(ingest.ApiKey),
@@ -49,6 +56,23 @@ builder.Services
 builder.Services.AddTransient<GatewayIngestOptions>(
     sp => sp.GetRequiredService<IOptions<GatewayIngestOptions>>().Value);
 builder.Services.AddScoped<GatewayTelemetryImporter>();
+builder.Services.AddScoped<MeasurementHistoryReader>();
+
+// Public API rate limiting: per-IP fixed window. Only endpoints tagged with
+// the "public-api" policy are limited; ingest stays unlimited (gateway→web).
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("public-api", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 120,
+            Window = TimeSpan.FromMinutes(1),
+        }));
+});
+
+builder.Services.AddOpenApi();
 builder.Services.AddHttpClient<GatewayTelemetryClient>((serviceProvider, client) =>
 {
     var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<GatewayIngestionOptions>>().Value;
@@ -64,6 +88,7 @@ var app = builder.Build();
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
+app.UseRateLimiter();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions
 {
@@ -102,6 +127,10 @@ app.MapGet("/api/v1/telemetry/snapshots", async Task<IResult> (
 });
 
 app.MapSensorApi();
+
+app.MapMeasurementHistoryApi();
+
+app.MapOpenApi();
 
 app.MapGatewayIngestApi();
 

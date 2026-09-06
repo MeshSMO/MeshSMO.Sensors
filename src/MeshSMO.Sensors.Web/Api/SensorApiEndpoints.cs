@@ -1,5 +1,6 @@
 using MeshSMO.Sensors.Domain.Sensors;
 using MeshSMO.Sensors.Infrastructure.Persistence;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace MeshSMO.Sensors.Web.Api;
@@ -8,7 +9,7 @@ public static class SensorApiEndpoints
 {
     public static IEndpointRouteBuilder MapSensorApi(this IEndpointRouteBuilder app)
     {
-        var sensors = app.MapGroup("/api/v1/sensors");
+        var sensors = app.MapGroup("/api/v1/sensors").RequireRateLimiting("public-api");
 
         sensors.MapGet("/", async Task<IResult> (SensorsDbContext dbContext, CancellationToken cancellationToken) =>
         {
@@ -173,7 +174,7 @@ public static class SensorApiEndpoints
                 },
                 sensors = sensors.Select(sensor => ToSummary(sensor, statuses.GetValueOrDefault(sensor.Id, SensorState.Unknown))),
             });
-        });
+        }).RequireRateLimiting("public-api");
 
         return app;
     }

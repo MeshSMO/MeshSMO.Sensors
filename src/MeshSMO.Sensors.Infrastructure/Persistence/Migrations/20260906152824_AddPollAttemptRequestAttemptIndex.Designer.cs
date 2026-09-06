@@ -3,6 +3,7 @@ using System;
 using MeshSMO.Sensors.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MeshSMO.Sensors.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(SensorsDbContext))]
-    partial class SensorsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260906152824_AddPollAttemptRequestAttemptIndex")]
+    partial class AddPollAttemptRequestAttemptIndex
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

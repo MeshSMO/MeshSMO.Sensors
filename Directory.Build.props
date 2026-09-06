@@ -7,5 +7,9 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    <!-- The Microsoft.AspNetCore.OpenApi source generator emits interceptor
+         code; the package sets this only for its direct consumer, projects
+         that pull it in transitively (unit tests) need it as well. -->
+    <InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.AspNetCore.OpenApi.Generated</InterceptorsNamespaces>
   </PropertyGroup>
 </Project>

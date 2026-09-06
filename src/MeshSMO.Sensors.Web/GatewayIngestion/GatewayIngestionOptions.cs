@@ -25,4 +25,16 @@ public sealed class GatewayIngestionOptions
     public int PollIntervalSeconds { get; set; } = 15;
 
     public int BatchSize { get; set; } = 200;
+
+    /// <summary>
+    /// Consecutive failed poll attempts (imported from gateway poll_attempt
+    /// snapshots) after which the materialized sensor state becomes Degraded.
+    /// </summary>
+    public int DegradedAfterFailures { get; set; } = 1;
+
+    /// <summary>
+    /// Consecutive failed poll attempts after which the materialized sensor
+    /// state becomes Offline. Must be ≥ DegradedAfterFailures.
+    /// </summary>
+    public int OfflineAfterFailures { get; set; } = 6;
 }

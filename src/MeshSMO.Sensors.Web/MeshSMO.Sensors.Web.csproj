@@ -5,6 +5,7 @@
     <SpaRoot>..\web\</SpaRoot>
     <SpaProxyServerUrl>http://localhost:5173</SpaProxyServerUrl>
     <SpaProxyLaunchCommand>npm run dev</SpaProxyLaunchCommand>
+    <UserSecretsId>7832e049-d75d-4ca7-8d01-0867b7aa0b43</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
@@ -12,12 +13,14 @@
     <ProjectReference Include="..\MeshSMO.Sensors.Infrastructure\MeshSMO.Sensors.Infrastructure.csproj" />
     <!-- The frontend is built by the node stage of deploy/Dockerfile.web and
          copied into wwwroot; the esproj is skipped in that environment. -->
-    <ProjectReference Include="..\web\MeshSMO.Sensors.Web.Client.esproj"
-                      Condition="'$(SkipFrontendBuild)' != 'true'">
+    <ProjectReference Include="..\web\MeshSMO.Sensors.Web.Client.esproj" Condition="'$(SkipFrontendBuild)' != 'true'">
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <!-- Analyzers/Build assets stay local: the OpenApi source generator emits
+         interceptor code that would otherwise break referencing projects. -->
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" PrivateAssets="Analyzers;Build" />
     <PackageReference Include="Microsoft.AspNetCore.SpaProxy" />
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
   </ItemGroup>

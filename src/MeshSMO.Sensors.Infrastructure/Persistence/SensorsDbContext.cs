@@ -126,6 +126,10 @@ public sealed class SensorsDbContext(DbContextOptions<SensorsDbContext> options)
         attempt.HasIndex(entity => new { entity.SensorId, entity.StartedAt })
             .IsDescending(false, true)
             .HasDatabaseName("ix_poll_attempts_sensor_started");
+        // Idempotency of gateway attempt import: one row per (poll request, attempt).
+        attempt.HasIndex(entity => new { entity.SensorId, entity.RequestId, entity.AttemptNumber })
+            .IsUnique()
+            .HasDatabaseName("ux_poll_attempts_sensor_request_attempt");
         attempt.HasOne<Sensor>().WithMany().HasForeignKey(entity => entity.SensorId).OnDelete(DeleteBehavior.Restrict);
     }
 
