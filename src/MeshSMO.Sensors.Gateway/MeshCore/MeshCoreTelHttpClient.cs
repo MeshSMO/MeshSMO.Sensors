@@ -8,6 +8,7 @@ namespace MeshSMO.Sensors.Gateway.MeshCore;
 
 public sealed class MeshCoreTelHttpClient(
     HttpClient httpClient,
+    MeshCoreTelSession session,
     IOptions<MeshCoreOptions> options) : IMeshCoreTelClient, IDisposable
 {
     private const int MaximumCommandBytes = 191;
@@ -15,34 +16,16 @@ public sealed class MeshCoreTelHttpClient(
     private const int MaximumErrorBodyLength = 512;
     private readonly SemaphoreSlim _requestLock = new(1, 1);
     private readonly string _adminPassword = options.Value.Http.AdminPassword;
-    private string? _token;
 
     public string TransportName => "http";
 
-    public async Task ConnectAsync(CancellationToken cancellationToken)
-    {
-        await _requestLock.WaitAsync(cancellationToken);
-        try
-        {
-            await AuthenticateAsync(cancellationToken);
-        }
-        finally
-        {
-            _requestLock.Release();
-        }
-    }
+    public Task ConnectAsync(CancellationToken cancellationToken) =>
+        session.GetTokenAsync(AuthenticateAsync, cancellationToken);
 
-    public async Task DisconnectAsync(CancellationToken cancellationToken)
+    public Task DisconnectAsync(CancellationToken cancellationToken)
     {
-        await _requestLock.WaitAsync(cancellationToken);
-        try
-        {
-            _token = null;
-        }
-        finally
-        {
-            _requestLock.Release();
-        }
+        session.ClearToken();
+        return Task.CompletedTask;
     }
 
     public Task<string> ExecuteCommandAsync(string command, CancellationToken cancellationToken)
@@ -130,15 +113,11 @@ public sealed class MeshCoreTelHttpClient(
         await _requestLock.WaitAsync(cancellationToken);
         try
         {
+            var token = await session.GetTokenAsync(AuthenticateAsync, cancellationToken);
             for (var attempt = 0; attempt < 2; attempt++)
             {
-                if (string.IsNullOrEmpty(_token))
-                {
-                    await AuthenticateAsync(cancellationToken);
-                }
-
                 using var request = requestFactory();
-                request.Headers.TryAddWithoutValidation("X-Auth-Token", _token);
+                request.Headers.TryAddWithoutValidation("X-Auth-Token", token);
                 using var response = await httpClient.SendAsync(
                     request,
                     HttpCompletionOption.ResponseHeadersRead,
@@ -146,7 +125,7 @@ public sealed class MeshCoreTelHttpClient(
 
                 if (response.StatusCode == HttpStatusCode.Unauthorized && attempt == 0)
                 {
-                    _token = null;
+                    token = await session.RefreshTokenAsync(token, AuthenticateAsync, cancellationToken);
                     continue;
                 }
 
@@ -162,7 +141,7 @@ public sealed class MeshCoreTelHttpClient(
         }
     }
 
-    private async Task AuthenticateAsync(CancellationToken cancellationToken)
+    private async Task<string> AuthenticateAsync(CancellationToken cancellationToken)
     {
         EnsureUtf8Length(_adminPassword, MaximumPasswordBytes, nameof(MeshCoreHttpOptions.AdminPassword));
 
@@ -179,7 +158,7 @@ public sealed class MeshCoreTelHttpClient(
             throw new InvalidOperationException("MeshCoreTel API returned an empty authentication token.");
         }
 
-        _token = token;
+        return token;
     }
 
     private static HttpRequestMessage CreateTextRequest(HttpMethod method, string path, string body)

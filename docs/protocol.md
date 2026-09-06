@@ -14,7 +14,7 @@ Sensor node ──ответ── Cayenne LPP телеметрия             
 
 ## 2. Транспорт: Gateway ↔ Repeater
 
-- Аутентификация: `POST /login` (body = plain-text пароль) → токен в теле ответа → заголовок `X-Auth-Token` на все `/api/*`. Повторный логин + один retry после `401` — реализованы в `MeshCoreTelHttpClient`.
+- Аутентификация: `POST /login` (body = plain-text пароль) → токен в теле ответа → заголовок `X-Auth-Token` на все `/api/*`. Панель держит **один глобальный токен**: каждый успешный логин инвалидирует предыдущий. Поэтому все потребители панели (`Worker` + `SensorTelemetryPoller`) делят singleton `MeshCoreTelSession`: логин один на старте, повторный — только после `401` (+ один retry того же запроса) — реализовано в `MeshCoreTelHttpClient`. Клиент, логинящийся независимо, устроит взаимный 401-пинг-понг. Токен также протухает по idle-таймауту панели (24 ч в текущей прошивке, раньше 15 мин) и после ребута репитера — gateway перелогинивается сам на первом же 401.
 - TLS: **только TLS 1.2, cipher `TLS_RSA_WITH_AES_128_GCM_SHA256`** (static-RSA). ESP32-сервер отвергает TLS 1.3 и ECDHE-наборы от OpenSSL-рантаймов. Зафиксировано в `MeshCoreGatewayServiceCollectionExtensions` (non-Windows).
 - Ограничения CLI: команда ≤ 191 байт UTF-8; serial-ответ читается до маркера `->`.
 

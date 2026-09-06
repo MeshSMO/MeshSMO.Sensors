@@ -54,6 +54,11 @@ public static class MeshCoreGatewayServiceCollectionExtensions
             .ValidateOnStart();
         services.AddSingleton<ILocalTelemetryStore, SqliteLocalTelemetryStore>();
 
+        // The repeater panel keeps a single global token: Worker and
+        // SensorTelemetryPoller must share one login instead of invalidating
+        // each other's session on every request.
+        services.AddSingleton<MeshCoreTelSession>();
+
         services
             .AddHttpClient<IMeshCoreTelClient, MeshCoreTelHttpClient>((serviceProvider, client) =>
             {

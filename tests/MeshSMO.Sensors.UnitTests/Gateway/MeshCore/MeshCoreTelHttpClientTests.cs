@@ -98,7 +98,69 @@ public sealed class MeshCoreTelHttpClientTests
         Assert.Empty(handler.Requests);
     }
 
-    private static MeshCoreTelHttpClient CreateClient(RecordingHandler handler)
+    [Fact]
+    public async Task SecondClientInstanceReusesSharedSessionToken()
+    {
+        var handler = new RecordingHandler(
+            TextResponse(HttpStatusCode.OK, "shared-token\n"),
+            JsonResponse(HttpStatusCode.OK, "{\"current\":42}"),
+            TextResponse(HttpStatusCode.OK, "MeshCoreTel 1.2.3"));
+        var session = new MeshCoreTelSession();
+        using var first = CreateClient(handler, session);
+        using var second = CreateClient(handler, session);
+
+        using var stats = await first.GetStatsAsync(null, CancellationToken.None);
+        var version = await second.ExecuteCommandAsync("ver", CancellationToken.None);
+
+        Assert.Equal(42, stats.RootElement.GetProperty("current").GetInt32());
+        Assert.Equal("MeshCoreTel 1.2.3", version);
+        Assert.Single(handler.Requests, request => request.Uri.AbsoluteUri.EndsWith("/login", StringComparison.Ordinal));
+        Assert.All(handler.Requests.Skip(1), request => Assert.Equal("shared-token", request.AuthToken));
+    }
+
+    [Fact]
+    public async Task ConnectAsyncDoesNotReloginWhenSessionTokenAlreadyExists()
+    {
+        var handler = new RecordingHandler(
+            TextResponse(HttpStatusCode.OK, "shared-token"),
+            TextResponse(HttpStatusCode.OK, "shared-token"));
+        var session = new MeshCoreTelSession();
+        using var first = CreateClient(handler, session);
+        using var second = CreateClient(handler, session);
+
+        await first.ConnectAsync(CancellationToken.None);
+        await second.ConnectAsync(CancellationToken.None);
+
+        Assert.Single(handler.Requests, request => request.Uri.AbsoluteUri.EndsWith("/login", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ClientReusesTokenRefreshedByAnotherInstanceAfterUnauthorized()
+    {
+        var handler = new RecordingHandler(
+            TextResponse(HttpStatusCode.OK, "first-token"),
+            JsonResponse(HttpStatusCode.OK, "{\"current\":1}"),
+            TextResponse(HttpStatusCode.Unauthorized, "Unauthorized"),
+            TextResponse(HttpStatusCode.OK, "second-token"),
+            JsonResponse(HttpStatusCode.OK, "{\"current\":2}"),
+            TextResponse(HttpStatusCode.OK, "OK"));
+        var session = new MeshCoreTelSession();
+        using var first = CreateClient(handler, session);
+        using var second = CreateClient(handler, session);
+
+        using var firstStats = await first.GetStatsAsync(null, CancellationToken.None);
+        using var secondStats = await second.GetStatsAsync(null, CancellationToken.None);
+        var command = await first.ExecuteCommandAsync("ver", CancellationToken.None);
+
+        Assert.Equal(1, firstStats.RootElement.GetProperty("current").GetInt32());
+        Assert.Equal(2, secondStats.RootElement.GetProperty("current").GetInt32());
+        Assert.Equal("OK", command);
+        Assert.Equal(2, handler.Requests.Count(request => request.Uri.AbsoluteUri.EndsWith("/login", StringComparison.Ordinal)));
+        Assert.Equal("second-token", handler.Requests[4].AuthToken);
+        Assert.Equal("second-token", handler.Requests[5].AuthToken);
+    }
+
+    private static MeshCoreTelHttpClient CreateClient(RecordingHandler handler, MeshCoreTelSession? session = null)
     {
         var httpClient = new HttpClient(handler)
         {
@@ -114,7 +176,7 @@ public sealed class MeshCoreTelHttpClientTests
             },
         });
 
-        return new MeshCoreTelHttpClient(httpClient, options);
+        return new MeshCoreTelHttpClient(httpClient, session ?? new MeshCoreTelSession(), options);
     }
 
     private static HttpResponseMessage TextResponse(HttpStatusCode statusCode, string content)
