@@ -102,7 +102,7 @@ dotnet ef migrations add MigrationName `
 
 GitHub Actions (`.github/workflows`):
 
-- **CI** (`ci.yml`) — на каждый push в `main`/`master` и на PR: параллельно .NET build + unit/protocol тесты + валидация реестра, frontend typecheck/test/build и сборка трёх Docker-образов. Каждый push в основную ветку публикует rolling-образы `ghcr.io/<owner>/meshsmo-sensors-{web,gateway,dbmigrator}` с тегами `<ветка>` и `sha-<hash>`.
+- **CI** (`ci.yml`) — на каждый push в `main`/`master` и на PR: параллельно .NET build + unit/protocol тесты + валидация реестра, frontend typecheck/test/build и сборка трёх Docker-образов. Каждый push в основную ветку публикует rolling-образы `ghcr.io/meshsmo/meshsmo-sensors-{web,gateway,dbmigrator}` с тегами `<ветка>` и `sha-<hash>`.
 - **Release** (`release.yml`) — на push тега `v*.*.*`: прогоняет тот же CI как quality gate, публикует версионированные образы (`1.2.3`, `1.2`, `1`, `latest`) и создаёт GitHub Release с автосгенерированными notes. `workflow_dispatch` без тега переопубликует только `latest`.
 
 Порядок релиза:
