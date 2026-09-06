@@ -35,7 +35,7 @@ public static class LocalOutboxDatabase
             // WAL lets the poller write while push/pull workers read; the mode is
             // persisted in the database file, so setting it at startup is enough.
             await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode = WAL;", cancellationToken);
-        await db.Database.MigrateAsync(cancellationToken);
+            await db.Database.MigrateAsync(cancellationToken);
         }
     }
 }

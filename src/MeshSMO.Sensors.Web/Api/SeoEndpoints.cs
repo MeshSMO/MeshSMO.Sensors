@@ -28,9 +28,7 @@ public static class SeoEndpoints
             builder.Append($"\n  <url><loc>{baseUrl}/sensors</loc></url>");
             builder.Append($"\n  <url><loc>{baseUrl}/about</loc></url>");
             foreach (var sensor in sensors)
-            {
                 builder.Append(System.Globalization.CultureInfo.InvariantCulture, $"\n  <url><loc>{baseUrl}/sensors/{sensor.Slug.Value}</loc><lastmod>{sensor.UpdatedAt:yyyy-MM-dd}</lastmod></url>");
-            }
 
             builder.Append("\n</urlset>");
             return Results.Content(builder.ToString(), "application/xml; charset=utf-8");

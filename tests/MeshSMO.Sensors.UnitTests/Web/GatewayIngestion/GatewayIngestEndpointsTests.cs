@@ -177,8 +177,8 @@ public sealed class GatewayIngestEndpointsTests : IDisposable
         builder.Configuration.AddInMemoryCollection(configuration);
         builder.Logging.ClearProviders();
         builder.Services.AddSensorsInfrastructure(builder.Configuration);
-        builder.Services.RemoveAll(typeof(DbContextOptions<SensorsDbContext>));
-        builder.Services.RemoveAll(typeof(IDbContextOptionsConfiguration<SensorsDbContext>));
+        builder.Services.RemoveAll<DbContextOptions<SensorsDbContext>>();
+        builder.Services.RemoveAll<IDbContextOptionsConfiguration<SensorsDbContext>>();
         builder.Services.AddDbContext<SensorsDbContext>(options =>
             options.UseInMemoryDatabase(_databaseName));
         builder.Services.AddHealthChecks();
@@ -195,9 +195,9 @@ public sealed class GatewayIngestEndpointsTests : IDisposable
 
         using var scope = app.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<SensorsDbContext>();
-        dbContext.Sensors.Add(new Sensor(
-            new SensorId(Guid.NewGuid()),
-            new SensorSlug("smolensk-center"),
+        dbContext.Sensors.Add(new(
+            new(Guid.NewGuid()),
+            new("smolensk-center"),
             "Смоленск — центр",
             null,
             "pub-key-1",

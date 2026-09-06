@@ -5,13 +5,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MeshSMO.Sensors.Web.Api.MeasurementHistory;
 
-public sealed record MeasurementHistoryPoint(
-    DateTimeOffset Timestamp,
-    double Min,
-    double Avg,
-    double Max,
-    int Count);
-
 /// <summary>
 /// Reads one numeric metric series of one sensor, either raw or aggregated
 /// into fixed UTC-aligned buckets (min/avg/max/count, spec §15). The bucket

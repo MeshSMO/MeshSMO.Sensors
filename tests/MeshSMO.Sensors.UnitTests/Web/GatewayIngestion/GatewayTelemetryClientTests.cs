@@ -69,8 +69,8 @@ public sealed class GatewayTelemetryClientTests
 
     private static GatewayTelemetryClient CreateClient(StubHttpMessageHandler handler, string? apiKey) =>
         new(
-            new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") },
-            Options.Create(new GatewayIngestionOptions { BaseUrl = new Uri("http://localhost/"), ApiKey = apiKey }));
+            new(handler) { BaseAddress = new("http://localhost/") },
+            Options.Create(new GatewayIngestionOptions { BaseUrl = new("http://localhost/"), ApiKey = apiKey }));
 
     private sealed class StubHttpMessageHandler(
         Func<HttpRequestMessage, Task<(HttpStatusCode, string)>> responder) : HttpMessageHandler
@@ -85,7 +85,7 @@ public sealed class GatewayTelemetryClientTests
             CancellationToken cancellationToken)
         {
             var (statusCode, content) = await responder(request).ConfigureAwait(false);
-            return new HttpResponseMessage(statusCode) { Content = new StringContent(content) };
+            return new(statusCode) { Content = new StringContent(content) };
         }
     }
 }

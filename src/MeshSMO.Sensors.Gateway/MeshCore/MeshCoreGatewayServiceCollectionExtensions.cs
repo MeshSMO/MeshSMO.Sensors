@@ -26,7 +26,7 @@ public static class MeshCoreGatewayServiceCollectionExtensions
                 "MeshCore:Http:BaseAddress must be an absolute URI in HTTP mode.")
             .Validate(
                 static options => options.Mode != MeshCoreConnectionMode.Http ||
-string.Equals(options.Http.BaseAddress?.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal),
+                    string.Equals(options.Http.BaseAddress?.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal),
                 "MeshCore:Http:BaseAddress must use HTTPS in HTTP mode.")
             .Validate(
                 static options => options.Mode != MeshCoreConnectionMode.Http ||
@@ -87,19 +87,19 @@ string.Equals(options.Http.BaseAddress?.Scheme, Uri.UriSchemeHttps, StringCompar
                 // The MeshCoreTel ESP32 firmware only negotiates TLS 1.2 with
                 // the static-RSA cipher below; OpenSSL-based runtimes (Linux
                 // containers) do not offer it by default, Windows does.
-                handler.SslOptions.EnabledSslProtocols =
-                    System.Security.Authentication.SslProtocols.Tls12;
+                handler.SslOptions.EnabledSslProtocols = System.Security.Authentication.SslProtocols.Tls12;
                 if (!OperatingSystem.IsWindows())
                 {
-                    handler.SslOptions.CipherSuitesPolicy = new System.Net.Security.CipherSuitesPolicy(
-                        new[] { System.Net.Security.TlsCipherSuite.TLS_RSA_WITH_AES_128_GCM_SHA256 });
+                    handler.SslOptions.CipherSuitesPolicy = new(new[]
+                    {
+                        System.Net.Security.TlsCipherSuite.TLS_RSA_WITH_AES_128_GCM_SHA256
+                    });
                 }
 
                 if (options.AllowInvalidServerCertificate)
-                {
-                    handler.SslOptions.RemoteCertificateValidationCallback =
-                        static (_, _, _, _) => true;
-                }
+#pragma warning disable CA5359
+                    handler.SslOptions.RemoteCertificateValidationCallback = static (_, _, _, _) => true;
+#pragma warning restore CA5359
 
                 return handler;
             });

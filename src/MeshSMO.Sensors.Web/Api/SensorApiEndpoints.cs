@@ -30,7 +30,7 @@ public static class SensorApiEndpoints
             SensorSlug slugValue;
             try
             {
-                slugValue = new SensorSlug(slug);
+                slugValue = new(slug);
             }
             catch (ArgumentException)
             {
@@ -72,7 +72,7 @@ public static class SensorApiEndpoints
             SensorSlug slugValue;
             try
             {
-                slugValue = new SensorSlug(slug);
+                slugValue = new(slug);
             }
             catch (ArgumentException)
             {
@@ -102,7 +102,7 @@ public static class SensorApiEndpoints
             SensorSlug slugValue;
             try
             {
-                slugValue = new SensorSlug(slug);
+                slugValue = new(slug);
             }
             catch (ArgumentException)
             {
@@ -232,7 +232,7 @@ StringComparer.Ordinal, cancellationToken).ConfigureAwait(false);
                 }
             }
 
-            return new DashboardSummary(total, online, degraded, offline, unknown);
+            return new(total, online, degraded, offline, unknown);
         }
     }
 }

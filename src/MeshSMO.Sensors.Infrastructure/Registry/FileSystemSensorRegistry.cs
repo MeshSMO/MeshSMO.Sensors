@@ -57,9 +57,9 @@ public sealed partial class FileSystemSensorRegistry(
                 await using (stream.ConfigureAwait(false))
                 {
                     using var reader = new StreamReader(stream);
-                var yaml = await reader.ReadToEndAsync(cancellationToken);
-                var document = _deserializer.Deserialize<SensorYaml>(yaml);
-                definitions.Add(Parse(document, Path.GetFileName(file), errors));
+                    var yaml = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+                    var document = _deserializer.Deserialize<SensorYaml>(yaml);
+                    definitions.Add(Parse(document, Path.GetFileName(file), errors));
                 }
             }
             catch (YamlException exception)
@@ -255,20 +255,11 @@ public sealed partial class FileSystemSensorRegistry(
                 string.IsNullOrWhiteSpace(channel.Unit) ? null : channel.Unit.Trim()));
         }
 
-        foreach (var duplicate in parsed
-                     .GroupBy(mapping => (mapping.Channel, mapping.Type ?? "*"))
-                     .Where(group => group.Count() > 1))
-        {
-            errors.Add(
-                $"{source}: telemetry channel {duplicate.Key.Channel} (type '{duplicate.Key.Item2}') is mapped more than once.");
-        }
+        foreach (var duplicate in parsed.GroupBy(mapping => (mapping.Channel, mapping.Type ?? "*")).Where(group => group.Count() > 1))
+            errors.Add($"{source}: telemetry channel {duplicate.Key.Channel} (type '{duplicate.Key.Item2}') is mapped more than once.");
 
-        foreach (var duplicate in parsed
-                     .GroupBy(mapping => mapping.Metric, StringComparer.Ordinal)
-                     .Where(group => group.Count() > 1))
-        {
+        foreach (var duplicate in parsed.GroupBy(mapping => mapping.Metric, StringComparer.Ordinal).Where(group => group.Count() > 1))
             errors.Add($"{source}: telemetry metric '{duplicate.Key}' is mapped more than once.");
-        }
 
         return parsed;
     }
@@ -278,7 +269,7 @@ public sealed partial class FileSystemSensorRegistry(
         if (!RegistryDuration.TryParse(value, out var duration) || duration.TotalSeconds < 1 || duration.TotalSeconds > int.MaxValue || duration.TotalSeconds % 1 != 0)
         {
             errors.Add($"{source}: {field} must be a positive whole-second duration such as '30s' or '5m'.");
-            return default;
+            return TimeSpan.Zero;
         }
 
         return duration;
@@ -308,10 +299,14 @@ public sealed partial class FileSystemSensorRegistry(
             errors.Add($"Duplicate {field} '{group.Key}' in {string.Join(", ", group.Select(definition => definition.Source))}.");
     }
 
+#pragma warning disable MA0009
     [GeneratedRegex("^[a-z][a-z0-9_-]{0,63}$", RegexOptions.CultureInvariant)]
+#pragma warning restore MA0009
     private static partial Regex MetricKeyPattern();
 
+#pragma warning disable MA0009
     [GeneratedRegex(@"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}", RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture)]
+#pragma warning restore MA0009
     private static partial Regex EnvironmentReferenceRegex();
 
     private sealed class SensorYaml

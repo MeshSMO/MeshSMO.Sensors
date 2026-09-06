@@ -35,8 +35,8 @@ public sealed class SitemapAndFallbackTests : IDisposable
         });
         builder.Logging.ClearProviders();
         builder.Services.AddSensorsInfrastructure(builder.Configuration);
-        builder.Services.RemoveAll(typeof(DbContextOptions<SensorsDbContext>));
-        builder.Services.RemoveAll(typeof(IDbContextOptionsConfiguration<SensorsDbContext>));
+        builder.Services.RemoveAll<DbContextOptions<SensorsDbContext>>();
+        builder.Services.RemoveAll<IDbContextOptionsConfiguration<SensorsDbContext>>();
         builder.Services.AddDbContext<SensorsDbContext>(options => options.UseInMemoryDatabase(_databaseName));
         builder.Services.AddHealthChecks();
         _app = builder.Build();
@@ -46,9 +46,9 @@ public sealed class SitemapAndFallbackTests : IDisposable
 
         using var scope = _app.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<SensorsDbContext>();
-        dbContext.Sensors.Add(new Sensor(
-            new SensorId(Guid.NewGuid()),
-            new SensorSlug("smolensk-center"),
+        dbContext.Sensors.Add(new(
+            new(Guid.NewGuid()),
+            new("smolensk-center"),
             "Смоленск — центр",
             null,
             "pub-key-sitemap",

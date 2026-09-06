@@ -39,14 +39,14 @@ public sealed class SensorTelemetryPollerTests : IDisposable
     public async Task Poller_PollsEveryRegistrySensor_AppliesChannelMapping_AndBootstrapsLogin()
     {
         var alpha = new SensorDefinition(
-            SensorId.New(), new SensorSlug("alpha-node"), "Alpha", null,
-            new string('a', 64), "meshcore-req-lpp", TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(8), 2,
+            SensorId.New(), new("alpha-node"), "Alpha", null,
+            new('a', 64), "meshcore-req-lpp", TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(8), 2,
             Enabled: true, PublicVisible: true, PublicIndexable: false, null, null, null,
             ["temperature", "battery_voltage"], "alpha.yaml",
-            [new TelemetryChannelMapping(1, "voltage", "battery_voltage", "Напряжение батареи", "В")]);
+            [new(1, "voltage", "battery_voltage", "Напряжение батареи", "В")]);
         var bravo = new SensorDefinition(
-            SensorId.New(), new SensorSlug("bravo-node"), "Bravo", null,
-            new string('b', 64), "meshcore-req-lpp", TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(8), 2,
+            SensorId.New(), new("bravo-node"), "Bravo", null,
+            new('b', 64), "meshcore-req-lpp", TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(8), 2,
             Enabled: true, PublicVisible: true, PublicIndexable: false, null, null, null,
             ["temperature"], "bravo.yaml", []);
 
@@ -114,7 +114,7 @@ public sealed class SensorTelemetryPollerTests : IDisposable
 
         // The sensor that did not answer triggered exactly one ANON login bootstrap
         // with the global password, then one retry that timed out again.
-        Assert.Equal([(new string('b', 8), "hello")], client.LoginAttempts);
+        Assert.Equal([(new('b', 8), "hello")], client.LoginAttempts);
         Assert.Equal(3, client.Requests.Count);
         Assert.All(client.Requests, request => Assert.EndsWith("0300", request.PayloadHex, StringComparison.Ordinal));
         var attemptSnapshots = pending
@@ -127,8 +127,8 @@ public sealed class SensorTelemetryPollerTests : IDisposable
     public async Task Poller_PerSensorEmptyLoginPassword_OverridesGlobal()
     {
         var node = new SensorDefinition(
-            SensorId.New(), new SensorSlug("nopass-node"), "NoPass", null,
-            new string('d', 64), "meshcore-req-lpp", TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(8), 2,
+            SensorId.New(), new("nopass-node"), "NoPass", null,
+            new('d', 64), "meshcore-req-lpp", TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(8), 2,
             Enabled: true, PublicVisible: true, PublicIndexable: false, null, null, null,
             ["temperature"], "nopass.yaml", [], LoginPassword: "");
 
@@ -165,15 +165,15 @@ public sealed class SensorTelemetryPollerTests : IDisposable
         }
 
         // The registry explicitly says "node has no password"; the global one must not be used.
-        Assert.Equal([(new string('d', 8), "")], client.LoginAttempts);
+        Assert.Equal([(new('d', 8), "")], client.LoginAttempts);
     }
 
     [Fact]
     public async Task Poller_RetriesAfterTimeout_AndRecordsEveryAttempt()
     {
         var node = new SensorDefinition(
-            SensorId.New(), new SensorSlug("retry-node"), "Retry", null,
-            new string('e', 64), "meshcore-req-lpp", TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(8), 2,
+            SensorId.New(), new("retry-node"), "Retry", null,
+            new('e', 64), "meshcore-req-lpp", TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(8), 2,
             Enabled: true, PublicVisible: true, PublicIndexable: false, null, null, null,
             ["temperature"], "retry.yaml", []);
 
@@ -229,8 +229,8 @@ public sealed class SensorTelemetryPollerTests : IDisposable
     public async Task Poller_ExhaustsRetries_LeavesOnlyAttemptRecords()
     {
         var node = new SensorDefinition(
-            SensorId.New(), new SensorSlug("quiet-node"), "Quiet", null,
-            new string('f', 64), "meshcore-req-lpp", TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(8), 2,
+            SensorId.New(), new("quiet-node"), "Quiet", null,
+            new('f', 64), "meshcore-req-lpp", TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(8), 2,
             Enabled: true, PublicVisible: true, PublicIndexable: false, null, null, null,
             ["temperature"], "quiet.yaml", []);
 
@@ -276,8 +276,8 @@ public sealed class SensorTelemetryPollerTests : IDisposable
     public async Task Poller_UndecodableBody_IsRecordedWithoutRetry()
     {
         var node = new SensorDefinition(
-            SensorId.New(), new SensorSlug("garbled-node"), "Garbled", null,
-            new string('1', 64), "meshcore-req-lpp", TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(8), 2,
+            SensorId.New(), new("garbled-node"), "Garbled", null,
+            new('1', 64), "meshcore-req-lpp", TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(8), 2,
             Enabled: true, PublicVisible: true, PublicIndexable: false, null, null, null,
             ["temperature"], "garbled.yaml", []);
 
@@ -327,8 +327,8 @@ public sealed class SensorTelemetryPollerTests : IDisposable
     public async Task Poller_DisabledSensor_IsSkipped()
     {
         var disabled = new SensorDefinition(
-            SensorId.New(), new SensorSlug("hidden-node"), "Hidden", null,
-            new string('c', 64), "meshcore-req-lpp", TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(8), 2,
+            SensorId.New(), new("hidden-node"), "Hidden", null,
+            new('c', 64), "meshcore-req-lpp", TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(8), 2,
             Enabled: false, PublicVisible: true, PublicIndexable: false, null, null, null,
             ["temperature"], "hidden.yaml", []);
 

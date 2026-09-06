@@ -17,6 +17,6 @@ public sealed class LocalOutboxDbContextFactory : IDesignTimeDbContextFactory<Lo
         var options = new DbContextOptionsBuilder<LocalOutboxDbContext>()
             .UseSqlite($"Data Source={Path.GetFullPath(databasePath)}")
             .Options;
-        return new LocalOutboxDbContext(options);
+        return new(options);
     }
 }

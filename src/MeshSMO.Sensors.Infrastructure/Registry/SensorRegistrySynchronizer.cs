@@ -46,7 +46,7 @@ public sealed class SensorRegistrySynchronizer(
         }
 
         await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return new SensorRegistrySyncResult(added, updated, definitions.Count);
+        return new(added, updated, definitions.Count);
     }
 
     /// <summary>Metric keys advertised by the sensor: the `metrics` list plus every channel mapping target.</summary>

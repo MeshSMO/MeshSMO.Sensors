@@ -16,7 +16,7 @@ public sealed class SensorPollingOptions
     /// the registry-configured intervals during bring-up. Values below 30 are
     /// ignored.
     /// </summary>
-    public int IntervalOverrideSeconds { get; set; } = 0;
+    public int IntervalOverrideSeconds { get; set; }
 
     /// <summary>
     /// Node password used for the ANON_REQ bootstrap login when a request

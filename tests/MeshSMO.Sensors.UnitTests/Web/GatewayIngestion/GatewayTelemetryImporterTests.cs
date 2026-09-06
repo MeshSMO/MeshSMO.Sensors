@@ -16,18 +16,18 @@ public sealed class GatewayTelemetryImporterTests : IDisposable
 
     public GatewayTelemetryImporterTests()
     {
-        _dbContext = new SensorsDbContext(
+        _dbContext = new(
             new DbContextOptionsBuilder<SensorsDbContext>()
                 .UseInMemoryDatabase($"importer-{Guid.NewGuid():N}")
                 .Options);
-        _importer = new GatewayTelemetryImporter(
+        _importer = new(
             _dbContext,
             Options.Create(new GatewayIngestionOptions()),
             NullLogger<GatewayTelemetryImporter>.Instance);
         var now = DateTimeOffset.UtcNow;
-        _sensor = new Sensor(
-            new SensorId(Guid.NewGuid()),
-            new SensorSlug("smolensk-center"),
+        _sensor = new(
+            new(Guid.NewGuid()),
+            new("smolensk-center"),
             "Смоленск — центр",
             null,
             "pub-key-1",
@@ -233,7 +233,7 @@ public sealed class GatewayTelemetryImporterTests : IDisposable
             "Http",
             payloadJson ??
                 $$"""{"type":"sensor_poll","sensor":"{{sensorSlug}}","requestId":{{requestId}},"protocol":"meshcore-req-lpp","rssi":-92.5,"snr":7.5,"responseHex":"00FF","readings":[{"metric":"temperature","value":21.5,"unit":"°C"}]}""",
-            [new GatewayTelemetryReadingDto("sensors.temperature", 21.5, null)]);
+            [new("sensors.temperature", 21.5, null)]);
 
     private static GatewayTelemetrySnapshotDto AttemptSnapshot(
         long id,

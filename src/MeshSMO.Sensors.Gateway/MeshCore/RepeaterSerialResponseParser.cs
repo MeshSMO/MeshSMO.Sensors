@@ -39,7 +39,7 @@ internal static class RepeaterSerialResponseParser
     public static RepeaterSensorPage ParseSensorPage(IReadOnlyList<string> lines)
     {
         if (lines.Count == 0 || !TryParseSensorCount(lines[0], out var count))
-            return new RepeaterSensorPage(0, new Dictionary<string, string>(StringComparer.Ordinal), null);
+            return new(0, new Dictionary<string, string>(StringComparer.Ordinal), null);
 
         var values = new Dictionary<string, string>(StringComparer.Ordinal);
         int? next = null;
@@ -57,6 +57,6 @@ internal static class RepeaterSerialResponseParser
                 values[line[..separator]] = line[(separator + 1)..];
         }
 
-        return new RepeaterSensorPage(count, values, next);
+        return new(count, values, next);
     }
 }

@@ -25,7 +25,7 @@ public sealed class SensorRegistryHealthCheck(IServiceScopeFactory scopeFactory)
         }
         catch (Exception exception)
         {
-            return new HealthCheckResult(
+            return new(
                 context.Registration.FailureStatus,
                 "Sensor registry could not be loaded.",
                 exception);

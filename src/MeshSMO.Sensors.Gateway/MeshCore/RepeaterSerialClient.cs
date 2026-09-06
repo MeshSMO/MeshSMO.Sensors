@@ -32,7 +32,7 @@ public sealed class RepeaterSerialClient(IOptions<MeshCoreOptions> options) : IR
         port.Open();
         port.DiscardInBuffer();
         _port = port;
-        _reader = new StreamReader(port.BaseStream, Encoding.UTF8, false, leaveOpen: true);
+        _reader = new(port.BaseStream, Encoding.UTF8, false, leaveOpen: true);
         return Task.CompletedTask;
     }
 

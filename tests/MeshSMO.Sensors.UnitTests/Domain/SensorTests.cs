@@ -28,14 +28,14 @@ public sealed class SensorTests
             ["temperature", "battery"],
             now.AddMinutes(1));
 
-        Assert.Equal(["battery", "temperature"], sensor.Metrics.Select(metric => metric.MetricKey).Order(), StringComparer.Ordinal);
+        Assert.Equal(["battery", "temperature"], sensor.Metrics.Select(metric => metric.MetricKey).Order(StringComparer.Ordinal), StringComparer.Ordinal);
         Assert.Equal(600, sensor.PollIntervalSeconds);
     }
 
     private static Sensor CreateSensor(string[] metrics, DateTimeOffset now) =>
         new(
             SensorId.New(),
-            new SensorSlug("test-sensor"),
+            new("test-sensor"),
             "Test sensor",
             null,
             "public-key",

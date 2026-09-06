@@ -1,7 +1,9 @@
 using System.Buffers.Binary;
 using System.Globalization;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using MeshSMO.Sensors.Application.Registry;
 using MeshSMO.Sensors.Domain.Polling;
 using MeshSMO.Sensors.Gateway.LocalStorage;
@@ -53,8 +55,7 @@ public sealed class SensorTelemetryPoller(
         {
             var registry = scope.ServiceProvider.GetRequiredService<ISensorRegistry>();
             sensors = (await registry.LoadAsync(stoppingToken).ConfigureAwait(false))
-                .Where(sensor => sensor.Enabled)
-                .Where(sensor => IsHexPublicKey(sensor.MeshPublicKey))
+                .Where(sensor => sensor.Enabled && IsHexPublicKey(sensor.MeshPublicKey))
                 .ToArray();
         }
         if (sensors.Length == 0)
@@ -396,13 +397,15 @@ public sealed class SensorTelemetryPoller(
     private static TimeSpan NextStartDelay(SensorDefinition sensor)
     {
         // Deterministic jitter so restarts do not synchronise all sensors.
-        var hash = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(sensor.Slug.Value));
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(sensor.Slug.Value));
         var jitterSeconds = BitConverter.ToUInt32(hash, 0) % 5 + 1;
         return TimeSpan.FromSeconds(jitterSeconds);
     }
 
     private static bool IsHexPublicKey(string value) =>
-        value.Length == 64 && System.Text.RegularExpressions.Regex.IsMatch(value, "^[0-9a-fA-F]{64}$");
+#pragma warning disable MA0009
+        value.Length == 64 && Regex.IsMatch(value, "^[0-9a-fA-F]{64}$");
+#pragma warning restore MA0009
 
     private static double? ReadNullableDouble(JsonElement element, string property) =>
         element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Number

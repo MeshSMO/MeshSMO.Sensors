@@ -128,6 +128,6 @@ public sealed class Sensor
 
         var existingKeys = Metrics.Select(metric => metric.MetricKey).ToHashSet(StringComparer.Ordinal);
         foreach (var metricKey in metricKeys.Where(metricKey => !existingKeys.Contains(metricKey)))
-            Metrics.Add(new SensorMetric(Id, metricKey));
+            Metrics.Add(new(Id, metricKey));
     }
 }

@@ -39,8 +39,8 @@ public sealed class PublicApiSurfaceTests : IDisposable
         });
         builder.Logging.ClearProviders();
         builder.Services.AddSensorsInfrastructure(builder.Configuration);
-        builder.Services.RemoveAll(typeof(DbContextOptions<SensorsDbContext>));
-        builder.Services.RemoveAll(typeof(IDbContextOptionsConfiguration<SensorsDbContext>));
+        builder.Services.RemoveAll<DbContextOptions<SensorsDbContext>>();
+        builder.Services.RemoveAll<IDbContextOptionsConfiguration<SensorsDbContext>>();
         builder.Services.AddDbContext<SensorsDbContext>(options =>
             options.UseInMemoryDatabase(_databaseName));
         builder.Services.AddHealthChecks();
@@ -51,7 +51,7 @@ public sealed class PublicApiSurfaceTests : IDisposable
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
             options.AddPolicy("public-api", context => RateLimitPartition.GetFixedWindowLimiter(
                 context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
-                _ => new FixedWindowRateLimiterOptions
+                _ => new()
                 {
                     PermitLimit = 3,
                     Window = TimeSpan.FromMinutes(1),

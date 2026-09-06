@@ -6,7 +6,7 @@ public static class RegistryDuration
 {
     public static bool TryParse(string? value, out TimeSpan duration)
     {
-        duration = default;
+        duration = TimeSpan.Zero;
         if (string.IsNullOrWhiteSpace(value))
             return false;
 
@@ -23,7 +23,7 @@ public static class RegistryDuration
                 "m" => TimeSpan.FromMinutes(amount),
                 "h" => TimeSpan.FromHours(amount),
                 "d" => TimeSpan.FromDays(amount),
-                _ => default,
+                _ => TimeSpan.Zero,
             };
         }
         catch (OverflowException)

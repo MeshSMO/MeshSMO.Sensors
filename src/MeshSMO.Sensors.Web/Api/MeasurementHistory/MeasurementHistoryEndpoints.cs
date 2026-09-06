@@ -22,7 +22,7 @@ public static class MeasurementHistoryEndpoints
             SensorSlug slugValue;
             try
             {
-                slugValue = new SensorSlug(slug);
+                slugValue = new(slug);
             }
             catch (ArgumentException)
             {

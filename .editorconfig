@@ -87,7 +87,7 @@ csharp_style_implicit_object_creation_when_type_is_apparent = false:suggestion
 # ------------------------------------------------------------------------------
 
 csharp_prefer_braces = when_multiline:error
-dotnet_diagnostic.IDE0011.severity = error
+dotnet_diagnostic.IDE0011.severity = suggestion
 
 # Don't keep statements like:
 #
@@ -275,7 +275,7 @@ csharp_space_between_square_brackets = false
 # ==============================================================================
 
 # Add braces when embedded statement itself is multiline
-dotnet_diagnostic.RCS1001.severity = warning
+dotnet_diagnostic.RCS1001.severity = suggestion
 
 # Remove unnecessary braces around a single statement
 dotnet_diagnostic.RCS1002.severity = warning
@@ -293,6 +293,17 @@ csharp_preferred_modifier_order = public,private,protected,internal,file,static,
 # ==============================================================================
 # .NET project files / XML
 # ==============================================================================
+
+dotnet_diagnostic.MA0048.severity = suggestion
+dotnet_diagnostic.IDE0028.severity = suggestion
+dotnet_diagnostic.CA1859.severity = suggestion
+dotnet_diagnostic.MA0051.severity = suggestion
+dotnet_diagnostic.CA1861.severity = silent
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.CA1873.severity = none
+dotnet_diagnostic.CA1848.severity = silent
+dotnet_diagnostic.MA0004.severity = suggestion
+dotnet_diagnostic.CA1305.severity = suggestion
 
 [*.{csproj,fsproj,vbproj,props,targets,nuspec,xml,config,slnx}]
 indent_style = space

@@ -46,8 +46,8 @@ public sealed class CayenneLppDecoderTests
     {
         var mappings = new Dictionary<(int, string), string> { [(5, "*")] = "custom_channel" };
 
-        var temperature = CayenneLppDecoder.ResolveMetricKey(new LppValue(5, "temperature", 20, "°C"), mappings, new HashSet<string>(StringComparer.Ordinal));
-        var unmapped = CayenneLppDecoder.ResolveMetricKey(new LppValue(6, "temperature", 20, "°C"), mappings, new HashSet<string>(StringComparer.Ordinal));
+        var temperature = CayenneLppDecoder.ResolveMetricKey(new(5, "temperature", 20, "°C"), mappings, new HashSet<string>(StringComparer.Ordinal));
+        var unmapped = CayenneLppDecoder.ResolveMetricKey(new(6, "temperature", 20, "°C"), mappings, new HashSet<string>(StringComparer.Ordinal));
 
         Assert.Equal("custom_channel", temperature);
         Assert.Equal("temperature", unmapped);
@@ -58,7 +58,7 @@ public sealed class CayenneLppDecoderTests
     {
         var repeated = new HashSet<string>(StringComparer.Ordinal) { "voltage" };
 
-        var key = CayenneLppDecoder.ResolveMetricKey(new LppValue(2, "voltage", 4.16, "V"), NoMappings, repeated);
+        var key = CayenneLppDecoder.ResolveMetricKey(new(2, "voltage", 4.16, "V"), NoMappings, repeated);
 
         Assert.Equal("voltage_2", key);
     }

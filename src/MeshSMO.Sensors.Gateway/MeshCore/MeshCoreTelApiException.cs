@@ -25,5 +25,5 @@ public sealed class MeshCoreTelApiException : Exception
 
     public HttpStatusCode StatusCode { get; }
 
-    public string ResponseBody { get; }
+    public string? ResponseBody { get; }
 }

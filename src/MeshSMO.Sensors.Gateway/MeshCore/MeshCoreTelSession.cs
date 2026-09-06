@@ -8,7 +8,7 @@ namespace MeshSMO.Sensors.Gateway.MeshCore;
 /// end up re-logging in before every request. The session logs in once and
 /// re-authenticates only after the panel answers 401.
 /// </summary>
-public sealed class MeshCoreTelSession
+public sealed class MeshCoreTelSession : IDisposable
 {
     private readonly SemaphoreSlim _loginLock = new(1, 1);
     private string? _token;
@@ -57,4 +57,6 @@ public sealed class MeshCoreTelSession
     }
 
     public void ClearToken() => _token = null;
+
+    public void Dispose() => _loginLock.Dispose();
 }

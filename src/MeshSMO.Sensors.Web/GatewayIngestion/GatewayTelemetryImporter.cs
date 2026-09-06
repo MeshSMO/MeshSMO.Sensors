@@ -56,7 +56,7 @@ public sealed class GatewayTelemetryImporter(
             };
             foreach (var reading in snapshot.Readings ?? [])
             {
-                entity.Readings.Add(new GatewayTelemetryReading
+                entity.Readings.Add(new()
                 {
                     SnapshotId = entity.Id,
                     MetricKey = reading.MetricKey,
@@ -257,7 +257,7 @@ public sealed class GatewayTelemetryImporter(
             };
             foreach (var reading in payload.Readings)
             {
-                sample.Values.Add(new MeasurementValue(
+                sample.Values.Add(new(
                     sample.Id,
                     sensor.Id,
                     reading.Metric,
@@ -291,7 +291,7 @@ public sealed class GatewayTelemetryImporter(
         if (statuses.TryGetValue(sensor.Id.Value, out var status))
             return status;
 
-        status = new SensorStatusSnapshot(sensor.Id, now);
+        status = new(sensor.Id, now);
         dbContext.SensorStatuses.Add(status);
         statuses[sensor.Id.Value] = status;
         return status;
@@ -306,7 +306,7 @@ public sealed class GatewayTelemetryImporter(
         {
             try
             {
-                slugValues.Add(new SensorSlug(slug));
+                slugValues.Add(new(slug));
             }
             catch (ArgumentException)
             {
@@ -379,7 +379,7 @@ public sealed class GatewayTelemetryImporter(
                                 unitElement.ValueKind == JsonValueKind.String
                                     ? unitElement.GetString()
                                     : null;
-                            readings.Add(new MetricReading(metricElement.GetString()!, value, unit));
+                            readings.Add(new(metricElement.GetString()!, value, unit));
                         }
                     }
 
@@ -390,7 +390,7 @@ public sealed class GatewayTelemetryImporter(
                         responseHex = responseElement.GetString();
                     }
 
-                    return new SensorPollPayload(
+                    return new(
                         sensorElement.GetString()!,
                         requestId,
                         root.TryGetProperty("protocol", out var protocolElement) &&
@@ -460,7 +460,7 @@ public sealed class GatewayTelemetryImporter(
                     return null;
                 }
 
-                return new PollAttemptPayload(
+                return new(
                     sensorElement.GetString()!,
                     requestId,
                     ReadInt(root, "attemptNumber") ?? 1,

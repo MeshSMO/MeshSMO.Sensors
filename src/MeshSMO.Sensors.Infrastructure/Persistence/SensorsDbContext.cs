@@ -30,8 +30,8 @@ public sealed class SensorsDbContext(DbContextOptions<SensorsDbContext> options)
         var sensor = modelBuilder.Entity<Sensor>();
         sensor.ToTable("sensors");
         sensor.HasKey(entity => entity.Id);
-        sensor.Property(entity => entity.Id).HasColumnName("id").HasConversion(id => id.Value, value => new SensorId(value));
-        sensor.Property(entity => entity.Slug).HasColumnName("slug").HasMaxLength(63).HasConversion(slug => slug.Value, value => new SensorSlug(value));
+        sensor.Property(entity => entity.Id).HasColumnName("id").HasConversion(id => id.Value, value => new(value));
+        sensor.Property(entity => entity.Slug).HasColumnName("slug").HasMaxLength(63).HasConversion(slug => slug.Value, value => new(value));
         sensor.Property(entity => entity.DisplayName).HasColumnName("display_name");
         sensor.Property(entity => entity.Description).HasColumnName("description");
         sensor.Property(entity => entity.MeshPublicKey).HasColumnName("mesh_public_key");
@@ -53,7 +53,7 @@ public sealed class SensorsDbContext(DbContextOptions<SensorsDbContext> options)
         var metric = modelBuilder.Entity<SensorMetric>();
         metric.ToTable("sensor_metrics");
         metric.HasKey(entity => new { entity.SensorId, entity.MetricKey });
-        metric.Property(entity => entity.SensorId).HasColumnName("sensor_id").HasConversion(id => id.Value, value => new SensorId(value));
+        metric.Property(entity => entity.SensorId).HasColumnName("sensor_id").HasConversion(id => id.Value, value => new(value));
         metric.Property(entity => entity.MetricKey).HasColumnName("metric_key").HasMaxLength(64);
         metric.Property(entity => entity.DisplayName).HasColumnName("display_name").HasMaxLength(128);
         metric.Property(entity => entity.Unit).HasColumnName("unit").HasMaxLength(16);
@@ -69,7 +69,7 @@ public sealed class SensorsDbContext(DbContextOptions<SensorsDbContext> options)
         sample.ToTable("measurement_samples");
         sample.HasKey(entity => entity.Id);
         sample.Property(entity => entity.Id).HasColumnName("id");
-        sample.Property(entity => entity.SensorId).HasColumnName("sensor_id").HasConversion(id => id.Value, value => new SensorId(value));
+        sample.Property(entity => entity.SensorId).HasColumnName("sensor_id").HasConversion(id => id.Value, value => new(value));
         sample.Property(entity => entity.RequestId).HasColumnName("request_id");
         sample.Property(entity => entity.MeasuredAt).HasColumnName("measured_at");
         sample.Property(entity => entity.ReceivedAt).HasColumnName("received_at");
@@ -91,7 +91,7 @@ public sealed class SensorsDbContext(DbContextOptions<SensorsDbContext> options)
         value.ToTable("measurement_values");
         value.HasKey(entity => new { entity.SampleId, entity.MetricKey });
         value.Property(entity => entity.SampleId).HasColumnName("sample_id");
-        value.Property(entity => entity.SensorId).HasColumnName("sensor_id").HasConversion(id => id.Value, id => new SensorId(id));
+        value.Property(entity => entity.SensorId).HasColumnName("sensor_id").HasConversion(id => id.Value, id => new(id));
         value.Property(entity => entity.MetricKey).HasColumnName("metric_key").HasMaxLength(64);
         value.Property(entity => entity.Timestamp).HasColumnName("timestamp");
         value.Property(entity => entity.NumericValue).HasColumnName("numeric_value");
@@ -114,7 +114,7 @@ public sealed class SensorsDbContext(DbContextOptions<SensorsDbContext> options)
         attempt.ToTable("poll_attempts");
         attempt.HasKey(entity => entity.Id);
         attempt.Property(entity => entity.Id).HasColumnName("id");
-        attempt.Property(entity => entity.SensorId).HasColumnName("sensor_id").HasConversion(id => id.Value, value => new SensorId(value));
+        attempt.Property(entity => entity.SensorId).HasColumnName("sensor_id").HasConversion(id => id.Value, value => new(value));
         attempt.Property(entity => entity.RequestId).HasColumnName("request_id");
         attempt.Property(entity => entity.StartedAt).HasColumnName("started_at");
         attempt.Property(entity => entity.CompletedAt).HasColumnName("completed_at");
@@ -138,7 +138,7 @@ public sealed class SensorsDbContext(DbContextOptions<SensorsDbContext> options)
         var status = modelBuilder.Entity<SensorStatusSnapshot>();
         status.ToTable("sensor_status");
         status.HasKey(entity => entity.SensorId);
-        status.Property(entity => entity.SensorId).HasColumnName("sensor_id").HasConversion(id => id.Value, value => new SensorId(value));
+        status.Property(entity => entity.SensorId).HasColumnName("sensor_id").HasConversion(id => id.Value, value => new(value));
         status.Property(entity => entity.State).HasColumnName("state").HasConversion<string>();
         status.Property(entity => entity.LastPollAt).HasColumnName("last_poll_at");
         status.Property(entity => entity.LastSuccessAt).HasColumnName("last_success_at");

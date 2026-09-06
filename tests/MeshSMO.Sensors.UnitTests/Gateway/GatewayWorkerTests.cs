@@ -72,7 +72,7 @@ public sealed class GatewayWorkerTests
             string payloadJson,
             CancellationToken cancellationToken)
         {
-            Appended.TrySetResult(new AppendedSnapshot(transport, payloadJson));
+            Appended.TrySetResult(new(transport, payloadJson));
             return Task.FromResult(1L);
         }
 

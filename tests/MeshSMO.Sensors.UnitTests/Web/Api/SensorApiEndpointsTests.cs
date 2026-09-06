@@ -35,8 +35,8 @@ public sealed class SensorApiEndpointsTests : IDisposable
         });
         builder.Logging.ClearProviders();
         builder.Services.AddSensorsInfrastructure(builder.Configuration);
-        builder.Services.RemoveAll(typeof(DbContextOptions<SensorsDbContext>));
-        builder.Services.RemoveAll(typeof(IDbContextOptionsConfiguration<SensorsDbContext>));
+        builder.Services.RemoveAll<DbContextOptions<SensorsDbContext>>();
+        builder.Services.RemoveAll<IDbContextOptionsConfiguration<SensorsDbContext>>();
         builder.Services.AddDbContext<SensorsDbContext>(options =>
             options.UseInMemoryDatabase(_databaseName));
         builder.Services.AddHealthChecks();
@@ -48,8 +48,8 @@ public sealed class SensorApiEndpointsTests : IDisposable
         var dbContext = scope.ServiceProvider.GetRequiredService<SensorsDbContext>();
         var now = DateTimeOffset.UtcNow;
         var publicSensor = new Sensor(
-            new SensorId(Guid.NewGuid()),
-            new SensorSlug("smolensk-center"),
+            new(Guid.NewGuid()),
+            new("smolensk-center"),
             "Смоленск — центр",
             "Метеодатчик MeshSMO в центральной части Смоленска.",
             "pub-key-1",
@@ -66,8 +66,8 @@ public sealed class SensorApiEndpointsTests : IDisposable
             ["temperature", "humidity"],
             now);
         var hiddenSensor = new Sensor(
-            new SensorId(Guid.NewGuid()),
-            new SensorSlug("private-node"),
+            new(Guid.NewGuid()),
+            new("private-node"),
             "Private node",
             null,
             "pub-key-2",
@@ -84,7 +84,7 @@ public sealed class SensorApiEndpointsTests : IDisposable
             ["battery"],
             now);
         dbContext.Sensors.AddRange(publicSensor, hiddenSensor);
-        dbContext.SensorStatuses.Add(new SensorStatusSnapshot(publicSensor.Id, now) { State = SensorState.Online });
+        dbContext.SensorStatuses.Add(new(publicSensor.Id, now) { State = SensorState.Online });
         dbContext.SaveChanges();
         _client = (_app.Services.GetRequiredService<IServer>() as TestServer)!.CreateClient();
     }

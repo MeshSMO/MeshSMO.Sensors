@@ -27,8 +27,8 @@ public static class TelemetryEndpoints
             });
         }
 
-        app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
-        app.MapHealthChecks("/health/ready", new HealthCheckOptions
+        app.MapHealthChecks("/health/live", new() { Predicate = _ => false });
+        app.MapHealthChecks("/health/ready", new()
         {
             Predicate = registration => registration.Tags.Contains("ready"),
         });

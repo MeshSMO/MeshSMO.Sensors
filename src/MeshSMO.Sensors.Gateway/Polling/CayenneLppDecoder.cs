@@ -176,7 +176,7 @@ public static class CayenneLppDecoder
         (data[0] << 16) | (data[1] << 8) | data[2] | ((data[0] & 0x80) == 0 ? 0 : unchecked((int)0xFF000000));
 
     private static void Add(List<LppValue> values, int channel, string typeKey, double value, string unit = "") =>
-        values.Add(new LppValue(channel, typeKey, value, unit));
+        values.Add(new(channel, typeKey, value, unit));
 
     /// <summary>
     /// Resolves the metric key for a decoded value: an explicit channel mapping

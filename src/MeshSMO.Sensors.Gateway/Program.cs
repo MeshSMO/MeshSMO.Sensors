@@ -75,7 +75,7 @@ builder.Services.AddHttpClient<TelemetryPushClient>((serviceProvider, client) =>
 {
     var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<TelemetryPushOptions>>().Value;
     if (options.ApiUrl is not null)
-        client.BaseAddress = new Uri($"{options.ApiUrl.AbsoluteUri.TrimEnd('/')}/");
+        client.BaseAddress = new($"{options.ApiUrl.AbsoluteUri.TrimEnd('/')}/");
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 

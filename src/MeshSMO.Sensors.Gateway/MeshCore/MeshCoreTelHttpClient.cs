@@ -46,7 +46,7 @@ public sealed class MeshCoreTelHttpClient(
             : $"api/stats?series={Uri.EscapeDataString(series)}";
 
         return SendAuthorizedAsync(
-            () => new HttpRequestMessage(HttpMethod.Get, path),
+            () => new(HttpMethod.Get, path),
             static async (response, token) =>
                 await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(token), cancellationToken: token).ConfigureAwait(false),
             cancellationToken);
@@ -87,7 +87,7 @@ public sealed class MeshCoreTelHttpClient(
 
     private Task<JsonDocument> SendAcquisitionAsync(string path, object body, CancellationToken cancellationToken) =>
         SendAuthorizedAsync(
-            () => new HttpRequestMessage(HttpMethod.Post, path)
+            () => new(HttpMethod.Post, path)
             {
                 Content = new StringContent(
                     JsonSerializer.Serialize(body),
@@ -162,7 +162,7 @@ public sealed class MeshCoreTelHttpClient(
         {
             Content = new StringContent(body, Encoding.UTF8)
         };
-        request.Content.Headers.ContentType = new MediaTypeHeaderValue("text/plain")
+        request.Content.Headers.ContentType = new("text/plain")
         {
             CharSet = "utf-8",
         };

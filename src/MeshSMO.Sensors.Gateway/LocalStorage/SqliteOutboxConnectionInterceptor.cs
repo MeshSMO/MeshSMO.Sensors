@@ -33,7 +33,7 @@ public sealed class SqliteOutboxConnectionInterceptor : DbConnectionInterceptor
         await using (command.ConfigureAwait(false))
         {
             command.CommandText = Pragmas;
-        await command.ExecuteNonQueryAsync(cancellationToken);
+            await command.ExecuteNonQueryAsync(cancellationToken);
         }
     }
 }

@@ -40,8 +40,8 @@ public sealed class MeasurementHistoryEndpointsTests : IDisposable
         });
         builder.Logging.ClearProviders();
         builder.Services.AddSensorsInfrastructure(builder.Configuration);
-        builder.Services.RemoveAll(typeof(DbContextOptions<SensorsDbContext>));
-        builder.Services.RemoveAll(typeof(IDbContextOptionsConfiguration<SensorsDbContext>));
+        builder.Services.RemoveAll<DbContextOptions<SensorsDbContext>>();
+        builder.Services.RemoveAll<IDbContextOptionsConfiguration<SensorsDbContext>>();
         builder.Services.AddDbContext<SensorsDbContext>(options =>
             options.UseSqlite($"Data Source={_databasePath}"));
         builder.Services.AddHealthChecks();
@@ -203,8 +203,8 @@ public sealed class MeasurementHistoryEndpointsTests : IDisposable
 
     private static Sensor CreateSensor(
         string slug, string displayName, bool enabled, bool visible, string publicKey) => new(
-        new SensorId(Guid.NewGuid()),
-        new SensorSlug(slug),
+        new(Guid.NewGuid()),
+        new(slug),
         displayName,
         null,
         publicKey,

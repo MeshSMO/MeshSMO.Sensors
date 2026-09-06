@@ -35,8 +35,8 @@ public sealed class LocalTelemetryStore(IDbContextFactory<LocalOutboxDbContext> 
         await using (db.ConfigureAwait(false))
         {
             db.Snapshots.Add(snapshot);
-        await db.SaveChangesAsync(cancellationToken);
-        return snapshot.Id;
+            await db.SaveChangesAsync(cancellationToken);
+            return snapshot.Id;
         }
     }
 
@@ -55,21 +55,21 @@ public sealed class LocalTelemetryStore(IDbContextFactory<LocalOutboxDbContext> 
             .Take(maximumCount)
             .ToListAsync(cancellationToken);
 
-        return snapshots
-            .Select(snapshot => new PendingTelemetrySnapshot(
-                snapshot.Id,
-                snapshot.CapturedAt,
-                snapshot.Transport,
-                snapshot.PayloadJson,
-                snapshot.Readings
-                    .OrderBy(reading => reading.MetricKey, StringComparer.Ordinal)
-                    .Select(reading => new LocalTelemetryReading(
-                        reading.SnapshotId,
-                        reading.MetricKey,
-                        reading.NumericValue,
-                        reading.TextValue))
-                    .ToArray()))
-            .ToArray();
+            return snapshots
+                .Select(snapshot => new PendingTelemetrySnapshot(
+                    snapshot.Id,
+                    snapshot.CapturedAt,
+                    snapshot.Transport,
+                    snapshot.PayloadJson,
+                    snapshot.Readings
+                        .OrderBy(reading => reading.MetricKey, StringComparer.Ordinal)
+                        .Select(reading => new LocalTelemetryReading(
+                            reading.SnapshotId,
+                            reading.MetricKey,
+                            reading.NumericValue,
+                            reading.TextValue))
+                        .ToArray()))
+                .ToArray();
         }
     }
 
@@ -92,9 +92,7 @@ public sealed class LocalTelemetryStore(IDbContextFactory<LocalOutboxDbContext> 
     {
         var db = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
-        {
             return await db.Snapshots.LongCountAsync(cancellationToken);
-        }
     }
 
     private static IEnumerable<FlattenedReading> FlattenReadings(JsonElement root) => FlattenReadings(root, string.Empty);
