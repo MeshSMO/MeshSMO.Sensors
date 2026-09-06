@@ -1,15 +1,31 @@
 // Build-time script: flattens the GitOps sensor registry (config/sensors/*.yaml)
-// into app/generated/sensorRegistry.json so that prerendered routes can render
-// sensor content without a server loader (React Router ssr:false forbids
-// loaders during prerender).
+// into src/generated/sensorRegistry.json so that prerendered routes can render
+// sensor content without a server loader. Bundled into the client build and
+// committed, so typecheck and prerender work before the first build too.
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(scriptDir, "../../..");
 const directory = path.join(root, "config", "sensors");
-const outFile = path.join(root, "src", "web", "app", "generated", "sensorRegistry.json");
+const outFile = path.resolve(scriptDir, "../src/generated/sensorRegistry.json");
+
+const durationSeconds = {
+  ms: (value) => value / 1000,
+  s: (value) => value,
+  m: (value) => value * 60,
+  h: (value) => value * 3600,
+};
+
+function parseIntervalSeconds(raw) {
+  if (typeof raw !== "string") return null;
+  const match = /^(\d+)(ms|s|m|h)$/.exec(raw.trim());
+  if (!match) return null;
+  const convert = durationSeconds[match[2]];
+  return Math.round(convert(Number(match[1])));
+}
 
 const sensors = [];
 if (existsSync(directory)) {
@@ -36,10 +52,13 @@ if (existsSync(directory)) {
           ? {
               latitude: location.latitude,
               longitude: location.longitude,
-              precision: typeof location.precision === "string" ? location.precision : "approximate",
+              precision:
+                typeof location.precision === "string" ? location.precision : "approximate",
             }
           : null,
       metrics: Array.isArray(raw.metrics) ? raw.metrics.filter((m) => typeof m === "string") : [],
+      protocol: typeof raw.mesh?.protocol === "string" ? raw.mesh.protocol : null,
+      pollIntervalSeconds: parseIntervalSeconds(polling.interval),
       enabled: Boolean(polling.enabled),
       visible: Boolean(publicSection.visible),
       indexable: Boolean(publicSection.indexable),

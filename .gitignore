@@ -2,7 +2,12 @@
 **/obj/
 **/node_modules/
 **/build/
+**/dist/
 **/.react-router/
+**/.output/
+**/.nitro/
+**/.tanstack/
+**/.wrangler/
 **/coverage/
 .env
 .env.*

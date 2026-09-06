@@ -24,7 +24,7 @@ RUN dotnet publish src/MeshSMO.Sensors.Web/MeshSMO.Sensors.Web.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 COPY --from=backend /app/publish ./
-COPY --from=frontend /src/src/web/build/client ./wwwroot
+COPY --from=frontend /src/src/web/.output/public ./wwwroot
 ENV ASPNETCORE_HTTP_PORTS=8080
 USER $APP_UID
 EXPOSE 8080
