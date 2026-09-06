@@ -13,6 +13,8 @@ public sealed class LocalTelemetryStore(IDbContextFactory<LocalOutboxDbContext> 
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(transport);
         ArgumentException.ThrowIfNullOrWhiteSpace(payloadJson);
+        // Fail fast on malformed payloads instead of queuing them for the
+        // main API; the JSON itself is the data — nothing else is derived here.
         using var payload = JsonDocument.Parse(payloadJson);
 
         var snapshot = new OutboxSnapshot
@@ -21,14 +23,6 @@ public sealed class LocalTelemetryStore(IDbContextFactory<LocalOutboxDbContext> 
             Transport = transport,
             PayloadJson = payloadJson,
             CreatedAt = DateTimeOffset.UtcNow,
-            Readings = FlattenReadings(payload.RootElement)
-                .Select(reading => new OutboxReading
-                {
-                    MetricKey = reading.MetricKey,
-                    NumericValue = reading.NumericValue,
-                    TextValue = reading.TextValue,
-                })
-                .ToList(),
         };
 
         var db = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
@@ -50,7 +44,6 @@ public sealed class LocalTelemetryStore(IDbContextFactory<LocalOutboxDbContext> 
         await using (db.ConfigureAwait(false))
         {
             var snapshots = await db.Snapshots
-            .Include(entity => entity.Readings)
             .OrderBy(entity => entity.Id)
             .Take(maximumCount)
             .ToListAsync(cancellationToken);
@@ -60,15 +53,7 @@ public sealed class LocalTelemetryStore(IDbContextFactory<LocalOutboxDbContext> 
                     snapshot.Id,
                     snapshot.CapturedAt,
                     snapshot.Transport,
-                    snapshot.PayloadJson,
-                    snapshot.Readings
-                        .OrderBy(reading => reading.MetricKey, StringComparer.Ordinal)
-                        .Select(reading => new LocalTelemetryReading(
-                            reading.SnapshotId,
-                            reading.MetricKey,
-                            reading.NumericValue,
-                            reading.TextValue))
-                        .ToArray()))
+                    snapshot.PayloadJson))
                 .ToArray();
         }
     }
@@ -81,7 +66,6 @@ public sealed class LocalTelemetryStore(IDbContextFactory<LocalOutboxDbContext> 
         var db = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
-            // The FK cascade removes the readings together with the snapshot.
             await db.Snapshots
             .Where(entity => ids.Contains(entity.Id))
             .ExecuteDeleteAsync(cancellationToken);
@@ -94,41 +78,4 @@ public sealed class LocalTelemetryStore(IDbContextFactory<LocalOutboxDbContext> 
         await using (db.ConfigureAwait(false))
             return await db.Snapshots.LongCountAsync(cancellationToken);
     }
-
-    private static IEnumerable<FlattenedReading> FlattenReadings(JsonElement root) => FlattenReadings(root, string.Empty);
-
-    private static IEnumerable<FlattenedReading> FlattenReadings(JsonElement element, string path)
-    {
-        if (element.ValueKind == JsonValueKind.Object)
-        {
-            foreach (var property in element.EnumerateObject())
-            {
-                var childPath = string.IsNullOrEmpty(path) ? property.Name : $"{path}.{property.Name}";
-                foreach (var reading in FlattenReadings(property.Value, childPath))
-                    yield return reading;
-            }
-
-            yield break;
-        }
-
-        if (string.IsNullOrEmpty(path) || element.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
-            yield break;
-
-        if (element.ValueKind == JsonValueKind.Number && element.TryGetDouble(out var numericValue))
-        {
-            yield return new FlattenedReading(path, numericValue, null);
-            yield break;
-        }
-
-        var textValue = element.ValueKind switch
-        {
-            JsonValueKind.String => element.GetString(),
-            JsonValueKind.True => "true",
-            JsonValueKind.False => "false",
-            _ => element.GetRawText(),
-        };
-        yield return new FlattenedReading(path, null, textValue);
-    }
-
-    private sealed record FlattenedReading(string MetricKey, double? NumericValue, string? TextValue);
 }

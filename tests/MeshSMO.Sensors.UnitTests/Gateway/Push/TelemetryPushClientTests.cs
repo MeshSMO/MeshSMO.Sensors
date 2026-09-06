@@ -24,10 +24,8 @@ public sealed class TelemetryPushClientTests
         var client = CreateClient(handler, "secret-key");
         var batch = new TelemetryBatchDto(2,
         [
-            new(11, DateTimeOffset.UnixEpoch, "Serial", """{"a":1}""",
-                [new("core.battery_mv", 4100, null)]),
-            new(12, DateTimeOffset.UnixEpoch, "Serial", """{"a":2}""",
-                [new("radio.rssi", -92, null)]),
+            new(11, DateTimeOffset.UnixEpoch, "Serial", """{"a":1}"""),
+            new(12, DateTimeOffset.UnixEpoch, "Serial", """{"a":2}"""),
         ]);
 
         var accepted = await client.PushAsync(batch, CancellationToken.None);
@@ -41,10 +39,9 @@ public sealed class TelemetryPushClientTests
         Assert.Equal(2, snapshots.Length);
         Assert.Equal(11, snapshots[0].GetProperty("id").GetInt64());
         Assert.Equal("Serial", snapshots[0].GetProperty("transport").GetString());
-        Assert.Equal(
-            "core.battery_mv",
-            snapshots[0].GetProperty("readings").EnumerateArray().Single()
-                .GetProperty("metricKey").GetString());
+
+        // The readings side-channel is gone: only payload JSON travels.
+        Assert.False(snapshots[0].TryGetProperty("readings", out _));
     }
 
     [Fact]

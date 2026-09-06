@@ -12,7 +12,7 @@ public sealed class TelemetryPushWorkerTests
     {
         var store = new FakeTelemetryStore(
         [
-            new(9, DateTimeOffset.UnixEpoch, "Serial", """{"type":"sensor_poll"}""", []),
+            new(9, DateTimeOffset.UnixEpoch, "Serial", """{"type":"sensor_poll"}"""),
         ]);
         string? apiKey = null;
         string? body = null;
@@ -54,7 +54,7 @@ public sealed class TelemetryPushWorkerTests
     {
         var store = new FakeTelemetryStore(
         [
-            new(9, DateTimeOffset.UnixEpoch, "Serial", """{"type":"sensor_poll"}""", []),
+            new(9, DateTimeOffset.UnixEpoch, "Serial", """{"type":"sensor_poll"}"""),
         ]);
         var pushed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var handler = new StubHttpMessageHandler(_ =>

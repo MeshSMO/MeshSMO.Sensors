@@ -156,10 +156,6 @@ public sealed class GatewayIngestEndpointsTests : IDisposable
         capturedAt = DateTimeOffset.UtcNow,
         transport = "Http",
         payloadJson = """{"type":"sensor_poll","sensor":"smolensk-center","requestId":7,"protocol":"meshcore-req-lpp","rssi":-92.5,"snr":7.5,"responseHex":"00FF","readings":[{"metric":"temperature","value":21.5,"unit":"°C"}]}""",
-        readings = new[]
-        {
-            new { metricKey = "sensors.temperature", numericValue = 21.5, textValue = (string?)null },
-        },
     };
 
     private WebApplication CreateApp(params (string Key, string Value)[] settings)

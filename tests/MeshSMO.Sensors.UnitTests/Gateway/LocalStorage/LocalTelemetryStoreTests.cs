@@ -51,19 +51,9 @@ public sealed class LocalTelemetryStoreTests
                 Assert.Equal("serial", second.Transport);
             });
 
-        var temperature = Assert.Single(
-            pending[0].Readings,
-            reading => string.Equals(reading.MetricKey, "sensors.temperature", StringComparison.Ordinal));
-        Assert.Equal(21.5, temperature.NumericValue);
-        Assert.Null(temperature.TextValue);
-
         await reopenedStore.AcknowledgeAsync([firstId], CancellationToken.None);
 
         Assert.Equal(1, await reopenedStore.CountPendingAsync(CancellationToken.None));
-        await using var db = await reopenedServices
-            .GetRequiredService<IDbContextFactory<LocalOutboxDbContext>>()
-            .CreateDbContextAsync();
-        Assert.False(await db.Readings.AnyAsync(reading => reading.SnapshotId == firstId));
         var remaining = await reopenedStore.ReadPendingAsync(10, CancellationToken.None);
         Assert.Equal(secondId, Assert.Single(remaining).Id);
     }
@@ -81,29 +71,6 @@ public sealed class LocalTelemetryStoreTests
             () => store.AppendAsync(DateTimeOffset.UtcNow, "http", "not-json", CancellationToken.None));
 
         Assert.Equal(0, await store.CountPendingAsync(CancellationToken.None));
-    }
-
-    [Fact]
-    public async Task ReadingsAreSortedByMetricKey()
-    {
-        using var database = new TemporarySqliteDatabase();
-        var services = CreateServices(database.Path);
-        await using var _ = services;
-        var store = CreateStore(services);
-        await MigrateAsync(services, database.Path);
-        await store.AppendAsync(
-            DateTimeOffset.UtcNow,
-            "http",
-            """{"radio":{"rssi":-92},"core":{"battery_mv":4100}}""",
-            CancellationToken.None);
-
-        var snapshot = Assert.Single(await store.ReadPendingAsync(10, CancellationToken.None));
-
-        Assert.Equal(
-            ["core.battery_mv", "radio.rssi"],
-            snapshot.Readings.Select(reading => reading.MetricKey).ToArray());
-        Assert.Equal(4100, snapshot.Readings[0].NumericValue);
-        Assert.Equal(-92, snapshot.Readings[1].NumericValue);
     }
 
     private static ServiceProvider CreateServices(string path) =>

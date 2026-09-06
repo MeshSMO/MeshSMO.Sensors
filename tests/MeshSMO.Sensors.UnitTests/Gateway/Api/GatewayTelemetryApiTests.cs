@@ -48,7 +48,7 @@ public sealed class GatewayTelemetryApiTests : IDisposable
     }
 
     [Fact]
-    public async Task Pending_ReturnsSnapshotsWithReadings()
+    public async Task Pending_ReturnsSnapshotsWithPayloadOnly()
     {
         var store = _app.Services.GetRequiredService<ILocalTelemetryStore>();
         await store.AppendAsync(
@@ -65,12 +65,11 @@ public sealed class GatewayTelemetryApiTests : IDisposable
         var snapshot = batch.GetProperty("snapshots").EnumerateArray().Single();
         Assert.Equal("Serial", snapshot.GetProperty("transport").GetString());
         Assert.True(snapshot.GetProperty("id").GetInt64() > 0);
+        using var payload = JsonDocument.Parse(snapshot.GetProperty("payloadJson").GetString()!);
+        Assert.Equal(4100, payload.RootElement.GetProperty("core").GetProperty("battery_mv").GetDouble());
 
-        var metricKeys = snapshot.GetProperty("readings")
-            .EnumerateArray()
-            .Select(reading => reading.GetProperty("metricKey").GetString()!)
-            .ToArray();
-        Assert.Equal(["core.battery_mv", "radio.rssi"], metricKeys);
+        // The readings side-channel is gone: the payload JSON is the only data.
+        Assert.False(snapshot.TryGetProperty("readings", out _));
     }
 
     [Fact]

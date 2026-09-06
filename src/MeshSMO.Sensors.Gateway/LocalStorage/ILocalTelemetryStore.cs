@@ -4,14 +4,7 @@ public sealed record PendingTelemetrySnapshot(
     long Id,
     DateTimeOffset CapturedAt,
     string Transport,
-    string PayloadJson,
-    IReadOnlyList<LocalTelemetryReading> Readings);
-
-public sealed record LocalTelemetryReading(
-    long SnapshotId,
-    string MetricKey,
-    double? NumericValue,
-    string? TextValue);
+    string PayloadJson);
 
 /// <summary>
 /// The gateway's local telemetry outbox (SQLite via EF Core). Writers append

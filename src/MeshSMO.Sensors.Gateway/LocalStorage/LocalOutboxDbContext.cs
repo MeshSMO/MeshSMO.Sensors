@@ -11,7 +11,6 @@ namespace MeshSMO.Sensors.Gateway.LocalStorage;
 public sealed class LocalOutboxDbContext(DbContextOptions<LocalOutboxDbContext> options) : DbContext(options)
 {
     public DbSet<OutboxSnapshot> Snapshots => Set<OutboxSnapshot>();
-    public DbSet<OutboxReading> Readings => Set<OutboxReading>();
     public DbSet<OutboxHealthProbe> HealthProbes => Set<OutboxHealthProbe>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -26,18 +25,6 @@ public sealed class LocalOutboxDbContext(DbContextOptions<LocalOutboxDbContext> 
         snapshot.Property(entity => entity.CreatedAt).HasColumnName("created_at");
         snapshot.HasIndex(entity => new { entity.CapturedAt, entity.Id })
             .HasDatabaseName("ix_telemetry_snapshots_captured_at");
-
-        var reading = modelBuilder.Entity<OutboxReading>();
-        reading.ToTable("telemetry_readings");
-        reading.HasKey(entity => new { entity.SnapshotId, entity.MetricKey });
-        reading.Property(entity => entity.SnapshotId).HasColumnName("snapshot_id");
-        reading.Property(entity => entity.MetricKey).HasColumnName("metric_key").HasMaxLength(128);
-        reading.Property(entity => entity.NumericValue).HasColumnName("numeric_value");
-        reading.Property(entity => entity.TextValue).HasColumnName("text_value");
-        snapshot.HasMany(entity => entity.Readings)
-            .WithOne()
-            .HasForeignKey(entity => entity.SnapshotId)
-            .OnDelete(DeleteBehavior.Cascade);
 
         var probe = modelBuilder.Entity<OutboxHealthProbe>();
         probe.ToTable("health_probe");

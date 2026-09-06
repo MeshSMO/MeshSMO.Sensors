@@ -55,8 +55,6 @@ public sealed class GatewayTelemetryImporterTests : IDisposable
         Assert.Equal(1, imported);
         var snapshot = Assert.Single(_dbContext.GatewayTelemetrySnapshots);
         Assert.Equal(1, snapshot.GatewaySnapshotId);
-        var reading = Assert.Single(snapshot.Readings);
-        Assert.Equal("sensors.temperature", reading.MetricKey);
 
         var sample = Assert.Single(_dbContext.MeasurementSamples);
         Assert.Equal(_sensor.Id, sample.SensorId);
@@ -121,7 +119,7 @@ public sealed class GatewayTelemetryImporterTests : IDisposable
 
         Assert.Equal(1, imported);
         var snapshot = Assert.Single(_dbContext.GatewayTelemetrySnapshots);
-        Assert.Single(snapshot.Readings);
+        Assert.Equal("not-json", snapshot.PayloadJson);
         Assert.Empty(_dbContext.MeasurementSamples);
     }
 
@@ -232,8 +230,7 @@ public sealed class GatewayTelemetryImporterTests : IDisposable
             DateTimeOffset.UtcNow,
             "Http",
             payloadJson ??
-                $$"""{"type":"sensor_poll","sensor":"{{sensorSlug}}","requestId":{{requestId}},"protocol":"meshcore-req-lpp","rssi":-92.5,"snr":7.5,"responseHex":"00FF","readings":[{"metric":"temperature","value":21.5,"unit":"°C"}]}""",
-            [new("sensors.temperature", 21.5, null)]);
+                $$"""{"type":"sensor_poll","sensor":"{{sensorSlug}}","requestId":{{requestId}},"protocol":"meshcore-req-lpp","rssi":-92.5,"snr":7.5,"responseHex":"00FF","readings":[{"metric":"temperature","value":21.5,"unit":"°C"}]}""");
 
     private static GatewayTelemetrySnapshotDto AttemptSnapshot(
         long id,
@@ -245,8 +242,7 @@ public sealed class GatewayTelemetryImporterTests : IDisposable
             id,
             DateTimeOffset.UtcNow,
             "Http",
-            $$"""{"type":"poll_attempt","sensor":"{{sensorSlug}}","requestId":{{requestId}},"protocol":"meshcore-req-lpp","attemptNumber":{{attemptNumber}},"startedAt":"{{DateTimeOffset.UtcNow.AddSeconds(-2):O}}","completedAt":"{{DateTimeOffset.UtcNow:O}}","status":"{{status}}","errorCode":"timeout","roundTripMs":8000}""",
-            []);
+            $$"""{"type":"poll_attempt","sensor":"{{sensorSlug}}","requestId":{{requestId}},"protocol":"meshcore-req-lpp","attemptNumber":{{attemptNumber}},"startedAt":"{{DateTimeOffset.UtcNow.AddSeconds(-2):O}}","completedAt":"{{DateTimeOffset.UtcNow:O}}","status":"{{status}}","errorCode":"timeout","roundTripMs":8000}""");
 
     public void Dispose() => _dbContext.Dispose();
 }

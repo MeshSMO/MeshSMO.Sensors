@@ -54,17 +54,6 @@ public sealed class GatewayTelemetryImporter(
                 Transport = snapshot.Transport,
                 PayloadJson = snapshot.PayloadJson,
             };
-            foreach (var reading in snapshot.Readings ?? [])
-            {
-                entity.Readings.Add(new()
-                {
-                    SnapshotId = entity.Id,
-                    MetricKey = reading.MetricKey,
-                    NumericValue = reading.NumericValue,
-                    TextValue = reading.TextValue,
-                });
-            }
-
             dbContext.GatewayTelemetrySnapshots.Add(entity);
             existingSet.Add(snapshot.Id);
             importedCount++;

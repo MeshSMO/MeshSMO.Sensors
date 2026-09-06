@@ -4,17 +4,11 @@ using Microsoft.Extensions.Options;
 
 namespace MeshSMO.Sensors.Web.GatewayIngestion;
 
-public sealed record GatewayTelemetryReadingDto(
-    [property: JsonPropertyName("metricKey")] string MetricKey,
-    [property: JsonPropertyName("numericValue")] double? NumericValue,
-    [property: JsonPropertyName("textValue")] string? TextValue);
-
 public sealed record GatewayTelemetrySnapshotDto(
     [property: JsonPropertyName("id")] long Id,
     [property: JsonPropertyName("capturedAt")] DateTimeOffset CapturedAt,
     [property: JsonPropertyName("transport")] string Transport,
-    [property: JsonPropertyName("payloadJson")] string PayloadJson,
-    [property: JsonPropertyName("readings")] GatewayTelemetryReadingDto[] Readings);
+    [property: JsonPropertyName("payloadJson")] string PayloadJson);
 
 public sealed record GatewayTelemetryBatchDto(
     [property: JsonPropertyName("pendingCount")] long PendingCount,
