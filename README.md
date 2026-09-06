@@ -2,20 +2,27 @@
 
 Сервис сбора и публикации показаний pull-only датчиков MeshSMO через MeshCore/LoRa.
 
-Сейчас реализован стартовый срез:
+Реализовано и проверено на железе:
 
-- solution на .NET 10 с границами Domain / Application / Infrastructure;
-- Worker gateway и ASP.NET Core BFF;
-- PostgreSQL-модель и initial EF Core migration;
-- отдельный one-shot DbMigrator;
-- GitOps-реестр YAML с валидацией и синхронизацией;
-- React Router Framework Mode как JSPS `.esproj`, связанный с BFF, с `ssr: false`, prerender главной страницы и SPA fallback;
-- health endpoints `/health/live` и `/health/ready`;
-- HTTP и USB Serial режимы Gateway для MeshCoreTel Repeater;
-- локальная SQLite outbox с исходными snapshots и индексируемыми показаниями;
-- unit tests и CI skeleton.
+- gateway собирает телеметрию MeshCoreTel Repeater (HTTPS или USB Serial CLI) и опрашивает pull-only датчики через acquisition API прошивки (`POST /api/request` + ANON-логин), ответы — Cayenne LPP с маппингом каналов из реестра;
+- локальная SQLite outbox в gateway; sensor-web выгружает её в PostgreSQL (ack + идемпотентность);
+- PostgreSQL-модель (sensors, measurements, gateway telemetry), one-shot DbMigrator;
+- GitOps-реестр YAML с валидацией, синхронизацией и prerender-маршрутами;
+- публичный `/api/v1` (sensors, latest, status, dashboard), sitemap.xml, robots.txt;
+- React Router Framework Mode с `ssr: false`, prerender и SPA fallback;
+- полный стек в Docker (`deploy/compose.yaml`), CI на GitHub Actions.
 
-Бинарный sensor protocol, публикация накопленных данных в PostgreSQL и публичный API — следующие фазы. Gateway уже умеет собирать телеметрию MeshCoreTel Repeater через HTTPS или USB Serial CLI и сохранять её локально. Тестовый датчик в `config/sensors` намеренно выключен и содержит placeholder public key.
+> **Для агентов и новых разработчиков:** начни с [AGENTS.md](./AGENTS.md) — карта репозитория, команды и найденные грабли.
+
+## Документация
+
+| Файл | О чём |
+|---|---|
+| [AGENTS.md](./AGENTS.md) | точка входа: структура, команды, грабли, статус |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | компоненты, потоки данных, решения, ограничения |
+| [docs/protocol.md](./docs/protocol.md) | wire-протоколы: REQ/ANON, Cayenne LPP, payload'ы outbox |
+| [docs/MeshSMO-Sensors-IMPLEMENTATION_SPEC.md](./docs/MeshSMO-Sensors-IMPLEMENTATION_SPEC.md) | полная спека и план фаз |
+| [docs/repeater-firmware-acquisition-spec.md](./docs/repeater-firmware-acquisition-spec.md) | контракт прошивки репитера (acquisition) |
 
 ## Локальная проверка без Docker
 

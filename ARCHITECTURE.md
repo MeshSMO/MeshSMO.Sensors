@@ -1,0 +1,112 @@
+# ARCHITECTURE
+
+Архитектура MeshSMO Sensors. Нормативный документ — `docs/MeshSMO-Sensors-IMPLEMENTATION_SPEC.md`; здесь — фактическое состояние и обоснования.
+
+## 1. Компоненты и границы
+
+```text
+                     sensors.meshsmo.ru (prod) / localhost:8080 (dev-docker)
+                                      |
+                              +---------------+
+                              |  sensor-web   |  ASP.NET Core BFF + React static/prerender
+                              |  (Kestrel)    |  PostgreSQL <-- единственный владелец БД
+                              +---+-------^---+
+                        internal |       |  internal HTTP
+                        HTTP     |       |  GET /api/telemetry/pending
+                                 v       |  POST /api/telemetry/ack
+                      +---------------------+
+                      |   sensor-gateway    |  .NET Worker + Kestrel (внутренний порт 8080)
+                      |  SQLite outbox      |  БД НЕ доступна (принципиально)
+                      +--+---------------+--+
+              HTTPS /api/request |        | USB serial (опционально)
+                                 v        v
+                        MeshCoreTel Repeater (ESP32, кастомная прошивка vbart-meshcoretel)
+                                 |
+                            LoRa (MeshCore)
+                                 |
+                        Sensor nodes (pull-only, отвечают на REQ телеметрией Cayenne LPP)
+```
+
+Плюс **sensor-migrator** (one-shot: EF-миграции + sync registry) и **sensor-db** (PostgreSQL, не публикуется наружу).
+
+Принципы границ (см. спека §5, §66):
+
+- **BFF не знает про MeshCore**: ни serial, ни пакетный формат не протекают в `Web`. Web оперирует снапшотами outbox.
+- **Gateway не знает про PostgreSQL**: он пишет только в локальную SQLite и отдаёт данные по API. Web может быть недоступен/перезапускаться — сбор продолжается.
+- **Frontend не знает про LoRa**: только `/api/v1/*`.
+- Registry — GitOps (`config/sensors/*.yaml`), источник истины для генерации prerender-маршрутов и таблицы `sensors`.
+
+## 2. Потоки данных
+
+### 2.1. Телеметрия самого репитера
+
+`Worker` (BackgroundService): connect → `ver` handshake → раз в `MeshCore:TelemetryCollectionIntervalSeconds` → `GetTelemetryAsync` (HTTP `GET /api/stats` либо serial CLI `stats-core/radio/packets` + `sensor list`) → `ILocalTelemetryStore.AppendAsync` (snapshot + плоские readings в SQLite) → ack-цикл web'а выгружает.
+
+### 2.2. Опрос датчиков (основной продуктовый путь)
+
+`SensorTelemetryPoller` (BackgroundService в gateway):
+
+1. Загружает включённые датчики из GitOps-registry (`ISensorRegistry`).
+2. Последовательно (concurrency = 1, deterministic jitter по slug) для каждого датчика по его `polling.interval`:
+   - строит REQ: `timestamp(4 LE) + 0x03 + 0x00` (MeshCore `GET_TELEMETRY_DATA`);
+   - отправляет через `POST /api/request` репитера (см. `docs/repeater-firmware-acquisition-spec.md`);
+   - при первом таймауте ноды — однократный ANON-логин bootstrap (`POST /api/login`, пароль из `SensorPolling:LoginPassword`);
+   - ответ: `timestamp(4) + Cayenne LPP` → `CayenneLppDecoder` → маппинг каналов из registry (`TelemetryChannelMapping`: `(channel, type|*) → metric, displayName, unit`) → значения;
+   - payload `{type:"sensor_poll", sensor, requestId, rssi, snr, responseHex, readings:[{metric,value,unit}]}` → в outbox.
+
+Wire-детали: [docs/protocol.md](./docs/protocol.md).
+
+### 2.3. Ingestion в PostgreSQL
+
+`GatewayIngestionWorker` (в web): раз в `Gateway:PollIntervalSeconds` → `GET /api/telemetry/pending?maxCount=N` у gateway → атомарно в одном SaveChanges:
+
+- `gateway_telemetry_snapshots`/`_readings` (raw архив, идемпотентно по unique `gateway_snapshot_id`);
+- для `sensor_poll`-payload: `measurement_samples` + `measurement_values` (идемпотентно по unique `(sensor_id, request_id)`), `unit` из payload;
+- upsert `sensor_status` → `Online` + RSSI/SNR.
+
+Только после коммита транзакции → `POST /api/telemetry/ack` (gateway удаляет снапшоты). Сбой на любом шаге = повторная доставка без дублей.
+
+### 2.4. Чтение (BFF)
+
+`/api/v1/sensors`, `/sensors/{slug}`, `/sensors/{slug}/status` (материализованный `sensor_status`, фолбэк `Unknown`), `/sensors/{slug}/latest` (последние значения с `displayName`/`unit` из `sensor_metrics`), `/dashboard` (агрегат одним payload'ом), `/sitemap.xml`. Больше нет ничего — фронт живёт на этих эндпоинтах.
+
+## 3. Модель данных (PostgreSQL)
+
+| Таблица | Назначение | Ключевые ограничения |
+|---|---|---|
+| `sensors` | реестр (sync из YAML) | unique slug, unique mesh_public_key |
+| `sensor_metrics` | состав метрик + presentation metadata | PK (sensor_id, metric_key); `display_name`, `unit` |
+| `measurement_samples` | один успешный ответ датчика | unique `(sensor_id, request_id)`; rssi/snr/raw_payload |
+| `measurement_values` | значения по метрикам | PK (sample_id, metric_key); unit; индекс под графики |
+| `poll_attempts` | диагастика попыток (схема есть, не заполняется) | — |
+| `sensor_status` | материализованный статус для дашборда | 1:1 к sensor |
+| `gateway_telemetry_snapshots`/`_readings` | raw-архив outbox gateway | unique `gateway_snapshot_id` |
+
+Миграции — только через `DbMigrator` (`deploy/compose.yaml` запускает его до web/gateway). Никакого `Database.Migrate()` в runtime-сервисах.
+
+## 4. Deployment
+
+- `deploy/compose.yaml`: `sensor-db` → `sensor-migrator` (one-shot) → `sensor-web` (:8080 наружу) + `sensor-gateway` (без published-порта, volume `/app/data` для SQLite, ro-mount `config/`).
+- Конфигурация только env (12-factor): см. `deploy/env.example`. Секреты — в `deploy/.env` (не в git).
+- Сборки: `deploy/Dockerfile.{web,gateway,dbmigrator}`; web — node-стадия собирает фронт, dotnet-стадия публикует BFF c `/p:SkipFrontendBuild=true`.
+- CI (`.github/workflows/ci.yml`): dotnet restore/build/test, валидация registry, npm typecheck/lint/test/build, docker build трёх образов. CD пока нет.
+
+## 5. Ключевые решения (мини-ADR)
+
+| # | Решение | Почему |
+|---|---|---|
+| 1 | Monorepo, bounded context | один домен, атомарные изменения контрактов |
+| 2 | Gateway без PostgreSQL; pull через внутренний API | изоляция радиочасти от БД, ack/idempotency дают ровно-однажды запись |
+| 3 | SQLite outbox в gateway | переживает рестарты, простая эксплуатация, no-broker |
+| 4 | Опрос нод через acquisition API прошивки (REQ + ANON login), не через свой radio | Risk A из спеки решён кастомной прошивкой репитера; gateway не держит радио |
+| 5 | Cayenne LPP как формат ответов датчиков | стандарт MeshCore; свой бинарный envelope (Phase 2) отложен до собственной прошивки датчиков |
+| 6 | Registry-маппинг каналов (`telemetry.channels`) в YAML | канал ≠ смысл; имена/юниты/отображение — версионируются в Git, а не в БД |
+| 7 | React Router `ssr:false` + prerender из registry + JSON-снапшот на prebuild | SEO без Node-SSR runtime; reproducible builds |
+| 8 | TLS 1.2 + static-RSA cipher pinning в HTTP-клиенте репитера | ESP32-firmware не поднимает TLS 1.3/ECDHE; из Linux-контейнеров иначе не подключиться |
+
+## 6. Известные ограничения / что дальше
+
+- Нет retry-окна внутри опроса, `poll_attempts` не заполняется, нет gateway health-check-компонентов (спека §53, §36).
+- Нет historical API (`/measurements` + downsampling, спека §14.2, §15) и графиков.
+- Нет OTel/metrics (только JSON console logs), нет CD в ghcr, нет backup/runbook (спека §37–42, §58–59).
+- Фронт будет переделан по `docs/frontend-redesign-prompt.md` — не вкладывайся в текущую вёрстку.
