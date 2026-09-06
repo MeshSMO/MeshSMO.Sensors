@@ -5,6 +5,7 @@ using System.Text.Json;
 using MeshSMO.Sensors.Application.Registry;
 using MeshSMO.Sensors.Gateway.LocalStorage;
 using MeshSMO.Sensors.Gateway.MeshCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
 namespace MeshSMO.Sensors.Gateway.Polling;
@@ -18,7 +19,7 @@ namespace MeshSMO.Sensors.Gateway.Polling;
 /// </summary>
 public sealed class SensorTelemetryPoller(
     IMeshCoreTelClient client,
-    ISensorRegistry registry,
+    IServiceScopeFactory scopeFactory,
     ILocalTelemetryStore store,
     IOptions<MeshCoreOptions> meshOptions,
     IOptions<SensorPollingOptions> pollingOptions,
@@ -34,10 +35,18 @@ public sealed class SensorTelemetryPoller(
             return;
         }
 
-        var sensors = (await registry.LoadAsync(stoppingToken))
-            .Where(sensor => sensor.Enabled)
-            .Where(sensor => IsHexPublicKey(sensor.MeshPublicKey))
-            .ToArray();
+        // ISensorRegistry is scoped; hosted services are singletons, so the
+        // registry must be resolved from a scope (Development validates this
+        // at startup, production does not — never take it via the constructor).
+        SensorDefinition[] sensors;
+        using (var scope = scopeFactory.CreateScope())
+        {
+            var registry = scope.ServiceProvider.GetRequiredService<ISensorRegistry>();
+            sensors = (await registry.LoadAsync(stoppingToken))
+                .Where(sensor => sensor.Enabled)
+                .Where(sensor => IsHexPublicKey(sensor.MeshPublicKey))
+                .ToArray();
+        }
         if (sensors.Length == 0)
         {
             logger.LogInformation("No enabled sensors in the registry; sensor polling idles");

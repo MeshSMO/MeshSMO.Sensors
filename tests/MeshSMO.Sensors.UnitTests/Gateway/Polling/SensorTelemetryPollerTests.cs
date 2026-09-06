@@ -5,6 +5,7 @@ using Microsoft.Data.Sqlite;
 using MeshSMO.Sensors.Gateway.LocalStorage;
 using MeshSMO.Sensors.Gateway.MeshCore;
 using MeshSMO.Sensors.Gateway.Polling;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -50,7 +51,7 @@ public sealed class SensorTelemetryPollerTests : IDisposable
 
         var poller = new SensorTelemetryPoller(
             client,
-            new FakeRegistry([alpha, bravo]),
+            ScopeFactory(new FakeRegistry([alpha, bravo])),
             store,
             Options.Create(new MeshCoreOptions { Mode = MeshCoreConnectionMode.Http }),
             Options.Create(new SensorPollingOptions
@@ -123,7 +124,7 @@ public sealed class SensorTelemetryPollerTests : IDisposable
 
         var poller = new SensorTelemetryPoller(
             client,
-            new FakeRegistry([node]),
+            ScopeFactory(new FakeRegistry([node])),
             store,
             Options.Create(new MeshCoreOptions { Mode = MeshCoreConnectionMode.Http }),
             Options.Create(new SensorPollingOptions
@@ -171,7 +172,7 @@ public sealed class SensorTelemetryPollerTests : IDisposable
 
         var poller = new SensorTelemetryPoller(
             client,
-            new FakeRegistry([disabled]),
+            ScopeFactory(new FakeRegistry([disabled])),
             store,
             Options.Create(new MeshCoreOptions { Mode = MeshCoreConnectionMode.Http }),
             Options.Create(new SensorPollingOptions { Enabled = true }),
@@ -190,6 +191,13 @@ public sealed class SensorTelemetryPollerTests : IDisposable
 
         Assert.Empty(client.Requests);
         Assert.Equal(0, await store.CountPendingAsync(CancellationToken.None));
+    }
+
+    private static IServiceScopeFactory ScopeFactory(ISensorRegistry registry)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(registry);
+        return services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
     }
 
     private sealed class FakeRegistry(IReadOnlyList<SensorDefinition> sensors) : ISensorRegistry
