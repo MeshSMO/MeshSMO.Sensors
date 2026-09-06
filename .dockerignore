@@ -8,7 +8,6 @@
 **/.nitro
 **/.tanstack
 **/.wrangler
-**/web_bak
 **/TestResults
 .git
 .env*
