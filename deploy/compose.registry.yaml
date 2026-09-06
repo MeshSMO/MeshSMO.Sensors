@@ -1,0 +1,20 @@
+# Оверлей поверх deploy/compose.yaml для запуска стека из опубликованных образов
+# GHCR вместо локальной сборки:
+#
+#   docker compose -f deploy/compose.yaml -f deploy/compose.registry.yaml up -d
+#
+# По умолчанию берётся ghcr.io/xarleyn/...:latest; переопределяется через .env
+# или переменные окружения MESHSMO_IMAGE_PREFIX и MESHSMO_IMAGE_TAG.
+# Для приватного пакета на хосте нужен docker login ghcr.io.
+services:
+  sensor-migrator:
+    image: ${MESHSMO_IMAGE_PREFIX:-ghcr.io/xarleyn}/meshsmo-sensors-dbmigrator:${MESHSMO_IMAGE_TAG:-latest}
+    build: !reset null
+
+  sensor-web:
+    image: ${MESHSMO_IMAGE_PREFIX:-ghcr.io/xarleyn}/meshsmo-sensors-web:${MESHSMO_IMAGE_TAG:-latest}
+    build: !reset null
+
+  sensor-gateway:
+    image: ${MESHSMO_IMAGE_PREFIX:-ghcr.io/xarleyn}/meshsmo-sensors-gateway:${MESHSMO_IMAGE_TAG:-latest}
+    build: !reset null

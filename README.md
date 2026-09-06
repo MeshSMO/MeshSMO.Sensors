@@ -91,6 +91,28 @@ dotnet ef migrations add MigrationName `
   --output-dir Persistence/Migrations
 ```
 
+## CI и релизы
+
+GitHub Actions (`.github/workflows`):
+
+- **CI** (`ci.yml`) — на каждый push в `main`/`master` и на PR: параллельно .NET build + unit/protocol тесты + валидация реестра, frontend typecheck/test/build и сборка трёх Docker-образов. Каждый push в основную ветку публикует rolling-образы `ghcr.io/<owner>/meshsmo-sensors-{web,gateway,dbmigrator}` с тегами `<ветка>` и `sha-<hash>`.
+- **Release** (`release.yml`) — на push тега `v*.*.*`: прогоняет тот же CI как quality gate, публикует версионированные образы (`1.2.3`, `1.2`, `1`, `latest`) и создаёт GitHub Release с автосгенерированными notes. `workflow_dispatch` без тега переопубликует только `latest`.
+
+Порядок релиза:
+
+```powershell
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Запуск стека из опубликованных образов вместо локальной сборки (нужен `docker login ghcr.io` для приватных пакетов):
+
+```bash
+docker compose -f deploy/compose.yaml -f deploy/compose.registry.yaml up -d
+```
+
+Префикс и тег образов переопределяются переменными `MESHSMO_IMAGE_PREFIX` и `MESHSMO_IMAGE_TAG`.
+
 ## Конфигурация
 
 Основные переменные окружения:
