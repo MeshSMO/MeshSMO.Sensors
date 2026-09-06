@@ -28,9 +28,18 @@ function parseIntervalSeconds(raw) {
 }
 
 const sensors = [];
-if (existsSync(directory)) {
+const yamlFiles = existsSync(directory)
+  ? readdirSync(directory).filter((name) => name.endsWith(".yaml"))
+  : [];
+if (yamlFiles.length === 0) {
+  // Sensor YAMLs are deployment-local (gitignored). On a checkout without
+  // them (CI), keep the committed snapshot so prerender routes survive.
+  console.log("No local sensor YAML files; keeping the committed sensorRegistry.json");
+  process.exit(0);
+}
+{
   const slugs = new Set();
-  for (const fileName of readdirSync(directory).filter((name) => name.endsWith(".yaml"))) {
+  for (const fileName of yamlFiles) {
     const raw = parse(readFileSync(path.join(directory, fileName), "utf8"));
     if (typeof raw?.slug !== "string") {
       continue;

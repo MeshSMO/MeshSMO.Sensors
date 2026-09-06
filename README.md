@@ -7,7 +7,7 @@
 - gateway собирает телеметрию MeshCoreTel Repeater (HTTPS или USB Serial CLI) и опрашивает pull-only датчики через acquisition API прошивки (`POST /api/request` + ANON-логин), ответы — Cayenne LPP с маппингом каналов из реестра;
 - локальная SQLite outbox в gateway; sensor-web выгружает её в PostgreSQL (ack + идемпотентность);
 - PostgreSQL-модель (sensors, measurements, gateway telemetry), one-shot DbMigrator;
-- GitOps-реестр YAML с валидацией, синхронизацией и prerender-маршрутами;
+- реестр датчиков в YAML (deployment-local, в git не хранится) с валидацией, синхронизацией и prerender-маршрутами;
 - публичный `/api/v1` (sensors, latest, status, dashboard), sitemap.xml, robots.txt;
 - React Router Framework Mode с `ssr: false`, prerender и SPA fallback;
 - полный стек в Docker (`deploy/compose.yaml`), CI на GitHub Actions.

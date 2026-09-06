@@ -20,3 +20,7 @@
 TestResults/
 artifacts/
 data/
+
+# Sensor registry: deployment-local, may contain node credentials
+# (mesh.loginPassword references). Only schema.json is tracked.
+config/sensors/*.yaml

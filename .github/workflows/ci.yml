@@ -34,7 +34,9 @@ jobs:
         working-directory: src/web
       - run: dotnet build MeshSMO.Sensors.slnx --configuration Release --no-restore
       - run: dotnet test MeshSMO.Sensors.slnx --configuration Release --no-build --logger "trx;LogFileName=dotnet-tests.trx"
-      - run: dotnet run --project src/MeshSMO.Sensors.DbMigrator --configuration Release --no-build -- --validate-registry
+      # Registry YAMLs are deployment-local (gitignored), so there is nothing
+      # committed to validate; the registry is validated on every
+      # gateway/dbmigrator start instead.
       - uses: actions/upload-artifact@v7
         if: always()
         with:

@@ -27,6 +27,9 @@ services:
     env_file:
       - path: .env
         required: false
+    volumes:
+      # Реестр датчиков — deployment-local (в git не хранится), маунтим с хоста
+      - ../config:/app/config:ro
     depends_on:
       sensor-db:
         condition: service_healthy

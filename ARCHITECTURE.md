@@ -36,7 +36,7 @@
 - **BFF не знает про MeshCore**: ни serial, ни пакетный формат не протекают в `Web`. Web оперирует снапшотами outbox.
 - **Gateway не знает про PostgreSQL**: он пишет только в локальную SQLite и отдаёт данные по API. Web может быть недоступен/перезапускаться — сбор продолжается.
 - **Frontend не знает про LoRa**: только `/api/v1/*`.
-- Registry — GitOps (`config/sensors/*.yaml`), источник истины для генерации prerender-маршрутов и таблицы `sensors`.
+- Registry — deployment-local (`config/sensors/*.yaml` gitignored: могут содержать чувствительные данные). В git — только `schema.json` и сгенерированный публичный снапшот `src/web/src/generated/sensorRegistry.json`. Локальные YAML — источник истины для синхронизации таблицы `sensors` и генерации prerender-маршрутов.
 
 ## 2. Потоки данных
 

@@ -13,6 +13,7 @@ RUN dotnet publish src/MeshSMO.Sensors.DbMigrator/MeshSMO.Sensors.DbMigrator.csp
 FROM mcr.microsoft.com/dotnet/runtime:10.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish ./
-COPY config/ ./config/
+# Sensor registry YAMLs are deployment-local and sensitive (may resolve node
+# passwords from env); they are mounted at runtime via compose, not baked in.
 USER $APP_UID
 ENTRYPOINT ["dotnet", "MeshSMO.Sensors.DbMigrator.dll"]
