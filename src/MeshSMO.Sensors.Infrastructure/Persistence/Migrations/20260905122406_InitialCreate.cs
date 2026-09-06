@@ -33,10 +33,7 @@ public partial class InitialCreate : Migration
                 created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                 updated_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
             },
-            constraints: table =>
-            {
-                table.PrimaryKey("PK_sensors", x => x.id);
-            });
+            constraints: table => table.PrimaryKey("PK_sensors", x => x.id));
 
         migrationBuilder.CreateTable(
             name: "measurement_samples",

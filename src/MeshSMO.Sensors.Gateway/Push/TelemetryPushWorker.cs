@@ -34,7 +34,7 @@ public sealed class TelemetryPushWorker(
         {
             try
             {
-                await PushPendingBatchAsync(pushOptions, stoppingToken);
+                await PushPendingBatchAsync(pushOptions, stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -50,7 +50,7 @@ public sealed class TelemetryPushWorker(
 
             try
             {
-                await timer.WaitForNextTickAsync(stoppingToken);
+                await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -61,11 +61,9 @@ public sealed class TelemetryPushWorker(
 
     private async Task PushPendingBatchAsync(TelemetryPushOptions pushOptions, CancellationToken cancellationToken)
     {
-        var snapshots = await store.ReadPendingAsync(pushOptions.BatchSize, cancellationToken);
+        var snapshots = await store.ReadPendingAsync(pushOptions.BatchSize, cancellationToken).ConfigureAwait(false);
         if (snapshots.Count == 0)
-        {
             return;
-        }
 
         var items = snapshots
             .Select(snapshot => new TelemetrySnapshotDto(
@@ -81,11 +79,11 @@ public sealed class TelemetryPushWorker(
                     .ToArray()))
             .ToList();
 
-        var pendingCount = await store.CountPendingAsync(cancellationToken);
-        await client.PushAsync(new TelemetryBatchDto(pendingCount, items), cancellationToken);
+        var pendingCount = await store.CountPendingAsync(cancellationToken).ConfigureAwait(false);
+        await client.PushAsync(new TelemetryBatchDto(pendingCount, items), cancellationToken).ConfigureAwait(false);
 
         // The API confirmed the batch (idempotently), so the local outbox can drop it.
-        await store.AcknowledgeAsync(snapshots.Select(snapshot => snapshot.Id).ToArray(), cancellationToken);
+        await store.AcknowledgeAsync(snapshots.Select(snapshot => snapshot.Id).ToArray(), cancellationToken).ConfigureAwait(false);
         logger.LogInformation("Pushed {Count} telemetry snapshots to the main API", snapshots.Count);
     }
 }

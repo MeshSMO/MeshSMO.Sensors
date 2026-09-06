@@ -52,7 +52,7 @@ public sealed class SensorTelemetryPoller(
         using (var scope = scopeFactory.CreateScope())
         {
             var registry = scope.ServiceProvider.GetRequiredService<ISensorRegistry>();
-            sensors = (await registry.LoadAsync(stoppingToken))
+            sensors = (await registry.LoadAsync(stoppingToken).ConfigureAwait(false))
                 .Where(sensor => sensor.Enabled)
                 .Where(sensor => IsHexPublicKey(sensor.MeshPublicKey))
                 .ToArray();
@@ -83,14 +83,14 @@ public sealed class SensorTelemetryPoller(
             now = DateTimeOffset.UtcNow;
             if (due > now)
             {
-                await Task.Delay(TimeSpan.FromTicks(Math.Min((due - now).Ticks, TimeSpan.FromSeconds(5).Ticks)), stoppingToken);
+                await Task.Delay(TimeSpan.FromTicks(Math.Min((due - now).Ticks, TimeSpan.FromSeconds(5).Ticks)), stoppingToken).ConfigureAwait(false);
                 continue;
             }
 
             var (sensor, _) = queue.Dequeue();
             try
             {
-                await PollCycleAsync(sensor, loginAttempted, stoppingToken);
+                await PollCycleAsync(sensor, loginAttempted, stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -122,7 +122,7 @@ public sealed class SensorTelemetryPoller(
             PollAttemptOutcome outcome;
             try
             {
-                outcome = await PollOnceAsync(sensor, requestId, startedAt, timeoutMs, cancellationToken);
+                outcome = await PollOnceAsync(sensor, requestId, startedAt, timeoutMs, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -144,35 +144,29 @@ public sealed class SensorTelemetryPoller(
                     (int)(DateTimeOffset.UtcNow - startedAt).TotalMilliseconds);
             }
 
-            await RecordAttemptAsync(sensor, requestId, attempt, startedAt, outcome, cancellationToken);
+            await RecordAttemptAsync(sensor, requestId, attempt, startedAt, outcome, cancellationToken).ConfigureAwait(false);
 
             if (outcome.Telemetry is not null)
-            {
                 break;
-            }
 
             if (attempt >= maxAttempts)
-            {
                 break;
-            }
 
             // An empty or undecodable body is a deterministic answer; retrying
             // would only burn LoRa airtime. Timeouts and transport errors are
             // transient and are retried.
             if (outcome.ErrorCode is "empty_response" or "undecodable_response")
-            {
                 break;
-            }
 
             if (outcome.Status == PollAttemptStatus.TimedOut)
             {
                 // The node most likely has not added this repeater to its ACL
                 // yet; bootstrap the ANON login once before the retry.
-                await TryLoginOnceAsync(sensor, loginAttempted, cancellationToken);
+                await TryLoginOnceAsync(sensor, loginAttempted, cancellationToken).ConfigureAwait(false);
             }
 
             var backoffMs = Random.Shared.Next(options.RetryBackoffMinMs, options.RetryBackoffMaxMs + 1);
-            await Task.Delay(TimeSpan.FromMilliseconds(backoffMs), cancellationToken);
+            await Task.Delay(TimeSpan.FromMilliseconds(backoffMs), cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -189,7 +183,7 @@ public sealed class SensorTelemetryPoller(
             sensor.MeshPublicKey,
             payload,
             timeoutMs,
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
         var status = response.RootElement.TryGetProperty("status", out var statusElement)
             ? statusElement.GetString()
             : null;
@@ -263,7 +257,7 @@ public sealed class SensorTelemetryPoller(
         string payloadJson;
         if (outcome.Telemetry is { } readings)
         {
-            payloadJson = JsonSerializer.Serialize(new Dictionary<string, object?>
+            payloadJson = JsonSerializer.Serialize(new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 ["type"] = "sensor_poll",
                 ["sensor"] = sensor.Slug.Value,
@@ -280,7 +274,7 @@ public sealed class SensorTelemetryPoller(
         }
         else
         {
-            payloadJson = JsonSerializer.Serialize(new Dictionary<string, object?>
+            payloadJson = JsonSerializer.Serialize(new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 ["type"] = "poll_attempt",
                 ["sensor"] = sensor.Slug.Value,
@@ -296,7 +290,7 @@ public sealed class SensorTelemetryPoller(
             });
         }
 
-        var snapshotId = await store.AppendAsync(startedAt, client.TransportName, payloadJson, cancellationToken);
+        var snapshotId = await store.AppendAsync(startedAt, client.TransportName, payloadJson, cancellationToken).ConfigureAwait(false);
         logger.LogInformation(
             "Poll attempt {Attempt} of sensor {Slug} (request {RequestId}) recorded as outbox snapshot {SnapshotId}: {Status}",
             attemptNumber,
@@ -310,9 +304,7 @@ public sealed class SensorTelemetryPoller(
     {
         var options = pollingOptions.Value;
         if (!options.LoginOnTimeout || !loginAttempted.Add(sensor.Slug.Value))
-        {
             return;
-        }
 
         var password = ResolveLoginPassword(sensor, options);
         logger.LogInformation(
@@ -326,7 +318,7 @@ public sealed class SensorTelemetryPoller(
                 sensor.MeshPublicKey,
                 password,
                 options.LoginTimeoutMs,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
             var loginStatus = login.RootElement.TryGetProperty("status", out var statusElement)
                 ? statusElement.GetString()
                 : null;
@@ -375,7 +367,7 @@ public sealed class SensorTelemetryPoller(
             .GroupBy(channel => (channel.Channel, channel.Type ?? "*"))
             .ToDictionary(group => group.Key, group => group.First().Metric);
         var repeatedTypes = telemetry
-            .GroupBy(value => value.TypeKey)
+            .GroupBy(value => value.TypeKey, StringComparer.Ordinal)
             .Where(group => group.Count() > 1)
             .Select(group => group.Key)
             .ToHashSet(StringComparer.Ordinal);
@@ -396,9 +388,7 @@ public sealed class SensorTelemetryPoller(
     {
         var overrideSeconds = pollingOptions.Value.IntervalOverrideSeconds;
         if (overrideSeconds >= 30 && overrideSeconds < sensor.PollInterval.TotalSeconds)
-        {
             return TimeSpan.FromSeconds(overrideSeconds);
-        }
 
         return sensor.PollInterval;
     }

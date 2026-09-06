@@ -22,22 +22,16 @@ public static class CayenneLppDecoder
             // MeshCore telemetry replies are zero-padded to a fixed buffer size;
             // a tail of zero bytes is padding, not a stream of zero records.
             if (IsAllZeros(payload.Slice(offset)))
-            {
                 break;
-            }
 
             var channel = payload[offset];
             var type = payload[offset + 1];
             if (type == 0xF0)
-            {
                 break; // polyline: variable length, not used by MeshCore telemetry replies
-            }
 
             var dataLength = DataSizeOf(type);
             if (dataLength is null || offset + 2 + dataLength.Value > payload.Length)
-            {
                 break; // trailing padding or unknown type
-            }
 
             var data = payload.Slice(offset + 2, dataLength.Value);
             AppendValues(values, channel, type, data);
@@ -52,9 +46,7 @@ public static class CayenneLppDecoder
         foreach (var b in span)
         {
             if (b != 0)
-            {
                 return false;
-            }
         }
 
         return true;
@@ -197,14 +189,10 @@ public static class CayenneLppDecoder
         IReadOnlySet<string> typesSeenMoreThanOnce)
     {
         if (mappings.TryGetValue((value.Channel, value.TypeKey), out var mapped))
-        {
             return mapped;
-        }
 
         if (mappings.TryGetValue((value.Channel, "*"), out var channelWide))
-        {
             return channelWide;
-        }
 
         return typesSeenMoreThanOnce.Contains(value.TypeKey)
             ? $"{value.TypeKey}_{value.Channel.ToString(CultureInfo.InvariantCulture)}"

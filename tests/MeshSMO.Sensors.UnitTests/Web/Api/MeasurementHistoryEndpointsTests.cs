@@ -33,7 +33,7 @@ public sealed class MeasurementHistoryEndpointsTests : IDisposable
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
-        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             ["ConnectionStrings:Sensors"] = "Host=localhost;Database=unused",
             ["Registry:Directory"] = Path.Combine(Path.GetTempPath(), $"registry-{Guid.NewGuid():N}"),
@@ -239,7 +239,7 @@ public sealed class MeasurementHistoryEndpointsTests : IDisposable
         $"&from={Uri.EscapeDataString($"{from:O}")}&to={Uri.EscapeDataString($"{to:O}")}&resolution={resolution}";
 
     private static void AssertTimestamp(DateTimeOffset expected, string actual) =>
-        Assert.Equal(expected, DateTimeOffset.Parse(actual));
+        Assert.Equal(expected, DateTimeOffset.Parse(actual, System.Globalization.CultureInfo.InvariantCulture));
 
     private static void AssertPoint(JsonElement point, DateTimeOffset expectedTimestamp, double expectedValue)
     {

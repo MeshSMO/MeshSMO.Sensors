@@ -16,7 +16,7 @@ public sealed class Worker(
         if (options.Value.Mode == MeshCoreConnectionMode.Disabled)
         {
             logger.LogInformation("MeshSMO Sensors gateway started with MeshCore communication disabled");
-            await Task.Delay(Timeout.InfiniteTimeSpan, stoppingToken);
+            await Task.Delay(Timeout.InfiniteTimeSpan, stoppingToken).ConfigureAwait(false);
             return;
         }
 
@@ -28,8 +28,8 @@ public sealed class Worker(
             {
                 try
                 {
-                    await repeaterClient.ConnectAsync(stoppingToken);
-                    var version = await repeaterClient.ExecuteCommandAsync("ver", stoppingToken);
+                    await repeaterClient.ConnectAsync(stoppingToken).ConfigureAwait(false);
+                    var version = await repeaterClient.ExecuteCommandAsync("ver", stoppingToken).ConfigureAwait(false);
                     logger.LogInformation(
                         "Connected to MeshCoreTel repeater over {Transport}; firmware: {FirmwareVersion}",
                         repeaterClient.TransportName,
@@ -37,16 +37,16 @@ public sealed class Worker(
 
                     while (!stoppingToken.IsCancellationRequested)
                     {
-                        using var telemetry = await repeaterClient.GetTelemetryAsync(stoppingToken);
+                        using var telemetry = await repeaterClient.GetTelemetryAsync(stoppingToken).ConfigureAwait(false);
                         var snapshotId = await localTelemetryStore.AppendAsync(
                             DateTimeOffset.UtcNow,
                             repeaterClient.TransportName,
                             telemetry.RootElement.GetRawText(),
-                            stoppingToken);
+                            stoppingToken).ConfigureAwait(false);
                         logger.LogDebug(
                             "Stored repeater telemetry snapshot {SnapshotId} in the local outbox",
                             snapshotId);
-                        await Task.Delay(collectionInterval, stoppingToken);
+                        await Task.Delay(collectionInterval, stoppingToken).ConfigureAwait(false);
                     }
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -62,8 +62,8 @@ public sealed class Worker(
                         "MeshCoreTel repeater communication over {Transport} failed; retrying in {RetryDelay}",
                         repeaterClient.TransportName,
                         retryDelay);
-                    await repeaterClient.DisconnectAsync(CancellationToken.None);
-                    await Task.Delay(retryDelay, stoppingToken);
+                    await repeaterClient.DisconnectAsync(CancellationToken.None).ConfigureAwait(false);
+                    await Task.Delay(retryDelay, stoppingToken).ConfigureAwait(false);
                 }
             }
         }
@@ -71,7 +71,7 @@ public sealed class Worker(
         {
             try
             {
-                await repeaterClient.DisconnectAsync(CancellationToken.None);
+                await repeaterClient.DisconnectAsync(CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception exception) when (exception is IOException or InvalidOperationException)
             {

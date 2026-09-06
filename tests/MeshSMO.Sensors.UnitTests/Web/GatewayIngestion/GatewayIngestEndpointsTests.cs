@@ -166,15 +166,13 @@ public sealed class GatewayIngestEndpointsTests : IDisposable
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
-        var configuration = new Dictionary<string, string?>
+        var configuration = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             ["ConnectionStrings:Sensors"] = "Host=localhost;Database=unused",
             ["Registry:Directory"] = Path.Combine(Path.GetTempPath(), $"registry-{Guid.NewGuid():N}"),
         };
         foreach (var (key, value) in settings)
-        {
             configuration[key] = value;
-        }
 
         builder.Configuration.AddInMemoryCollection(configuration);
         builder.Logging.ClearProviders();

@@ -29,8 +29,11 @@ public sealed class SqliteOutboxConnectionInterceptor : DbConnectionInterceptor
         ConnectionEndEventData eventData,
         CancellationToken cancellationToken = default)
     {
-        await using var command = connection.CreateCommand();
-        command.CommandText = Pragmas;
+        var command = connection.CreateCommand();
+        await using (command.ConfigureAwait(false))
+        {
+            command.CommandText = Pragmas;
         await command.ExecuteNonQueryAsync(cancellationToken);
+        }
     }
 }

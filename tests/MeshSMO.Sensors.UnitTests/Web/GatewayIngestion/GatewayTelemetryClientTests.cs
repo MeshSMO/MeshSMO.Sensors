@@ -54,7 +54,7 @@ public sealed class GatewayTelemetryClientTests
         var handler = new StubHttpMessageHandler(async request =>
         {
             apiKey = request.Headers.TryGetValues("X-Api-Key", out var values) ? values.SingleOrDefault() : null;
-            body = await request.Content!.ReadAsStringAsync();
+            body = await request.Content!.ReadAsStringAsync().ConfigureAwait(false);
             return (HttpStatusCode.OK, """{"acknowledged":2}""");
         });
         var client = CreateClient(handler, "secret-key");
@@ -84,7 +84,7 @@ public sealed class GatewayTelemetryClientTests
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
-            var (statusCode, content) = await responder(request);
+            var (statusCode, content) = await responder(request).ConfigureAwait(false);
             return new HttpResponseMessage(statusCode) { Content = new StringContent(content) };
         }
     }

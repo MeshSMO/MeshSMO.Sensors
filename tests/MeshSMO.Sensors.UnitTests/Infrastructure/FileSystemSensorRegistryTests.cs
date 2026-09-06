@@ -44,7 +44,7 @@ public sealed class FileSystemSensorRegistryTests
     {
         var definitions = await LoadSingleWithLoginPassword(
             @"loginPassword: ""${TEST_SENSOR_NODE_PASSWORD}""",
-            new Dictionary<string, string?> { ["TEST_SENSOR_NODE_PASSWORD"] = "hello" });
+            new Dictionary<string, string?>(StringComparer.Ordinal) { ["TEST_SENSOR_NODE_PASSWORD"] = "hello" });
 
         Assert.Equal("hello", definitions.LoginPassword);
     }
@@ -54,7 +54,7 @@ public sealed class FileSystemSensorRegistryTests
     {
         var definitions = await LoadSingleWithLoginPassword(
             @"loginPassword: ""${TEST_SENSOR_NODE_PASSWORD:-fallback-pass}""",
-            new Dictionary<string, string?> { ["TEST_SENSOR_NODE_PASSWORD"] = null });
+            new Dictionary<string, string?>(StringComparer.Ordinal) { ["TEST_SENSOR_NODE_PASSWORD"] = null });
 
         Assert.Equal("fallback-pass", definitions.LoginPassword);
     }
@@ -68,7 +68,7 @@ public sealed class FileSystemSensorRegistryTests
             await File.WriteAllTextAsync(
                 Path.Combine(directory, "sensor.yaml"),
                 WithLoginPassword(@"loginPassword: ""${TEST_SENSOR_NODE_PASSWORD_MISSING}"""));
-            var registry = CreateRegistry(directory, new Dictionary<string, string?>());
+            var registry = CreateRegistry(directory, new Dictionary<string, string?>(StringComparer.Ordinal));
 
             var exception = await Assert.ThrowsAsync<SensorRegistryValidationException>(
                 () => registry.LoadAsync(CancellationToken.None));
@@ -92,7 +92,7 @@ public sealed class FileSystemSensorRegistryTests
             await File.WriteAllTextAsync(
                 Path.Combine(directory, "sensor.yaml"),
                 WithLoginPassword(@"loginPassword: ""sixteen-bytes-xy"""));
-            var registry = CreateRegistry(directory, new Dictionary<string, string?>());
+            var registry = CreateRegistry(directory, new Dictionary<string, string?>(StringComparer.Ordinal));
 
             var exception = await Assert.ThrowsAsync<SensorRegistryValidationException>(
                 () => registry.LoadAsync(CancellationToken.None));
@@ -116,7 +116,7 @@ public sealed class FileSystemSensorRegistryTests
             await File.WriteAllTextAsync(
                 Path.Combine(directory, "sensor.yaml"),
                 WithLoginPassword(@"loginPassword: ""${unclosed"""));
-            var registry = CreateRegistry(directory, new Dictionary<string, string?>());
+            var registry = CreateRegistry(directory, new Dictionary<string, string?>(StringComparer.Ordinal));
 
             var exception = await Assert.ThrowsAsync<SensorRegistryValidationException>(
                 () => registry.LoadAsync(CancellationToken.None));
@@ -138,8 +138,8 @@ public sealed class FileSystemSensorRegistryTests
         var directory = CreateTemporaryDirectory();
         try
         {
-            await File.WriteAllTextAsync(Path.Combine(directory, "sensor.yaml"), WithLoginPassword(loginPasswordLine));
-            var registry = CreateRegistry(directory, environment ?? new Dictionary<string, string?>());
+            await File.WriteAllTextAsync(Path.Combine(directory, "sensor.yaml"), WithLoginPassword(loginPasswordLine)).ConfigureAwait(false);
+            var registry = CreateRegistry(directory, environment ?? new Dictionary<string, string?>(StringComparer.Ordinal));
 
             return Assert.Single(await registry.LoadAsync(CancellationToken.None));
         }

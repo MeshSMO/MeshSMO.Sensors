@@ -72,9 +72,7 @@ public static class MeasurementResolutionPolicy
         foreach (var (upTo, resolution) in AutoBands)
         {
             if (range <= upTo)
-            {
                 return resolution;
-            }
         }
 
         return MeasurementResolution.OneDay;

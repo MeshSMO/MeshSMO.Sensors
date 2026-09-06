@@ -34,9 +34,7 @@ public sealed partial class FileSystemSensorRegistry(
                 : Path.Combine(hostEnvironment.ContentRootPath, directory));
 
         if (!System.IO.Directory.Exists(fullPath))
-        {
             throw new DirectoryNotFoundException($"Sensor registry directory was not found: {fullPath}");
-        }
 
         var files = System.IO.Directory
             .EnumerateFiles(fullPath, "*.y*ml", SearchOption.TopDirectoryOnly)
@@ -44,9 +42,7 @@ public sealed partial class FileSystemSensorRegistry(
             .ToArray();
 
         if (files.Length == 0)
-        {
             throw new SensorRegistryValidationException(["The sensor registry contains no YAML files."]);
-        }
 
         var definitions = new List<SensorDefinition>(files.Length);
         var errors = new List<string>();
@@ -57,11 +53,14 @@ public sealed partial class FileSystemSensorRegistry(
 
             try
             {
-                await using var stream = File.OpenRead(file);
-                using var reader = new StreamReader(stream);
+                var stream = File.OpenRead(file);
+                await using (stream.ConfigureAwait(false))
+                {
+                    using var reader = new StreamReader(stream);
                 var yaml = await reader.ReadToEndAsync(cancellationToken);
                 var document = _deserializer.Deserialize<SensorYaml>(yaml);
                 definitions.Add(Parse(document, Path.GetFileName(file), errors));
+                }
             }
             catch (YamlException exception)
             {
@@ -71,9 +70,7 @@ public sealed partial class FileSystemSensorRegistry(
 
         AddDuplicateErrors(definitions, errors);
         if (errors.Count > 0)
-        {
             throw new SensorRegistryValidationException(errors);
-        }
 
         return definitions;
     }
@@ -107,32 +104,22 @@ public sealed partial class FileSystemSensorRegistry(
         var timeout = ParseDuration(yaml.Polling?.Timeout, source, "polling.timeout", errors);
 
         if (interval > TimeSpan.Zero && timeout > interval)
-        {
             errors.Add($"{source}: polling.timeout cannot exceed polling.interval.");
-        }
 
         var maxAttempts = yaml.Polling?.MaxAttempts ?? 0;
         if (maxAttempts is < 1 or > 10)
-        {
             errors.Add($"{source}: polling.maxAttempts must be between 1 and 10.");
-        }
 
         var latitude = yaml.Location?.Latitude;
         var longitude = yaml.Location?.Longitude;
         if (latitude is < -90 or > 90)
-        {
             errors.Add($"{source}: location.latitude must be between -90 and 90.");
-        }
 
         if (longitude is < -180 or > 180)
-        {
             errors.Add($"{source}: location.longitude must be between -180 and 180.");
-        }
 
         if (latitude.HasValue != longitude.HasValue)
-        {
             errors.Add($"{source}: location.latitude and location.longitude must be specified together.");
-        }
 
         var metrics = (yaml.Metrics ?? [])
             .Where(metric => !string.IsNullOrWhiteSpace(metric))
@@ -140,19 +127,13 @@ public sealed partial class FileSystemSensorRegistry(
             .ToArray();
 
         if (metrics.Length == 0)
-        {
             errors.Add($"{source}: at least one metric is required.");
-        }
 
         foreach (var metric in metrics.Where(metric => !MetricKeyPattern().IsMatch(metric)))
-        {
             errors.Add($"{source}: metric '{metric}' has an invalid key.");
-        }
 
         foreach (var duplicate in metrics.GroupBy(metric => metric, StringComparer.Ordinal).Where(group => group.Count() > 1))
-        {
             errors.Add($"{source}: metric '{duplicate.Key}' is listed more than once.");
-        }
 
         var channels = ParseTelemetryChannels(yaml.Telemetry?.Channels, source, errors);
         var loginPassword = ResolveLoginPassword(yaml.Mesh?.LoginPassword, source, errors);
@@ -160,9 +141,7 @@ public sealed partial class FileSystemSensorRegistry(
         var visible = yaml.Public?.Visible ?? false;
         var indexable = yaml.Public?.Indexable ?? false;
         if (indexable && !visible)
-        {
             errors.Add($"{source}: an indexable sensor must also be publicly visible.");
-        }
 
         if (errors.Count > startErrorCount)
         {
@@ -192,9 +171,7 @@ public sealed partial class FileSystemSensorRegistry(
     private string? ResolveLoginPassword(string? raw, string source, ICollection<string> errors)
     {
         if (raw is null)
-        {
             return null;
-        }
 
         var resolved = raw.Contains('$')
             ? EnvironmentReferenceRegex().Replace(raw, match =>
@@ -202,14 +179,10 @@ public sealed partial class FileSystemSensorRegistry(
                 var name = match.Groups[1].Value;
                 var value = _environmentVariableLookup(name);
                 if (value is not null)
-                {
                     return value;
-                }
 
                 if (match.Groups[2].Success)
-                {
                     return match.Groups[2].Value;
-                }
 
                 errors.Add(
                     $"{source}: mesh.loginPassword references environment variable '{name}' that is not set. " +
@@ -218,7 +191,7 @@ public sealed partial class FileSystemSensorRegistry(
             })
             : raw;
 
-        if (resolved.Contains("${"))
+        if (resolved.Contains("${", StringComparison.Ordinal))
         {
             errors.Add(
                 $"{source}: mesh.loginPassword contains a malformed or unresolved '${{...}}' reference. " +
@@ -241,9 +214,7 @@ public sealed partial class FileSystemSensorRegistry(
         ICollection<string> errors)
     {
         if (channels is null || channels.Count == 0)
-        {
             return [];
-        }
 
         var parsed = new List<TelemetryChannelMapping>(channels.Count);
         foreach (var channel in channels)
@@ -316,9 +287,7 @@ public sealed partial class FileSystemSensorRegistry(
     private static void Require(string? value, string source, string field, ICollection<string> errors)
     {
         if (string.IsNullOrWhiteSpace(value))
-        {
             errors.Add($"{source}: {field} is required.");
-        }
     }
 
     private static void AddDuplicateErrors(IReadOnlyCollection<SensorDefinition> definitions, ICollection<string> errors)
@@ -336,15 +305,13 @@ public sealed partial class FileSystemSensorRegistry(
         ICollection<string> errors)
     {
         foreach (var group in definitions.GroupBy(selector, comparer).Where(group => group.Count() > 1))
-        {
             errors.Add($"Duplicate {field} '{group.Key}' in {string.Join(", ", group.Select(definition => definition.Source))}.");
-        }
     }
 
     [GeneratedRegex("^[a-z][a-z0-9_-]{0,63}$", RegexOptions.CultureInvariant)]
     private static partial Regex MetricKeyPattern();
 
-    [GeneratedRegex(@"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}", RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture)]
     private static partial Regex EnvironmentReferenceRegex();
 
     private sealed class SensorYaml

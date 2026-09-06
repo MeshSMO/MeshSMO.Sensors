@@ -16,17 +16,15 @@ builder.Logging.AddSimpleConsole(options =>
     options.TimestampFormat = "yyyy-MM-dd HH:mm:ss ";
 });
 if (validateRegistryOnly)
-{
     builder.Services.AddSensorRegistry(builder.Configuration);
-}
 else
-{
     builder.Services.AddSensorsInfrastructure(builder.Configuration);
-}
 
 using var host = builder.Build();
-await using var scope = host.Services.CreateAsyncScope();
-var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DbMigrator");
+var scope = host.Services.CreateAsyncScope();
+await using (scope.ConfigureAwait(false))
+{
+    var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DbMigrator");
 
 if (validateRegistryOnly)
 {
@@ -48,3 +46,4 @@ logger.LogInformation(
     result.Added,
     result.Updated,
     result.Total);
+}

@@ -62,7 +62,7 @@ public sealed class MeasurementHistoryReader(SensorsDbContext dbContext)
                 Parameter("@metric", metricKey),
                 Parameter("@from", from.ToUniversalTime()),
                 Parameter("@to", to.ToUniversalTime()))
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
 
         return rows
             .Select(row => new MeasurementHistoryPoint(

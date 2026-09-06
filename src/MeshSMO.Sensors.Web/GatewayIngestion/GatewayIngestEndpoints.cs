@@ -16,24 +16,22 @@ public static class GatewayIngestEndpoints
         var ingestionOptions = app.ServiceProvider.GetRequiredService<IOptions<GatewayIngestionOptions>>().Value;
         var ingestOptions = app.ServiceProvider.GetRequiredService<IOptions<GatewayIngestOptions>>().Value;
         if (ingestionOptions.Mode != GatewayDeliveryMode.Push || string.IsNullOrWhiteSpace(ingestOptions.ApiKey))
-        {
             return app;
-        }
 
         var apiKey = ingestOptions.ApiKey;
         if (app is IApplicationBuilder application)
         {
             application.Use(async (context, next) =>
             {
-                if (context.Request.Path.StartsWithSegments("/api/telemetry/ingest") &&
+                if (context.Request.Path.StartsWithSegments("/api/telemetry/ingest", StringComparison.Ordinal) &&
                     !IsApiKeyValid(context.Request.Headers["X-Api-Key"].ToString(), apiKey))
                 {
                     context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    await context.Response.WriteAsJsonAsync(new { error = "Unauthorized" });
+                    await context.Response.WriteAsJsonAsync(new { error = "Unauthorized" }).ConfigureAwait(false);
                     return;
                 }
 
-                await next();
+                await next().ConfigureAwait(false);
             });
         }
 
@@ -44,9 +42,7 @@ public static class GatewayIngestEndpoints
             CancellationToken cancellationToken) =>
         {
             if (batch is null || batch.Snapshots.Count == 0)
-            {
                 return Results.Ok(new GatewayIngestResponse(0));
-            }
 
             if (batch.Snapshots.Count > options.Value.MaximumBatchSize)
             {
@@ -56,10 +52,11 @@ public static class GatewayIngestEndpoints
             }
 
             int imported;
-            await using (var scope = scopeFactory.CreateAsyncScope())
+            var scope = scopeFactory.CreateAsyncScope();
+            await using (scope.ConfigureAwait(false))
             {
                 var importer = scope.ServiceProvider.GetRequiredService<GatewayTelemetryImporter>();
-                imported = await importer.ImportBatchAsync(batch.Snapshots, cancellationToken);
+                imported = await importer.ImportBatchAsync(batch.Snapshots, cancellationToken).ConfigureAwait(false);
             }
 
             return Results.Ok(new GatewayIngestResponse(imported));

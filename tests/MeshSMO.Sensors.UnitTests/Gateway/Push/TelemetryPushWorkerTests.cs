@@ -19,7 +19,7 @@ public sealed class TelemetryPushWorkerTests
         var handler = new StubHttpMessageHandler(async request =>
         {
             apiKey = request.Headers.TryGetValues("X-Api-Key", out var values) ? values.SingleOrDefault() : null;
-            body = await request.Content!.ReadAsStringAsync();
+            body = await request.Content!.ReadAsStringAsync().ConfigureAwait(false);
             return (System.Net.HttpStatusCode.OK, """{"accepted":1}""");
         });
         var client = CreateClient(handler, "secret", intervalSeconds: 1);
@@ -181,7 +181,7 @@ public sealed class TelemetryPushWorkerTests
             CancellationToken cancellationToken)
         {
             RequestCount++;
-            var (statusCode, content) = await responder(request);
+            var (statusCode, content) = await responder(request).ConfigureAwait(false);
             return new HttpResponseMessage(statusCode) { Content = new StringContent(content) };
         }
     }

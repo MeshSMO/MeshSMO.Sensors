@@ -5,9 +5,7 @@ public readonly record struct SensorId
     public SensorId(Guid value)
     {
         if (value == Guid.Empty)
-        {
             throw new ArgumentException("Sensor id cannot be empty.", nameof(value));
-        }
 
         Value = value;
     }

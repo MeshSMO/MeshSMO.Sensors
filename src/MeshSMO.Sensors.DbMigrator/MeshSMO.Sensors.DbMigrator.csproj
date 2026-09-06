@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <UserSecretsId>42995013-094b-49f6-a322-46169da37012</UserSecretsId>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\MeshSMO.Sensors.Infrastructure\MeshSMO.Sensors.Infrastructure.csproj" />

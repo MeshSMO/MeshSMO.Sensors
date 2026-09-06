@@ -31,10 +31,13 @@ public sealed class LocalTelemetryStore(IDbContextFactory<LocalOutboxDbContext> 
                 .ToList(),
         };
 
-        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        db.Snapshots.Add(snapshot);
+        var db = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            db.Snapshots.Add(snapshot);
         await db.SaveChangesAsync(cancellationToken);
         return snapshot.Id;
+        }
     }
 
     public async Task<IReadOnlyList<PendingTelemetrySnapshot>> ReadPendingAsync(
@@ -43,8 +46,10 @@ public sealed class LocalTelemetryStore(IDbContextFactory<LocalOutboxDbContext> 
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumCount);
 
-        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var snapshots = await db.Snapshots
+        var db = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var snapshots = await db.Snapshots
             .Include(entity => entity.Readings)
             .OrderBy(entity => entity.Id)
             .Take(maximumCount)
@@ -65,32 +70,34 @@ public sealed class LocalTelemetryStore(IDbContextFactory<LocalOutboxDbContext> 
                         reading.TextValue))
                     .ToArray()))
             .ToArray();
+        }
     }
 
     public async Task AcknowledgeAsync(IReadOnlyCollection<long> ids, CancellationToken cancellationToken)
     {
         if (ids.Count == 0)
-        {
             return;
-        }
 
-        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        // The FK cascade removes the readings together with the snapshot.
-        await db.Snapshots
+        var db = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            // The FK cascade removes the readings together with the snapshot.
+            await db.Snapshots
             .Where(entity => ids.Contains(entity.Id))
             .ExecuteDeleteAsync(cancellationToken);
+        }
     }
 
     public async Task<long> CountPendingAsync(CancellationToken cancellationToken)
     {
-        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        return await db.Snapshots.LongCountAsync(cancellationToken);
+        var db = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            return await db.Snapshots.LongCountAsync(cancellationToken);
+        }
     }
 
-    private static IEnumerable<FlattenedReading> FlattenReadings(JsonElement root)
-    {
-        return FlattenReadings(root, string.Empty);
-    }
+    private static IEnumerable<FlattenedReading> FlattenReadings(JsonElement root) => FlattenReadings(root, string.Empty);
 
     private static IEnumerable<FlattenedReading> FlattenReadings(JsonElement element, string path)
     {
@@ -100,18 +107,14 @@ public sealed class LocalTelemetryStore(IDbContextFactory<LocalOutboxDbContext> 
             {
                 var childPath = string.IsNullOrEmpty(path) ? property.Name : $"{path}.{property.Name}";
                 foreach (var reading in FlattenReadings(property.Value, childPath))
-                {
                     yield return reading;
-                }
             }
 
             yield break;
         }
 
         if (string.IsNullOrEmpty(path) || element.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
-        {
             yield break;
-        }
 
         if (element.ValueKind == JsonValueKind.Number && element.TryGetDouble(out var numericValue))
         {

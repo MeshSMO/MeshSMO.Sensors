@@ -33,7 +33,7 @@ public sealed class GatewayTelemetryImporter(
         var existingIds = await dbContext.GatewayTelemetrySnapshots
             .Where(snapshot => batchIds.Contains(snapshot.GatewaySnapshotId))
             .Select(snapshot => snapshot.GatewaySnapshotId)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
         var existingSet = existingIds.ToHashSet();
         var importedAt = DateTimeOffset.UtcNow;
 
@@ -43,9 +43,7 @@ public sealed class GatewayTelemetryImporter(
         foreach (var snapshot in snapshots)
         {
             if (existingSet.Contains(snapshot.Id))
-            {
                 continue;
-            }
 
             var entity = new GatewayTelemetrySnapshot
             {
@@ -80,9 +78,7 @@ public sealed class GatewayTelemetryImporter(
 
             var attemptPayload = PollAttemptPayload.TryParse(snapshot.PayloadJson);
             if (attemptPayload is not null)
-            {
                 pollAttemptSnapshots.Add((entity, attemptPayload));
-            }
         }
 
         // Failures first so a batch containing both attempts of one cycle ends
@@ -90,21 +86,19 @@ public sealed class GatewayTelemetryImporter(
         var sensors = await ResolveSensorsAsync(
             sensorPollSnapshots.Select(item => item.Payload.Sensor)
                 .Concat(pollAttemptSnapshots.Select(item => item.Payload.Sensor)),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
         // One materialized status per sensor for the whole batch: several
         // snapshots of the same sensor must mutate the same instance.
         var statuses = await dbContext.SensorStatuses.ToDictionaryAsync(
             snapshot => snapshot.SensorId.Value,
             snapshot => snapshot,
-            cancellationToken);
-        await AppendPollAttemptsAsync(sensorPollSnapshots, pollAttemptSnapshots, sensors, statuses, cancellationToken);
-        await AppendSensorMeasurementsAsync(sensorPollSnapshots, sensors, statuses, cancellationToken);
-        await dbContext.SaveChangesAsync(cancellationToken);
+            cancellationToken).ConfigureAwait(false);
+        await AppendPollAttemptsAsync(sensorPollSnapshots, pollAttemptSnapshots, sensors, statuses, cancellationToken).ConfigureAwait(false);
+        await AppendSensorMeasurementsAsync(sensorPollSnapshots, sensors, statuses, cancellationToken).ConfigureAwait(false);
+        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         if (importedCount > 0)
-        {
             logger.LogInformation("Imported {Count} gateway telemetry snapshots", importedCount);
-        }
 
         return importedCount;
     }
@@ -170,9 +164,7 @@ public sealed class GatewayTelemetryImporter(
         }
 
         if (pending.Count == 0)
-        {
             return;
-        }
 
         var existingAttemptKeys = new HashSet<(Guid SensorId, long RequestId, int AttemptNumber)>();
         foreach (var group in pending.GroupBy(item => item.Sensor.Id))
@@ -181,26 +173,20 @@ public sealed class GatewayTelemetryImporter(
             var known = await dbContext.PollAttempts
                 .Where(attempt => attempt.SensorId == group.Key && requestIds.Contains(attempt.RequestId))
                 .Select(attempt => new { attempt.RequestId, attempt.AttemptNumber })
-                .ToListAsync(cancellationToken);
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
             foreach (var attempt in known)
-            {
                 existingAttemptKeys.Add((group.Key.Value, attempt.RequestId, attempt.AttemptNumber));
-            }
         }
 
         foreach (var (sensor, attempt, succeeded) in pending)
         {
             if (!existingAttemptKeys.Add((sensor.Id.Value, attempt.RequestId, attempt.AttemptNumber)))
-            {
                 continue;
-            }
 
             dbContext.PollAttempts.Add(attempt);
 
             if (succeeded)
-            {
                 continue;
-            }
 
             var status = GetOrAddStatus(statuses, sensor, DateTimeOffset.UtcNow);
             status.ConsecutiveFailures++;
@@ -224,16 +210,14 @@ public sealed class GatewayTelemetryImporter(
         CancellationToken cancellationToken)
     {
         if (sensorPollSnapshots.Count == 0)
-        {
             return;
-        }
 
         var requestIdBySensor = sensorPollSnapshots
             .Where(item => sensors.ContainsKey(item.Payload.Sensor))
-            .GroupBy(item => item.Payload.Sensor)
+            .GroupBy(item => item.Payload.Sensor, StringComparer.Ordinal)
             .ToDictionary(
                 group => group.Key,
-                group => group.Select(item => item.Payload.RequestId).ToArray());
+                group => group.Select(item => item.Payload.RequestId).ToArray(), StringComparer.Ordinal);
         var existingSampleKeys = new HashSet<(Guid, long)>();
         foreach (var (sensor, requestIds) in requestIdBySensor)
         {
@@ -241,11 +225,9 @@ public sealed class GatewayTelemetryImporter(
             var known = await dbContext.MeasurementSamples
                 .Where(sample => sample.SensorId == sensorId && requestIds.Contains(sample.RequestId!.Value))
                 .Select(sample => sample.RequestId)
-                .ToListAsync(cancellationToken);
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
             foreach (var requestId in known)
-            {
                 existingSampleKeys.Add((sensorId.Value, requestId!.Value));
-            }
         }
 
         foreach (var (entity, payload) in sensorPollSnapshots)
@@ -259,9 +241,7 @@ public sealed class GatewayTelemetryImporter(
             }
 
             if (existingSampleKeys.Contains((sensor.Id.Value, payload.RequestId)))
-            {
                 continue;
-            }
 
             var sample = new MeasurementSample(
                 Guid.NewGuid(),
@@ -309,9 +289,7 @@ public sealed class GatewayTelemetryImporter(
         DateTimeOffset now)
     {
         if (statuses.TryGetValue(sensor.Id.Value, out var status))
-        {
             return status;
-        }
 
         status = new SensorStatusSnapshot(sensor.Id, now);
         dbContext.SensorStatuses.Add(status);
@@ -324,7 +302,7 @@ public sealed class GatewayTelemetryImporter(
         CancellationToken cancellationToken)
     {
         var slugValues = new List<SensorSlug>();
-        foreach (var slug in slugs.Distinct())
+        foreach (var slug in slugs.Distinct(StringComparer.Ordinal))
         {
             try
             {
@@ -338,7 +316,7 @@ public sealed class GatewayTelemetryImporter(
 
         return await dbContext.Sensors
             .Where(sensor => slugValues.Contains(sensor.Slug))
-            .ToDictionaryAsync(sensor => sensor.Slug.Value, sensor => sensor, cancellationToken);
+            .ToDictionaryAsync(sensor => sensor.Slug.Value, sensor => sensor, StringComparer.Ordinal, cancellationToken).ConfigureAwait(false);
     }
 
     private static DateTimeOffset ResolveStartedAt(SensorPollPayload payload, DateTimeOffset capturedAt) =>
@@ -376,7 +354,7 @@ public sealed class GatewayTelemetryImporter(
                 var root = document.RootElement;
                 if (root.TryGetProperty("type", out var type) &&
                     type.ValueKind == JsonValueKind.String &&
-                    type.GetString() != "sensor_poll")
+!string.Equals(type.GetString(), "sensor_poll", StringComparison.Ordinal))
                 {
                     return null;
                 }
@@ -397,7 +375,7 @@ public sealed class GatewayTelemetryImporter(
                             valueElement.ValueKind == JsonValueKind.Number &&
                             valueElement.TryGetDouble(out var value))
                         {
-                            string? unit = reading.TryGetProperty("unit", out var unitElement) &&
+                            var unit = reading.TryGetProperty("unit", out var unitElement) &&
                                 unitElement.ValueKind == JsonValueKind.String
                                     ? unitElement.GetString()
                                     : null;
@@ -461,7 +439,7 @@ public sealed class GatewayTelemetryImporter(
                 var root = document.RootElement;
                 if (!root.TryGetProperty("type", out var type) ||
                     type.ValueKind != JsonValueKind.String ||
-                    type.GetString() != "poll_attempt" ||
+!string.Equals(type.GetString(), "poll_attempt", StringComparison.Ordinal) ||
                     !root.TryGetProperty("sensor", out var sensorElement) ||
                     sensorElement.ValueKind != JsonValueKind.String ||
                     !root.TryGetProperty("requestId", out var requestIdElement) ||

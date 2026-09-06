@@ -23,8 +23,5 @@ public sealed class SensorSlugTests
     [InlineData("sensor-")]
     [InlineData("sensor--one")]
     [InlineData("sensor one")]
-    public void Constructor_rejects_non_canonical_slug(string value)
-    {
-        Assert.ThrowsAny<ArgumentException>(() => new SensorSlug(value));
-    }
+    public void Constructor_rejects_non_canonical_slug(string value) => Assert.ThrowsAny<ArgumentException>(() => new SensorSlug(value));
 }

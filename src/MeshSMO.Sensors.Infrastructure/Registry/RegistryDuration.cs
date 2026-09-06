@@ -8,15 +8,11 @@ public static class RegistryDuration
     {
         duration = default;
         if (string.IsNullOrWhiteSpace(value))
-        {
             return false;
-        }
 
         var unitLength = value.EndsWith("ms", StringComparison.Ordinal) ? 2 : 1;
         if (value.Length <= unitLength || !double.TryParse(value[..^unitLength], NumberStyles.None, CultureInfo.InvariantCulture, out var amount))
-        {
             return false;
-        }
 
         try
         {

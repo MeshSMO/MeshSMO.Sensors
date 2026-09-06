@@ -23,8 +23,5 @@ public sealed class RegistryDurationTests
     [InlineData("5")]
     [InlineData("-1s")]
     [InlineData("1w")]
-    public void TryParse_rejects_invalid_values(string? value)
-    {
-        Assert.False(RegistryDuration.TryParse(value, out _));
-    }
+    public void TryParse_rejects_invalid_values(string? value) => Assert.False(RegistryDuration.TryParse(value, out _));
 }

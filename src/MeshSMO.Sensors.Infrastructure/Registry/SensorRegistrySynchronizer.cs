@@ -13,12 +13,12 @@ public sealed class SensorRegistrySynchronizer(
 {
     public async Task<SensorRegistrySyncResult> SynchronizeAsync(CancellationToken cancellationToken)
     {
-        var definitions = await registry.LoadAsync(cancellationToken);
+        var definitions = await registry.LoadAsync(cancellationToken).ConfigureAwait(false);
         var ids = definitions.Select(definition => definition.Id).ToArray();
         var existing = await dbContext.Sensors
             .Include(sensor => sensor.Metrics)
             .Where(sensor => ids.Contains(sensor.Id))
-            .ToDictionaryAsync(sensor => sensor.Id, cancellationToken);
+            .ToDictionaryAsync(sensor => sensor.Id, cancellationToken).ConfigureAwait(false);
 
         var added = 0;
         var updated = 0;
@@ -45,7 +45,7 @@ public sealed class SensorRegistrySynchronizer(
             ApplyChannelMetadata(sensor, definition);
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return new SensorRegistrySyncResult(added, updated, definitions.Count);
     }
 
@@ -61,11 +61,9 @@ public sealed class SensorRegistrySynchronizer(
     {
         foreach (var channel in definition.Channels)
         {
-            var metric = sensor.Metrics.FirstOrDefault(candidate => candidate.MetricKey == channel.Metric);
+            var metric = sensor.Metrics.FirstOrDefault(candidate => string.Equals(candidate.MetricKey, channel.Metric, StringComparison.Ordinal));
             if (metric is null)
-            {
                 continue;
-            }
 
             metric.DisplayName = channel.DisplayName ?? metric.DisplayName;
             metric.Unit = channel.Unit ?? metric.Unit;
@@ -113,11 +111,11 @@ public sealed class SensorRegistrySynchronizer(
 
     private static bool Matches(Sensor sensor, SensorDefinition definition, IReadOnlyList<string> effectiveMetrics) =>
         sensor.Slug == definition.Slug
-        && sensor.DisplayName == definition.DisplayName.Trim()
-        && sensor.Description == Normalize(definition.Description)
-        && sensor.MeshPublicKey == definition.MeshPublicKey.Trim()
-        && sensor.ProtocolId == definition.ProtocolId.Trim()
-        && sensor.PollIntervalSeconds == (int)definition.PollInterval.TotalSeconds
+        && string.Equals(sensor.DisplayName, definition.DisplayName.Trim()
+, StringComparison.Ordinal) && string.Equals(sensor.Description, Normalize(definition.Description)
+, StringComparison.Ordinal) && string.Equals(sensor.MeshPublicKey, definition.MeshPublicKey.Trim()
+, StringComparison.Ordinal) && string.Equals(sensor.ProtocolId, definition.ProtocolId.Trim()
+, StringComparison.Ordinal) && sensor.PollIntervalSeconds == (int)definition.PollInterval.TotalSeconds
         && sensor.PollTimeoutSeconds == (int)definition.PollTimeout.TotalSeconds
         && sensor.PollMaxAttempts == definition.PollMaxAttempts
         && sensor.Enabled == definition.Enabled
@@ -125,8 +123,8 @@ public sealed class SensorRegistrySynchronizer(
         && sensor.PublicIndexable == definition.PublicIndexable
         && sensor.Latitude == definition.Latitude
         && sensor.Longitude == definition.Longitude
-        && sensor.LocationPrecision == Normalize(definition.LocationPrecision)
-        && sensor.Metrics.Select(metric => metric.MetricKey).ToHashSet(StringComparer.Ordinal)
+        && string.Equals(sensor.LocationPrecision, Normalize(definition.LocationPrecision)
+, StringComparison.Ordinal) && sensor.Metrics.Select(metric => metric.MetricKey).ToHashSet(StringComparer.Ordinal)
             .SetEquals(effectiveMetrics)
         && ChannelsMatch(sensor, definition);
 
@@ -136,9 +134,8 @@ public sealed class SensorRegistrySynchronizer(
     private static bool ChannelsMatch(Sensor sensor, SensorDefinition definition) =>
         definition.Channels.All(channel =>
         {
-            var metric = sensor.Metrics.FirstOrDefault(candidate => candidate.MetricKey == channel.Metric);
+            var metric = sensor.Metrics.FirstOrDefault(candidate => string.Equals(candidate.MetricKey, channel.Metric, StringComparison.Ordinal));
             return metric is not null
-                && metric.DisplayName == (channel.DisplayName ?? metric.DisplayName)
-                && metric.Unit == (channel.Unit ?? metric.Unit);
+                && string.Equals(metric.DisplayName, channel.DisplayName ?? metric.DisplayName, StringComparison.Ordinal) && string.Equals(metric.Unit, channel.Unit ?? metric.Unit, StringComparison.Ordinal);
         });
 }

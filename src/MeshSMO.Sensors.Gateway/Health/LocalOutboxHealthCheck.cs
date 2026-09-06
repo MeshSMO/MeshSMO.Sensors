@@ -17,14 +17,17 @@ public sealed class LocalOutboxHealthCheck(IDbContextFactory<LocalOutboxDbContex
     {
         try
         {
-            await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-            var probe = new OutboxHealthProbe { CheckedAt = DateTimeOffset.UtcNow };
+            var db = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+            await using (db.ConfigureAwait(false))
+            {
+                var probe = new OutboxHealthProbe { CheckedAt = DateTimeOffset.UtcNow };
             db.HealthProbes.Add(probe);
             await db.SaveChangesAsync(cancellationToken);
             db.HealthProbes.Remove(probe);
             await db.SaveChangesAsync(cancellationToken);
 
             return HealthCheckResult.Healthy("Local telemetry outbox is writable.");
+            }
         }
         catch (Exception exception)
         {

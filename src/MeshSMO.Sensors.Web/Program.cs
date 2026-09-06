@@ -77,9 +77,7 @@ builder.Services.AddHttpClient<GatewayTelemetryClient>((serviceProvider, client)
 {
     var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<GatewayIngestionOptions>>().Value;
     if (options.BaseUrl is not null)
-    {
         client.BaseAddress = new Uri($"{options.BaseUrl.AbsoluteUri.TrimEnd('/')}/");
-    }
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 builder.Services.AddHostedService<GatewayIngestionWorker>();
@@ -122,7 +120,7 @@ app.MapGet("/api/v1/telemetry/snapshots", async Task<IResult> (
             importedAt = snapshot.ImportedAt,
             transport = snapshot.Transport,
         })
-        .ToListAsync(cancellationToken);
+        .ToListAsync(cancellationToken).ConfigureAwait(false);
     return Results.Ok(new { snapshots });
 });
 

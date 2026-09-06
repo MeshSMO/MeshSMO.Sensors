@@ -27,14 +27,15 @@ public static class LocalOutboxDatabase
         var fullPath = Path.GetFullPath(databasePath);
         var directory = Path.GetDirectoryName(fullPath);
         if (!string.IsNullOrEmpty(directory))
-        {
             Directory.CreateDirectory(directory);
-        }
 
-        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        // WAL lets the poller write while push/pull workers read; the mode is
-        // persisted in the database file, so setting it at startup is enough.
-        await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode = WAL;", cancellationToken);
+        var db = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            // WAL lets the poller write while push/pull workers read; the mode is
+            // persisted in the database file, so setting it at startup is enough.
+            await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode = WAL;", cancellationToken);
         await db.Database.MigrateAsync(cancellationToken);
+        }
     }
 }

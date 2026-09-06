@@ -26,7 +26,7 @@ public static class MeshCoreGatewayServiceCollectionExtensions
                 "MeshCore:Http:BaseAddress must be an absolute URI in HTTP mode.")
             .Validate(
                 static options => options.Mode != MeshCoreConnectionMode.Http ||
-                    options.Http.BaseAddress?.Scheme == Uri.UriSchemeHttps,
+string.Equals(options.Http.BaseAddress?.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal),
                 "MeshCore:Http:BaseAddress must use HTTPS in HTTP mode.")
             .Validate(
                 static options => options.Mode != MeshCoreConnectionMode.Http ||
@@ -120,8 +120,5 @@ public static class MeshCoreGatewayServiceCollectionExtensions
         return services;
     }
 
-    private static Uri NormalizeBaseAddress(Uri baseAddress)
-    {
-        return new Uri($"{baseAddress.AbsoluteUri.TrimEnd('/')}/", UriKind.Absolute);
-    }
+    private static Uri NormalizeBaseAddress(Uri baseAddress) => new Uri($"{baseAddress.AbsoluteUri.TrimEnd('/')}/", UriKind.Absolute);
 }

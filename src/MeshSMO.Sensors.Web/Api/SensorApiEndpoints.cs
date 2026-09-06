@@ -13,10 +13,10 @@ public static class SensorApiEndpoints
 
         sensors.MapGet("/", async Task<IResult> (SensorsDbContext dbContext, CancellationToken cancellationToken) =>
         {
-            var list = await LoadPublicSensors(dbContext, cancellationToken);
+            var list = await LoadPublicSensors(dbContext, cancellationToken).ConfigureAwait(false);
             var statuses = await dbContext.SensorStatuses
                 .AsNoTracking()
-                .ToDictionaryAsync(snapshot => snapshot.SensorId, snapshot => snapshot.State, cancellationToken);
+                .ToDictionaryAsync(snapshot => snapshot.SensorId, snapshot => snapshot.State, cancellationToken).ConfigureAwait(false);
             return Results.Json(
                 new { sensors = list.Select(sensor => ToSummary(sensor, statuses.GetValueOrDefault(sensor.Id))) },
                 statusCode: 200);
@@ -42,15 +42,13 @@ public static class SensorApiEndpoints
                 .Include(entity => entity.Metrics)
                 .SingleOrDefaultAsync(
                     entity => entity.Slug == slugValue && entity.Enabled && entity.PublicVisible,
-                    cancellationToken);
+                    cancellationToken).ConfigureAwait(false);
             if (sensor is null)
-            {
                 return Results.NotFound(new { error = "NotFound" });
-            }
 
             var status = await dbContext.SensorStatuses
                 .AsNoTracking()
-                .SingleOrDefaultAsync(snapshot => snapshot.SensorId == sensor.Id, cancellationToken);
+                .SingleOrDefaultAsync(snapshot => snapshot.SensorId == sensor.Id, cancellationToken).ConfigureAwait(false);
             return Results.Json(new
             {
                 slug = sensor.Slug.Value,
@@ -59,7 +57,7 @@ public static class SensorApiEndpoints
                 location = sensor.Latitude is null || sensor.Longitude is null
                     ? null
                     : new { latitude = sensor.Latitude, longitude = sensor.Longitude, precision = sensor.LocationPrecision },
-                metrics = sensor.Metrics.Select(metric => metric.MetricKey).OrderBy(key => key).ToArray(),
+                metrics = sensor.Metrics.Select(metric => metric.MetricKey).OrderBy(key => key, StringComparer.Ordinal).ToArray(),
                 protocol = sensor.ProtocolId,
                 pollIntervalSeconds = sensor.PollIntervalSeconds,
                 state = (status?.State ?? SensorState.Unknown).ToString(),
@@ -86,15 +84,13 @@ public static class SensorApiEndpoints
                 .Include(entity => entity.Metrics)
                 .SingleOrDefaultAsync(
                     entity => entity.Slug == slugValue && entity.Enabled && entity.PublicVisible,
-                    cancellationToken);
+                    cancellationToken).ConfigureAwait(false);
             if (sensor is null)
-            {
                 return Results.NotFound(new { error = "NotFound" });
-            }
 
             var status = await dbContext.SensorStatuses
                 .AsNoTracking()
-                .SingleOrDefaultAsync(snapshot => snapshot.SensorId == sensor.Id, cancellationToken);
+                .SingleOrDefaultAsync(snapshot => snapshot.SensorId == sensor.Id, cancellationToken).ConfigureAwait(false);
             return Results.Json(ToStatus(status));
         });
 
@@ -118,11 +114,9 @@ public static class SensorApiEndpoints
                 .Include(entity => entity.Metrics)
                 .SingleOrDefaultAsync(
                     entity => entity.Slug == slugValue && entity.Enabled && entity.PublicVisible,
-                    cancellationToken);
+                    cancellationToken).ConfigureAwait(false);
             if (sensor is null)
-            {
                 return Results.NotFound(new { error = "NotFound" });
-            }
 
             var metricMeta = await dbContext.SensorMetrics
                 .AsNoTracking()
@@ -130,7 +124,7 @@ public static class SensorApiEndpoints
                 .ToDictionaryAsync(
                     metric => metric.MetricKey,
                     metric => new { metric.DisplayName, metric.Unit },
-                    cancellationToken);
+StringComparer.Ordinal, cancellationToken).ConfigureAwait(false);
             var values = await dbContext.MeasurementValues
                 .AsNoTracking()
                 .Where(value => value.SensorId == sensor.Id && value.Timestamp == dbContext.MeasurementValues
@@ -138,7 +132,7 @@ public static class SensorApiEndpoints
                     .Max(inner => inner.Timestamp))
                 .OrderBy(value => value.MetricKey)
                 .Select(value => new { value.MetricKey, value.Timestamp, value.NumericValue, value.TextValue, value.Unit })
-                .ToListAsync(cancellationToken);
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
             return Results.Json(new
             {
                 values = values.Select(value => new
@@ -157,10 +151,10 @@ public static class SensorApiEndpoints
             SensorsDbContext dbContext,
             CancellationToken cancellationToken) =>
         {
-            var sensors = await LoadPublicSensors(dbContext, cancellationToken);
+            var sensors = await LoadPublicSensors(dbContext, cancellationToken).ConfigureAwait(false);
             var statuses = await dbContext.SensorStatuses
                 .AsNoTracking()
-                .ToDictionaryAsync(snapshot => snapshot.SensorId, snapshot => snapshot.State, cancellationToken);
+                .ToDictionaryAsync(snapshot => snapshot.SensorId, snapshot => snapshot.State, cancellationToken).ConfigureAwait(false);
             var summary = DashboardSummary.Build(sensors.Select(sensor => statuses.GetValueOrDefault(sensor.Id, SensorState.Unknown)));
             return Results.Json(new
             {
@@ -185,7 +179,7 @@ public static class SensorApiEndpoints
             .Include(sensor => sensor.Metrics)
             .Where(sensor => sensor.Enabled && sensor.PublicVisible)
             .OrderBy(sensor => sensor.Slug)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
 
     private static object ToSummary(Sensor sensor, SensorState? state = null) => new
     {
@@ -194,7 +188,7 @@ public static class SensorApiEndpoints
         description = sensor.Description,
         latitude = sensor.Latitude,
         longitude = sensor.Longitude,
-        metrics = sensor.Metrics.Select(metric => metric.MetricKey).OrderBy(key => key).ToArray(),
+        metrics = sensor.Metrics.Select(metric => metric.MetricKey).OrderBy(key => key, StringComparer.Ordinal).ToArray(),
         state = (state ?? SensorState.Unknown).ToString(),
     };
 
@@ -223,10 +217,18 @@ public static class SensorApiEndpoints
                 total++;
                 switch (state)
                 {
-                    case SensorState.Online: online++; break;
-                    case SensorState.Degraded: degraded++; break;
-                    case SensorState.Offline: offline++; break;
-                    default: unknown++; break;
+                    case SensorState.Online:
+                        online++;
+                        break;
+                    case SensorState.Degraded:
+                        degraded++;
+                        break;
+                    case SensorState.Offline:
+                        offline++;
+                        break;
+                    default:
+                        unknown++;
+                        break;
                 }
             }
 

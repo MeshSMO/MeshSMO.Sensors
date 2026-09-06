@@ -3,16 +3,16 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using MeshSMO.Sensors.Gateway;
 using MeshSMO.Sensors.Gateway.Api;
-using MeshSMO.Sensors.Gateway.MeshCore;
-using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Microsoft.Extensions.Logging;
 using MeshSMO.Sensors.Gateway.LocalStorage;
+using MeshSMO.Sensors.Gateway.MeshCore;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace MeshSMO.Sensors.UnitTests.Gateway.Api;
 
@@ -27,7 +27,7 @@ public sealed class GatewayTelemetryApiTests : IDisposable
         _databasePath = Path.Combine(Path.GetTempPath(), $"gateway-api-{Guid.NewGuid():N}.db");
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
-        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             ["LocalTelemetry:DatabasePath"] = _databasePath,
             ["Gateway:ApiKey"] = "test-key",
@@ -97,8 +97,8 @@ public sealed class GatewayTelemetryApiTests : IDisposable
 
     private async Task<int> CountPending(long snapshotId)
     {
-        var batch = await (await _client.GetAsync("/api/telemetry/pending?maxCount=10"))
-            .Content.ReadFromJsonAsync<JsonElement>();
+        var batch = await (await _client.GetAsync("/api/telemetry/pending?maxCount=10").ConfigureAwait(false))
+            .Content.ReadFromJsonAsync<JsonElement>().ConfigureAwait(false);
         return batch.GetProperty("snapshots")
             .EnumerateArray()
             .Count(snapshot => snapshot.GetProperty("id").GetInt64() == snapshotId);

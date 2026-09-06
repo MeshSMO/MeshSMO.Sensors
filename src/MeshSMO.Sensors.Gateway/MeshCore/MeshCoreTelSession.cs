@@ -19,14 +19,12 @@ public sealed class MeshCoreTelSession
     {
         var token = _token;
         if (!string.IsNullOrEmpty(token))
-        {
             return token;
-        }
 
-        await _loginLock.WaitAsync(cancellationToken);
+        await _loginLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            _token ??= await loginAsync(cancellationToken);
+            _token ??= await loginAsync(cancellationToken).ConfigureAwait(false);
             return _token;
         }
         finally
@@ -40,7 +38,7 @@ public sealed class MeshCoreTelSession
         Func<CancellationToken, Task<string>> loginAsync,
         CancellationToken cancellationToken)
     {
-        await _loginLock.WaitAsync(cancellationToken);
+        await _loginLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             if (!string.IsNullOrEmpty(_token) && !string.Equals(_token, staleToken, StringComparison.Ordinal))
@@ -49,7 +47,7 @@ public sealed class MeshCoreTelSession
                 return _token;
             }
 
-            _token = await loginAsync(cancellationToken);
+            _token = await loginAsync(cancellationToken).ConfigureAwait(false);
             return _token;
         }
         finally

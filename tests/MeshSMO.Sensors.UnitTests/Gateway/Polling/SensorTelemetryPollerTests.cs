@@ -1,10 +1,10 @@
 using System.Text.Json;
 using MeshSMO.Sensors.Application.Registry;
 using MeshSMO.Sensors.Domain.Sensors;
-using Microsoft.Data.Sqlite;
 using MeshSMO.Sensors.Gateway.LocalStorage;
 using MeshSMO.Sensors.Gateway.MeshCore;
 using MeshSMO.Sensors.Gateway.Polling;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -20,9 +20,7 @@ public sealed class SensorTelemetryPollerTests : IDisposable
     public void Dispose()
     {
         foreach (var provider in _serviceProviders)
-        {
             provider.Dispose();
-        }
 
         SqliteConnection.ClearAllPools();
         foreach (var suffix in new[] { string.Empty, "-wal", "-shm" })
@@ -92,7 +90,7 @@ public sealed class SensorTelemetryPollerTests : IDisposable
         }
 
         var pending = await store.ReadPendingAsync(10, CancellationToken.None);
-        var pollSnapshot = pending.Single(snapshot => snapshot.PayloadJson.Contains("alpha-node"));
+        var pollSnapshot = pending.Single(snapshot => snapshot.PayloadJson.Contains("alpha-node", StringComparison.Ordinal));
         var payload = JsonDocument.Parse(pollSnapshot.PayloadJson).RootElement;
 
         Assert.Equal("sensor_poll", payload.GetProperty("type").GetString());
@@ -118,9 +116,9 @@ public sealed class SensorTelemetryPollerTests : IDisposable
         // with the global password, then one retry that timed out again.
         Assert.Equal([(new string('b', 8), "hello")], client.LoginAttempts);
         Assert.Equal(3, client.Requests.Count);
-        Assert.All(client.Requests, request => Assert.EndsWith("0300", request.PayloadHex));
+        Assert.All(client.Requests, request => Assert.EndsWith("0300", request.PayloadHex, StringComparison.Ordinal));
         var attemptSnapshots = pending
-            .Where(snapshot => snapshot.PayloadJson.Contains("\"poll_attempt\""))
+            .Where(snapshot => snapshot.PayloadJson.Contains("\"poll_attempt\"", StringComparison.Ordinal))
             .ToArray();
         Assert.True(attemptSnapshots.Length == 2, $"expected 2 attempt snapshots, got {attemptSnapshots.Length}");
     }
@@ -157,9 +155,7 @@ public sealed class SensorTelemetryPollerTests : IDisposable
         {
             var deadline = DateTime.UtcNow.AddSeconds(15);
             while (client.LoginAttempts.Count < 1 && DateTime.UtcNow < deadline)
-            {
                 await Task.Delay(100);
-            }
         }
         finally
         {
@@ -205,9 +201,7 @@ public sealed class SensorTelemetryPollerTests : IDisposable
         {
             var deadline = DateTime.UtcNow.AddSeconds(30);
             while (await store.CountPendingAsync(CancellationToken.None) < 2 && DateTime.UtcNow < deadline)
-            {
                 await Task.Delay(50);
-            }
         }
         finally
         {
@@ -218,12 +212,12 @@ public sealed class SensorTelemetryPollerTests : IDisposable
 
         Assert.Equal(2, client.Requests.Count);
         var pending = await store.ReadPendingAsync(10, CancellationToken.None);
-        var attemptSnapshot = pending.Single(snapshot => snapshot.PayloadJson.Contains("\"poll_attempt\""));
+        var attemptSnapshot = pending.Single(snapshot => snapshot.PayloadJson.Contains("\"poll_attempt\"", StringComparison.Ordinal));
         var attemptPayload = JsonDocument.Parse(attemptSnapshot.PayloadJson).RootElement;
         Assert.Equal("TimedOut", attemptPayload.GetProperty("status").GetString());
         Assert.Equal(1, attemptPayload.GetProperty("attemptNumber").GetInt32());
 
-        var pollSnapshot = pending.Single(snapshot => snapshot.PayloadJson.Contains("\"sensor_poll\""));
+        var pollSnapshot = pending.Single(snapshot => snapshot.PayloadJson.Contains("\"sensor_poll\"", StringComparison.Ordinal));
         var pollPayload = JsonDocument.Parse(pollSnapshot.PayloadJson).RootElement;
         Assert.Equal(2, pollPayload.GetProperty("attemptNumber").GetInt32());
         Assert.NotEqual(
@@ -263,9 +257,7 @@ public sealed class SensorTelemetryPollerTests : IDisposable
         {
             var deadline = DateTime.UtcNow.AddSeconds(30);
             while (await store.CountPendingAsync(CancellationToken.None) < 2 && DateTime.UtcNow < deadline)
-            {
                 await Task.Delay(50);
-            }
         }
         finally
         {
@@ -277,7 +269,7 @@ public sealed class SensorTelemetryPollerTests : IDisposable
         Assert.Equal(2, client.Requests.Count);
         var pending = await store.ReadPendingAsync(10, CancellationToken.None);
         Assert.Equal(2, pending.Count);
-        Assert.All(pending, snapshot => Assert.Contains("\"poll_attempt\"", snapshot.PayloadJson));
+        Assert.All(pending, snapshot => Assert.Contains("\"poll_attempt\"", snapshot.PayloadJson, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -312,9 +304,7 @@ public sealed class SensorTelemetryPollerTests : IDisposable
         {
             var deadline = DateTime.UtcNow.AddSeconds(30);
             while (await store.CountPendingAsync(CancellationToken.None) < 1 && DateTime.UtcNow < deadline)
-            {
                 await Task.Delay(50);
-            }
 
             await Task.Delay(300); // give a (wrongful) retry a chance to surface
         }
@@ -375,7 +365,7 @@ public sealed class SensorTelemetryPollerTests : IDisposable
             .BuildServiceProvider();
         _serviceProviders.Add(provider);
         var factory = provider.GetRequiredService<IDbContextFactory<LocalOutboxDbContext>>();
-        await LocalOutboxDatabase.MigrateAsync(factory, _storePath, CancellationToken.None);
+        await LocalOutboxDatabase.MigrateAsync(factory, _storePath, CancellationToken.None).ConfigureAwait(false);
         return new LocalTelemetryStore(factory);
     }
 

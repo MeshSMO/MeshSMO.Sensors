@@ -179,21 +179,15 @@ public sealed class MeshCoreTelHttpClientTests
         return new MeshCoreTelHttpClient(httpClient, session ?? new MeshCoreTelSession(), options);
     }
 
-    private static HttpResponseMessage TextResponse(HttpStatusCode statusCode, string content)
+    private static HttpResponseMessage TextResponse(HttpStatusCode statusCode, string content) => new HttpResponseMessage(statusCode)
     {
-        return new HttpResponseMessage(statusCode)
-        {
-            Content = new StringContent(content, Encoding.UTF8, "text/plain"),
-        };
-    }
+        Content = new StringContent(content, Encoding.UTF8, "text/plain"),
+    };
 
-    private static HttpResponseMessage JsonResponse(HttpStatusCode statusCode, string content)
+    private static HttpResponseMessage JsonResponse(HttpStatusCode statusCode, string content) => new HttpResponseMessage(statusCode)
     {
-        return new HttpResponseMessage(statusCode)
-        {
-            Content = new StringContent(content, Encoding.UTF8, "application/json"),
-        };
-    }
+        Content = new StringContent(content, Encoding.UTF8, "application/json"),
+    };
 
     private sealed class RecordingHandler(params HttpResponseMessage[] responses) : HttpMessageHandler
     {
@@ -207,7 +201,7 @@ public sealed class MeshCoreTelHttpClientTests
         {
             var body = request.Content is null
                 ? null
-                : await request.Content.ReadAsStringAsync(cancellationToken);
+                : await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             request.Headers.TryGetValues("X-Auth-Token", out var tokenValues);
             Requests.Add(new RequestSnapshot(
                 request.Method,

@@ -36,7 +36,7 @@ public sealed class CayenneLppDecoderTests
         };
 
         var values = CayenneLppDecoder.Decode(payload);
-        var keys = values.Select(value => CayenneLppDecoder.ResolveMetricKey(value, mappings, new HashSet<string>())).ToArray();
+        var keys = values.Select(value => CayenneLppDecoder.ResolveMetricKey(value, mappings, new HashSet<string>(StringComparer.Ordinal))).ToArray();
 
         Assert.Equal(["battery_voltage", "solar_panel_voltage"], keys);
     }
@@ -46,8 +46,8 @@ public sealed class CayenneLppDecoderTests
     {
         var mappings = new Dictionary<(int, string), string> { [(5, "*")] = "custom_channel" };
 
-        var temperature = CayenneLppDecoder.ResolveMetricKey(new LppValue(5, "temperature", 20, "°C"), mappings, new HashSet<string>());
-        var unmapped = CayenneLppDecoder.ResolveMetricKey(new LppValue(6, "temperature", 20, "°C"), mappings, new HashSet<string>());
+        var temperature = CayenneLppDecoder.ResolveMetricKey(new LppValue(5, "temperature", 20, "°C"), mappings, new HashSet<string>(StringComparer.Ordinal));
+        var unmapped = CayenneLppDecoder.ResolveMetricKey(new LppValue(6, "temperature", 20, "°C"), mappings, new HashSet<string>(StringComparer.Ordinal));
 
         Assert.Equal("custom_channel", temperature);
         Assert.Equal("temperature", unmapped);
@@ -56,7 +56,7 @@ public sealed class CayenneLppDecoderTests
     [Fact]
     public void ResolveMetricKey_RepeatedType_GetsChannelSuffix()
     {
-        var repeated = new HashSet<string> { "voltage" };
+        var repeated = new HashSet<string>(StringComparer.Ordinal) { "voltage" };
 
         var key = CayenneLppDecoder.ResolveMetricKey(new LppValue(2, "voltage", 4.16, "V"), NoMappings, repeated);
 
@@ -93,7 +93,7 @@ public sealed class CayenneLppDecoderTests
 
         var values = CayenneLppDecoder.Decode(payload);
 
-        var byKey = values.ToDictionary(value => value.TypeKey, value => value.Value);
+        var byKey = values.ToDictionary(value => value.TypeKey, value => value.Value, StringComparer.Ordinal);
         Assert.Equal(22, values.Count);
         Assert.All(values, value => Assert.Equal(9, value.Channel));
         Assert.Equal(1, byKey["digital_input"]);
@@ -129,7 +129,7 @@ public sealed class CayenneLppDecoderTests
             "0A87", "FF", "80", "01"));       // colour 255, 128, 1
 
         var values = CayenneLppDecoder.Decode(payload);
-        var byKey = values.ToDictionary(value => value.TypeKey, value => value.Value);
+        var byKey = values.ToDictionary(value => value.TypeKey, value => value.Value, StringComparer.Ordinal);
 
         Assert.Equal(-0.010, byKey["accel_x"], 3);
         Assert.Equal(0.010, byKey["accel_y"], 3);
@@ -149,7 +149,7 @@ public sealed class CayenneLppDecoderTests
         var payload = Convert.FromHexString("0A88034EC4FC0BE301F400");
 
         var values = CayenneLppDecoder.Decode(payload);
-        var byKey = values.ToDictionary(value => value.TypeKey, value => value.Value);
+        var byKey = values.ToDictionary(value => value.TypeKey, value => value.Value, StringComparer.Ordinal);
 
         Assert.Equal(21.6772, byKey["gps_lat"], 4);
         Assert.Equal(-25.9101, byKey["gps_lon"], 4);

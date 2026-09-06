@@ -18,7 +18,7 @@ public sealed class TelemetryPushClientTests
         {
             requestUrl = request.RequestUri?.PathAndQuery;
             apiKey = request.Headers.TryGetValues("X-Api-Key", out var values) ? values.SingleOrDefault() : null;
-            body = await request.Content!.ReadAsStringAsync();
+            body = await request.Content!.ReadAsStringAsync().ConfigureAwait(false);
             return (HttpStatusCode.OK, """{"accepted":2}""");
         });
         var client = CreateClient(handler, "secret-key");
@@ -75,7 +75,7 @@ public sealed class TelemetryPushClientTests
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
-            var (statusCode, content) = await responder(request);
+            var (statusCode, content) = await responder(request).ConfigureAwait(false);
             return new HttpResponseMessage(statusCode) { Content = new StringContent(content) };
         }
     }
