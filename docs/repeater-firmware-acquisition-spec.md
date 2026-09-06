@@ -1,6 +1,6 @@
 # Спецификация: acquisition path в прошивке репитера MeshCoreTel
 
-**Статус:** Draft v0.1
+**Статус:** Draft v0.2 — разделы 1–7 реализованы и проверены на железе; добавлен §8 (не реализован).
 **Дата:** 2026-09-06
 **Аудитория:** агент, дорабатывающий прошивку репитера (ветка `vbart-meshcoretel`).
 **Родительская спека:** `docs/MeshSMO-Sensors-IMPLEMENTATION_SPEC.md` (см. §7.1.3 и Risk A).
@@ -143,3 +143,98 @@ req <destination-hex> <payload-hex> [timeout-seconds]
 1. Какой примитив отправки direct binary message доступен в кодовой базе прошивки (тот же, что Companion app → нода)? Если direct-канал к off-graph ноде требует предварительного `contacts` — как зарегистрировать контакт по pubkey без полного ключа шифрования (MeshCore direct messages шифруются shared secret пары ключей; репитер знает только pubkey получателя — отправка потребует session/channel-механики, см. вопрос 2).
 2. Шифрование: payload датчик ожидает зашифрованным тем же механизмом, каким датчик расшифрует (channel key или ECDH пары). Требование к реализации: поддержать оба режима — (a) отправка в channel с общим ключом, (b) direct по паре ключей, если репитеру доступен механизм обмена. Выбранный режим зафиксировать и отразить в ответе на спеку; Gateway'ю достаточно «payload in → response out».
 3. Нужен ли отдельный `/api/cancel` для досрочного завершения окна — на v1 не делаем, окно ≤ 30 с.
+
+---
+
+## 8. v0.2 — Анонимный логин (ANON_REQ) — НОВОЕ, не реализовано
+
+### 8.1. Контекст и результат проверки на железе (2026-09-06)
+
+Разделы 1–7 реализованы и работают: `/api/request` корректно валидирует аргументы, отправляет `PAYLOAD_TYPE_REQ`
+(flood, ECDH self↔dest), возвращает `timeout` при отсутствии ответа; CLI `req` парсится; захват ответа работает
+и через ACL-пир (`onPeerDataRecv`), и контактless через `onAnonDataRecv`.
+
+Полевая проверка выявила недостающее звено. Целевая нода (репитер/сенсор MeshCore) **игнорирует
+`PAYLOAD_TYPE_REQ` от отправителей, которых нет в её контакт-листе/ACL**. В MeshCore bootstrap-механизм —
+анонимный логин: отправитель шлёт `PAYLOAD_TYPE_ANON_REQ` с паролем ноды, после успешного логина нода
+добавляет отправителя в ACL, и последующие REQ от него обрабатываются. Именно поэтому у нод запрашивают
+«пароль админа» (у тестируемой ноды — пустой или `hello`).
+
+Текущая прошивка умеет слать только `createDatagram(PAYLOAD_TYPE_REQ, ...)`; API анонимных запросов в
+библиотеке уже есть — `Mesh::createAnonDatagram(PAYLOAD_TYPE_ANON_REQ, self_id, dest, shared_secret, data, len)`
+(референс: `BaseChatMesh::sendLogin`, `BaseChatMesh.cpp:560`).
+
+### 8.2. Требование: `POST /api/login`
+
+Bootstrap-операция (выполняется один раз на пару репитер↔нода, результат — запись в ACL ноды — персистентен):
+
+```text
+POST /api/login
+Content-Type: application/json
+X-Auth-Token: <как у остальных /api/*>
+
+{
+  "destination": "<64 hex chars>",
+  "password":    "<строка, 0..15 байт UTF-8>"    // пустая строка = логин без пароля
+}
+```
+
+Поведение:
+
+1. Собрать ANON_REQ по референсу `BaseChatMesh::sendLogin`:
+   plaintext `data` = `now_unique (4 байта, uint32 LE)` + `password` (≤ 15 байт, без терминатора);
+   для нод типа room server — `sync_since (4)` + `password` (см. `recipient.type == ADV_TYPE_ROOM`);
+   отправка через `createAnonDatagram(..., recipient.getSharedSecret(self_id) эквивалент — ECDH(self_priv, dest_pub), ...)`,
+   flood-режим (out_path неизвестен — репитер не ведёт контактов).
+2. Ожидать ответ ноды в течение окна 1–10 с (по умолчанию 5 с): ANON-датаграмма от dest pubkey;
+   захват уже реализован в `onAnonDataRecv` через `_acq.isWaitingFor(sender.pub_key)` — переиспользовать.
+   Ответ ноды на логин: payload с отражённым timestamp + статус (`RESP_SERVER_LOGIN_OK = 0x00` у сенсорных
+   нод); точную семантику определяет целевая прошивка — прошивка репитера НЕ интерпретирует тело, только
+   возвращает его.
+3. Во время окна логина обычный REQ запрещён (тот же single in-flight, `Busy`).
+
+Ответы:
+
+```text
+200 OK   { "status": "ok",       "responseHex": "<hex>", "rssi": ..., "snr": ..., "elapsedMs": ... }
+200 OK   { "status": "timeout",  "responseHex": null, ... }        // нода не ответила
+400      { "error": "InvalidDestination" | "InvalidPassword" }         // password > 15 байт
+409      { "error": "Busy" }
+503      { "error": "RadioUnavailable" }
+```
+
+### 8.3. CLI-команда
+
+```text
+login <destination-hex> <password>
+```
+
+Ответ после маркера `->`, одной строкой:
+
+```text
+-> OK resp=<hex> [rssi=<float>] [snr=<float>] elapsed=<ms>     // нода ответила (логин скорее всего успешен)
+-> TIMEOUT elapsed=<ms>
+-> ERR <code>   // Busy | InvalidDestination | InvalidPassword | RadioUnavailable
+```
+
+Пустой пароль: `login <dest> ""` либо отдельная форма `login <dest>` (выбрать одну и зафиксировать).
+Суммарная длина команды укладывается в существующий CLI-буфер (64 hex + пароль ≤ 15 → ~90 символов).
+
+### 8.4. Критерии приёмки v0.2
+
+1. `POST /api/login` к ноде с известным паролем возвращает `200 {"status":"ok",...}` с непустым `responseHex`.
+2. После успешного логина `POST /api/request` к той же ноде с валидным REQ-пейлоадом получает ответ
+   (для сенсорной ноды: plaintext запроса `timestamp(4 LE) + 0x03 + 0x00`, ответ — `timestamp(4) + Cayenne LPP`;
+   для репитерной ноды: `timestamp(4) + 0x01` — stats-ответ).
+3. Неверный пароль: нода отвечает ошибкой или молчит → `status: ok` с телом ответа / `timeout` соответственно;
+   прошивка репитера не пытается интерпретировать.
+4. Логин не ломает обычную пересылку пакетов и совместим с разделами 4–5.
+5. Повторный логин после первого — допустим (нода просто обновит запись ACL).
+
+### 8.5. Что уже подтверждено на стороне Gateway/инфраструктуры (без изменений)
+
+- Gateway вызывает `POST /api/request` по HTTPS (TLS 1.2 + cipher `TLS_RSA_WITH_AES_128_GCM_SHA256` —
+  зафиксировано в клиенте), single in-flight, retry — на стороне Gateway.
+- Формат REQ-пейлоада для MeshCore-нод: `timestamp(uint32 LE, секунды) + request_type + args`
+  (`0x03 0x00` — телеметрия сенсорной ноды, `0x01` — stats репитера). Ответ: `timestamp(4) + тело`
+  (у сенсорных нод тело — Cayenne LPP). Gateway декодирует LPP в метрики (temperature/humidity/pressure/voltage).
