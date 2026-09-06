@@ -72,6 +72,51 @@ public sealed class MeshCoreTelHttpClient(
     public Task<JsonDocument> GetTelemetryAsync(CancellationToken cancellationToken) =>
         GetStatsAsync(null, cancellationToken);
 
+    public Task<JsonDocument> SendAcquisitionRequestAsync(
+        string destinationHex,
+        string payloadHex,
+        int timeoutMilliseconds,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(destinationHex);
+        ArgumentException.ThrowIfNullOrWhiteSpace(payloadHex);
+
+        return SendAcquisitionAsync(
+            "api/request",
+            new { destination = destinationHex, payload = payloadHex, timeoutMs = timeoutMilliseconds },
+            cancellationToken);
+    }
+
+    public Task<JsonDocument> SendAcquisitionLoginAsync(
+        string destinationHex,
+        string password,
+        int timeoutMilliseconds,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(destinationHex);
+        ArgumentNullException.ThrowIfNull(password);
+
+        return SendAcquisitionAsync(
+            "api/login",
+            new { destination = destinationHex, password, timeoutMs = timeoutMilliseconds },
+            cancellationToken);
+    }
+
+    private Task<JsonDocument> SendAcquisitionAsync(string path, object body, CancellationToken cancellationToken) =>
+        SendAuthorizedAsync(
+            () => new HttpRequestMessage(HttpMethod.Post, path)
+            {
+                Content = new StringContent(
+                    JsonSerializer.Serialize(body),
+                    Encoding.UTF8,
+                    "application/json"),
+            },
+            static async (response, token) =>
+                await JsonDocument.ParseAsync(
+                    await response.Content.ReadAsStreamAsync(token),
+                    cancellationToken: token),
+            cancellationToken);
+
     public void Dispose()
     {
         _requestLock.Dispose();

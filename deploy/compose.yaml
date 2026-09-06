@@ -60,8 +60,12 @@ services:
       MeshCore__Serial__PortName: /dev/meshcore
       MeshCore__Serial__BaudRate: 115200
       LocalTelemetry__DatabasePath: /app/data/gateway-telemetry.db
+      Registry__Directory: /app/config/sensors
+      SensorPolling__LoginPassword: ${SENSOR_LOGIN_PASSWORD:-}
+      SensorPolling__IntervalOverrideSeconds: ${SENSOR_POLL_INTERVAL_OVERRIDE:-60}
     volumes:
       - sensor-gateway-data:/app/data
+      - ../config:/app/config:ro
 
 volumes:
   sensor-db-data:

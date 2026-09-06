@@ -1,6 +1,6 @@
 # Спецификация: acquisition path в прошивке репитера MeshCoreTel
 
-**Статус:** Draft v0.2 — разделы 1–7 реализованы и проверены на железе; добавлен §8 (не реализован).
+**Статус:** Draft v0.2 — разделы 1–7 реализованы и проверены на железе; §8 реализован (см. §8.6), ожидает полевой проверки критериев §8.4.
 **Дата:** 2026-09-06
 **Аудитория:** агент, дорабатывающий прошивку репитера (ветка `vbart-meshcoretel`).
 **Родительская спека:** `docs/MeshSMO-Sensors-IMPLEMENTATION_SPEC.md` (см. §7.1.3 и Risk A).
@@ -238,3 +238,29 @@ login <destination-hex> <password>
 - Формат REQ-пейлоада для MeshCore-нод: `timestamp(uint32 LE, секунды) + request_type + args`
   (`0x03 0x00` — телеметрия сенсорной ноды, `0x01` — stats репитера). Ответ: `timestamp(4) + тело`
   (у сенсорных нод тело — Cayenne LPP). Gateway декодирует LPP в метрики (temperature/humidity/pressure/voltage).
+
+### 8.6. Реализация в MeshCoreTel-firmware — зафиксированные решения
+
+Реализовано в `examples/simple_repeater` поверх acquisition path v0.1 (общий контекст `AcquisitionClient`,
+один in-flight на `req`+`login` вместе). Собрано и проверено компиляцией (`Heltec_WSL3_repeater_mqtt`).
+
+- **Wire-формат логина** — точно по референсу `BaseChatMesh::sendLogin`: plaintext = `now_unique (4, uint32 LE,
+  RTCClock::getCurrentTimeUnique — удовлетворяет replay-чеку ноды)` + `password (≤15 байт, без терминатора)`;
+  пустой пароль = только 4 байта timestamp (нода читает `data[4]==0` из zero-padding). Отправка:
+  `createAnonDatagram(PAYLOAD_TYPE_ANON_REQ, self_id, dest, ECDH(self_priv, dest_pub), ...)`,
+  flood-режим (`sendFloodScoped`, transport-scope как у штатных ответов репитера).
+- **Захват ответа** — переиспользованы все три hook'а v0.1: RESPONSE-датаграмма и PATH-extra (как отвечает
+  репитеро-подобная нода на flood-ANON_REQ) и ANON_REQ от dest (contactless-ответ). Расшифровка ответа от
+  ноды вне ACL — через «псевдопир» (адресат активной операции временно участвует в `searchPeersByHash`).
+- **Не интерпретируем тело** (§8.2.2): `responseHex` — сырой ответ ноды (может содержать хвостовые нули
+  AES-паддинга — см. §8.5/доки прошивки). `TIMEOUT` — нода молчит (неверный пароль/недоступна).
+- **Контракт CLI (§8.3)**: выбранная форма пустого пароля — `login <dest>` (опустить аргумент);
+  форма `login <dest> ""` тоже принимается (кавычки срезаются). Пароль без кавычек может содержать пробелы
+  (берётся весь остаток строки). Окно фиксировано 5 с. Коды ошибок CLI: `Busy | InvalidDestination |
+  InvalidPassword | InvalidTimeout* | RadioUnavailable` (*additive: только для HTTP при явном timeoutMs).
+- **HTTP (§8.2)**: `POST /api/login`, тело `{destination, password?, timeoutMs?}`; `timeoutMs` — additive-
+  расширение (1–10000 мс, по умолчанию 5000) — Gateway может не слать. `InvalidPassword` — password > 15 байт.
+  Пароли с `"`/`\` в JSON не поддерживаются (упрощённый парсер тела без unescape).
+- Room-server вариант (`sync_since + password`) не реализован — у репитера нет контактов и он не знает тип
+  ноды; для MeshSMO-целей (сенсоры/репитеры) не требуется.
+- Повторный логин допустим (§8.4.5): каждый вызов шлёт свежий `now_unique`, replay-чек ноды проходит.
