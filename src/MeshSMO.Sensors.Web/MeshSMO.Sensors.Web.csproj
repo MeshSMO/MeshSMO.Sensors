@@ -10,7 +10,10 @@
   <ItemGroup>
     <ProjectReference Include="..\MeshSMO.Sensors.Application\MeshSMO.Sensors.Application.csproj" />
     <ProjectReference Include="..\MeshSMO.Sensors.Infrastructure\MeshSMO.Sensors.Infrastructure.csproj" />
-    <ProjectReference Include="..\web\MeshSMO.Sensors.Web.Client.esproj">
+    <!-- The frontend is built by the node stage of deploy/Dockerfile.web and
+         copied into wwwroot; the esproj is skipped in that environment. -->
+    <ProjectReference Include="..\web\MeshSMO.Sensors.Web.Client.esproj"
+                      Condition="'$(SkipFrontendBuild)' != 'true'">
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
     </ProjectReference>
   </ItemGroup>

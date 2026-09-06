@@ -19,7 +19,7 @@ RUN dotnet restore src/MeshSMO.Sensors.Web/MeshSMO.Sensors.Web.csproj \
 COPY src/ src/
 RUN dotnet publish src/MeshSMO.Sensors.Web/MeshSMO.Sensors.Web.csproj \
     --configuration Release --output /app/publish --no-restore \
-    /p:ShouldRunNpmInstall=false /p:ShouldRunBuildScript=false
+    /p:SkipFrontendBuild=true
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app

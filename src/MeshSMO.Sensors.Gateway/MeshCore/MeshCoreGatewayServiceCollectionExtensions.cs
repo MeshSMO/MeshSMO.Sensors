@@ -64,11 +64,22 @@ public static class MeshCoreGatewayServiceCollectionExtensions
             .ConfigurePrimaryHttpMessageHandler(serviceProvider =>
             {
                 var options = serviceProvider.GetRequiredService<IOptions<MeshCoreOptions>>().Value.Http;
-                var handler = new HttpClientHandler();
+                var handler = new SocketsHttpHandler();
+                // The MeshCoreTel ESP32 firmware only negotiates TLS 1.2 with
+                // the static-RSA cipher below; OpenSSL-based runtimes (Linux
+                // containers) do not offer it by default, Windows does.
+                handler.SslOptions.EnabledSslProtocols =
+                    System.Security.Authentication.SslProtocols.Tls12;
+                if (!OperatingSystem.IsWindows())
+                {
+                    handler.SslOptions.CipherSuitesPolicy = new System.Net.Security.CipherSuitesPolicy(
+                        new[] { System.Net.Security.TlsCipherSuite.TLS_RSA_WITH_AES_128_GCM_SHA256 });
+                }
+
                 if (options.AllowInvalidServerCertificate)
                 {
-                    handler.ServerCertificateCustomValidationCallback =
-                        HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+                    handler.SslOptions.RemoteCertificateValidationCallback =
+                        static (_, _, _, _) => true;
                 }
 
                 return handler;
