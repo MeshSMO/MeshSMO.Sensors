@@ -3,7 +3,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
-namespace MeshSMO.Sensors.UnitTests;
+namespace MeshSMO.Sensors.UnitTests.Infrastructure;
 
 public sealed class FileSystemSensorRegistryTests
 {

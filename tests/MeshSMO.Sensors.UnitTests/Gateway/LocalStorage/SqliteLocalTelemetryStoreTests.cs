@@ -3,7 +3,7 @@ using MeshSMO.Sensors.Gateway.LocalStorage;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
 
-namespace MeshSMO.Sensors.UnitTests;
+namespace MeshSMO.Sensors.UnitTests.Gateway.LocalStorage;
 
 public sealed class SqliteLocalTelemetryStoreTests
 {

@@ -8,7 +8,7 @@ using MeshSMO.Sensors.Gateway.Polling;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace MeshSMO.Sensors.UnitTests;
+namespace MeshSMO.Sensors.UnitTests.Gateway.Polling;
 
 public sealed class SensorTelemetryPollerTests : IDisposable
 {

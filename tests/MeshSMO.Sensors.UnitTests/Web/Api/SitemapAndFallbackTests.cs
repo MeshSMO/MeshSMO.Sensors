@@ -15,7 +15,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 
-namespace MeshSMO.Sensors.UnitTests;
+namespace MeshSMO.Sensors.UnitTests.Web.Api;
 
 public sealed class SitemapAndFallbackTests : IDisposable
 {

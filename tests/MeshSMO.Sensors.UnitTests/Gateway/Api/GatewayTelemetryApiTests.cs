@@ -14,7 +14,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
-namespace MeshSMO.Sensors.UnitTests;
+namespace MeshSMO.Sensors.UnitTests.Gateway.Api;
 
 public sealed class GatewayTelemetryApiTests : IDisposable
 {

@@ -1,6 +1,6 @@
 using MeshSMO.Sensors.Infrastructure.Registry;
 
-namespace MeshSMO.Sensors.UnitTests;
+namespace MeshSMO.Sensors.UnitTests.Infrastructure;
 
 public sealed class RegistryDurationTests
 {

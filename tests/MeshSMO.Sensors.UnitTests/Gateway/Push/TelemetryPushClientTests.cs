@@ -4,7 +4,7 @@ using MeshSMO.Sensors.Gateway.Api;
 using MeshSMO.Sensors.Gateway.Push;
 using Microsoft.Extensions.Options;
 
-namespace MeshSMO.Sensors.UnitTests;
+namespace MeshSMO.Sensors.UnitTests.Gateway.Push;
 
 public sealed class TelemetryPushClientTests
 {

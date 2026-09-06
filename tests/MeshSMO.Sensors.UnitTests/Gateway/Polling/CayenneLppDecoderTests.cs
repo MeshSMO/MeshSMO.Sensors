@@ -1,7 +1,7 @@
 using MeshSMO.Sensors.Application.Registry;
 using MeshSMO.Sensors.Gateway.Polling;
 
-namespace MeshSMO.Sensors.UnitTests;
+namespace MeshSMO.Sensors.UnitTests.Gateway.Polling;
 
 public sealed class CayenneLppDecoderTests
 {

@@ -4,7 +4,7 @@ using Microsoft.Extensions.Hosting;
 using MeshSMO.Sensors.Infrastructure.Registry;
 using Microsoft.Extensions.Options;
 
-namespace MeshSMO.Sensors.UnitTests;
+namespace MeshSMO.Sensors.UnitTests.Infrastructure;
 
 public sealed class RegistryTelemetryMappingTests : IDisposable
 {

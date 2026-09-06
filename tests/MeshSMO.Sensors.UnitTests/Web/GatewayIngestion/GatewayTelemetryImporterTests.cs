@@ -4,7 +4,7 @@ using MeshSMO.Sensors.Web.GatewayIngestion;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace MeshSMO.Sensors.UnitTests;
+namespace MeshSMO.Sensors.UnitTests.Web.GatewayIngestion;
 
 public sealed class GatewayTelemetryImporterTests : IDisposable
 {

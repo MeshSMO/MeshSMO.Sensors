@@ -1,6 +1,6 @@
 using MeshSMO.Sensors.Domain.Sensors;
 
-namespace MeshSMO.Sensors.UnitTests;
+namespace MeshSMO.Sensors.UnitTests.Domain;
 
 public sealed class SensorSlugTests
 {

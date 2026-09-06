@@ -3,7 +3,7 @@ using System.Text.Json;
 using MeshSMO.Sensors.Web.GatewayIngestion;
 using Microsoft.Extensions.Options;
 
-namespace MeshSMO.Sensors.UnitTests;
+namespace MeshSMO.Sensors.UnitTests.Web.GatewayIngestion;
 
 public sealed class GatewayTelemetryClientTests
 {

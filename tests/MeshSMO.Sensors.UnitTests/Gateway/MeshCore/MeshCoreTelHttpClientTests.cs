@@ -3,7 +3,7 @@ using System.Text;
 using MeshSMO.Sensors.Gateway.MeshCore;
 using Microsoft.Extensions.Options;
 
-namespace MeshSMO.Sensors.UnitTests;
+namespace MeshSMO.Sensors.UnitTests.Gateway.MeshCore;
 
 public sealed class MeshCoreTelHttpClientTests
 {

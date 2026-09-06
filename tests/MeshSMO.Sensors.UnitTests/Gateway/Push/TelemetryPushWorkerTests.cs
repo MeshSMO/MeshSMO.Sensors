@@ -3,7 +3,7 @@ using MeshSMO.Sensors.Gateway.Push;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
-namespace MeshSMO.Sensors.UnitTests;
+namespace MeshSMO.Sensors.UnitTests.Gateway.Push;
 
 public sealed class TelemetryPushWorkerTests
 {
