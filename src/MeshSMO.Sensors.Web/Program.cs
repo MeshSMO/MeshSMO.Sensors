@@ -4,6 +4,7 @@ using MeshSMO.Sensors.Web.Api;
 using MeshSMO.Sensors.Web.GatewayIngestion;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
@@ -39,6 +40,10 @@ builder.Services
         static options => options.MaximumBatchSize > 0,
         "Gateway:Ingest:MaximumBatchSize must be greater than zero.")
     .ValidateOnStart();
+// Validate<GatewayIngestOptions> above resolves the raw type from DI;
+// AddOptions<T> on .NET 10 no longer registers TOptions itself.
+builder.Services.AddTransient<GatewayIngestOptions>(
+    sp => sp.GetRequiredService<IOptions<GatewayIngestOptions>>().Value);
 builder.Services.AddScoped<GatewayTelemetryImporter>();
 builder.Services.AddHttpClient<GatewayTelemetryClient>((serviceProvider, client) =>
 {
