@@ -45,22 +45,19 @@ public static class TelemetryEndpoints
             var snapshots = await store.ReadPendingAsync(limit, cancellationToken);
             var pendingCount = await store.CountPendingAsync(cancellationToken);
 
-            var items = new List<TelemetrySnapshotDto>(snapshots.Count);
-            foreach (var snapshot in snapshots)
-            {
-                var readings = await store.ReadReadingsAsync(snapshot.Id, cancellationToken);
-                items.Add(new TelemetrySnapshotDto(
+            var items = snapshots
+                .Select(snapshot => new TelemetrySnapshotDto(
                     snapshot.Id,
                     snapshot.CapturedAt,
                     snapshot.Transport,
                     snapshot.PayloadJson,
-                    readings
+                    snapshot.Readings
                         .Select(reading => new TelemetryReadingDto(
                             reading.MetricKey,
                             reading.NumericValue,
                             reading.TextValue))
-                        .ToArray()));
-            }
+                        .ToArray()))
+                .ToList();
 
             return Results.Ok(new TelemetryBatchDto(pendingCount, items));
         });

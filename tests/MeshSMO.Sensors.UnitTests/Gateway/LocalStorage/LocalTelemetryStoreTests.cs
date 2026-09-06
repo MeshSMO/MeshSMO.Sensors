@@ -1,19 +1,22 @@
 using System.Text.Json;
 using MeshSMO.Sensors.Gateway.LocalStorage;
 using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Options;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MeshSMO.Sensors.UnitTests.Gateway.LocalStorage;
 
-public sealed class SqliteLocalTelemetryStoreTests
+public sealed class LocalTelemetryStoreTests
 {
     [Fact]
     public async Task SnapshotsSurviveStoreRecreationUntilAcknowledged()
     {
         using var database = new TemporarySqliteDatabase();
         var capturedAt = new DateTimeOffset(2026, 9, 5, 12, 30, 0, TimeSpan.Zero);
-        var firstStore = CreateStore(database.Path);
-        await firstStore.InitializeAsync(CancellationToken.None);
+        var firstServices = CreateServices(database.Path);
+        await using var _ = firstServices;
+        var firstStore = CreateStore(firstServices);
+        await MigrateAsync(firstServices, database.Path);
         var firstId = await firstStore.AppendAsync(
             capturedAt,
             "http",
@@ -25,8 +28,11 @@ public sealed class SqliteLocalTelemetryStoreTests
             "{\"core\":\"battery:4100\"}",
             CancellationToken.None);
 
-        var reopenedStore = CreateStore(database.Path);
-        await reopenedStore.InitializeAsync(CancellationToken.None);
+        // A fresh service provider over the same file models a gateway restart.
+        var reopenedServices = CreateServices(database.Path);
+        await using var __ = reopenedServices;
+        var reopenedStore = CreateStore(reopenedServices);
+        await MigrateAsync(reopenedServices, database.Path);
         var pending = await reopenedStore.ReadPendingAsync(10, CancellationToken.None);
 
         Assert.Collection(
@@ -45,15 +51,19 @@ public sealed class SqliteLocalTelemetryStoreTests
                 Assert.Equal("serial", second.Transport);
             });
 
-        var readings = await reopenedStore.ReadReadingsAsync(firstId, CancellationToken.None);
-        var temperature = Assert.Single(readings, reading => reading.MetricKey == "sensors.temperature");
+        var temperature = Assert.Single(
+            pending[0].Readings,
+            reading => reading.MetricKey == "sensors.temperature");
         Assert.Equal(21.5, temperature.NumericValue);
         Assert.Null(temperature.TextValue);
 
         await reopenedStore.AcknowledgeAsync([firstId], CancellationToken.None);
 
         Assert.Equal(1, await reopenedStore.CountPendingAsync(CancellationToken.None));
-        Assert.Empty(await reopenedStore.ReadReadingsAsync(firstId, CancellationToken.None));
+        await using var db = await reopenedServices
+            .GetRequiredService<IDbContextFactory<LocalOutboxDbContext>>()
+            .CreateDbContextAsync();
+        Assert.False(await db.Readings.AnyAsync(reading => reading.SnapshotId == firstId));
         var remaining = await reopenedStore.ReadPendingAsync(10, CancellationToken.None);
         Assert.Equal(secondId, Assert.Single(remaining).Id);
     }
@@ -62,8 +72,10 @@ public sealed class SqliteLocalTelemetryStoreTests
     public async Task InvalidJsonIsRejectedBeforeWriting()
     {
         using var database = new TemporarySqliteDatabase();
-        var store = CreateStore(database.Path);
-        await store.InitializeAsync(CancellationToken.None);
+        var services = CreateServices(database.Path);
+        await using var _ = services;
+        var store = CreateStore(services);
+        await MigrateAsync(services, database.Path);
 
         await Assert.ThrowsAnyAsync<JsonException>(
             () => store.AppendAsync(DateTimeOffset.UtcNow, "http", "not-json", CancellationToken.None));
@@ -71,8 +83,42 @@ public sealed class SqliteLocalTelemetryStoreTests
         Assert.Equal(0, await store.CountPendingAsync(CancellationToken.None));
     }
 
-    private static SqliteLocalTelemetryStore CreateStore(string path) =>
-        new(Options.Create(new LocalTelemetryOptions { DatabasePath = path }));
+    [Fact]
+    public async Task ReadingsAreSortedByMetricKey()
+    {
+        using var database = new TemporarySqliteDatabase();
+        var services = CreateServices(database.Path);
+        await using var _ = services;
+        var store = CreateStore(services);
+        await MigrateAsync(services, database.Path);
+        await store.AppendAsync(
+            DateTimeOffset.UtcNow,
+            "http",
+            """{"radio":{"rssi":-92},"core":{"battery_mv":4100}}""",
+            CancellationToken.None);
+
+        var snapshot = Assert.Single(await store.ReadPendingAsync(10, CancellationToken.None));
+
+        Assert.Equal(
+            ["core.battery_mv", "radio.rssi"],
+            snapshot.Readings.Select(reading => reading.MetricKey).ToArray());
+        Assert.Equal(4100, snapshot.Readings[0].NumericValue);
+        Assert.Equal(-92, snapshot.Readings[1].NumericValue);
+    }
+
+    private static ServiceProvider CreateServices(string path) =>
+        new ServiceCollection()
+            .AddDbContextFactory<LocalOutboxDbContext>(options => options.UseSqlite($"Data Source={path}"))
+            .BuildServiceProvider();
+
+    private static LocalTelemetryStore CreateStore(ServiceProvider services) =>
+        new(services.GetRequiredService<IDbContextFactory<LocalOutboxDbContext>>());
+
+    private static Task MigrateAsync(ServiceProvider services, string path) =>
+        LocalOutboxDatabase.MigrateAsync(
+            services.GetRequiredService<IDbContextFactory<LocalOutboxDbContext>>(),
+            path,
+            CancellationToken.None);
 
     private sealed class TemporarySqliteDatabase : IDisposable
     {

@@ -443,6 +443,8 @@ Serial mode отправляет CLI-команду, завершённую `CR`
 
 Записи удаляются только после успешной публикации в основное хранилище (`AcknowledgeAsync`). Незавершённая очередь переживает рестарт Gateway.
 
+Схема outbox управляется EF Core (`LocalOutboxDbContext` в Gateway): миграции лежат в `src/MeshSMO.Sensors.Gateway/Migrations` и применяются при старте gateway (отдельного SQLite-мигратора нет).
+
 ### 7.1.5. Gateway telemetry API
 
 Gateway не имеет доступа к PostgreSQL. Забирает данные из outbox основной backend (`sensor-web`) по внутреннему HTTP API gateway:

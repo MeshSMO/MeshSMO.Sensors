@@ -41,9 +41,8 @@ public sealed class GatewayTelemetryApiTests : IDisposable
             .Bind(builder.Configuration.GetSection(GatewayApiOptions.SectionName));
         _app = builder.Build();
         _app.MapTelemetryApi();
+        LocalOutboxDatabase.MigrateAsync(_app.Services).GetAwaiter().GetResult();
         _app.StartAsync().GetAwaiter().GetResult();
-        _app.Services.GetRequiredService<ILocalTelemetryStore>()
-            .InitializeAsync(CancellationToken.None).GetAwaiter().GetResult();
         _client = (_app.Services.GetRequiredService<Microsoft.AspNetCore.Hosting.Server.IServer>() as TestServer)!.CreateClient();
         _client.DefaultRequestHeaders.Add("X-Api-Key", "test-key");
     }

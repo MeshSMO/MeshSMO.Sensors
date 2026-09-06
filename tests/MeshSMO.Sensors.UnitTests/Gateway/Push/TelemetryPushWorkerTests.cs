@@ -12,7 +12,7 @@ public sealed class TelemetryPushWorkerTests
     {
         var store = new FakeTelemetryStore(
         [
-            new PendingTelemetrySnapshot(9, DateTimeOffset.UnixEpoch, "Serial", """{"type":"sensor_poll"}"""),
+            new PendingTelemetrySnapshot(9, DateTimeOffset.UnixEpoch, "Serial", """{"type":"sensor_poll"}""", []),
         ]);
         string? apiKey = null;
         string? body = null;
@@ -54,7 +54,7 @@ public sealed class TelemetryPushWorkerTests
     {
         var store = new FakeTelemetryStore(
         [
-            new PendingTelemetrySnapshot(9, DateTimeOffset.UnixEpoch, "Serial", """{"type":"sensor_poll"}"""),
+            new PendingTelemetrySnapshot(9, DateTimeOffset.UnixEpoch, "Serial", """{"type":"sensor_poll"}""", []),
         ]);
         var pushed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var handler = new StubHttpMessageHandler(_ =>
@@ -142,8 +142,6 @@ public sealed class TelemetryPushWorkerTests
         public TaskCompletionSource<IReadOnlyList<long>> Acknowledged { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
         public Task<long> AppendAsync(
             DateTimeOffset capturedAt,
             string transport,
@@ -157,14 +155,6 @@ public sealed class TelemetryPushWorkerTests
             ReadPendingCalled = true;
             return Task.FromResult(pending);
         }
-
-        public Task<IReadOnlyList<LocalTelemetryReading>> ReadReadingsAsync(
-            long snapshotId,
-            CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<LocalTelemetryReading>>(
-            [
-                new LocalTelemetryReading(snapshotId, "core.battery_mv", 4100, null),
-            ]);
 
         public Task AcknowledgeAsync(IReadOnlyCollection<long> ids, CancellationToken cancellationToken)
         {

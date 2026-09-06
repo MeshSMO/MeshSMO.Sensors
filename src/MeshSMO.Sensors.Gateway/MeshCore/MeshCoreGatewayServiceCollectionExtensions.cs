@@ -1,4 +1,6 @@
 using MeshSMO.Sensors.Gateway.LocalStorage;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace MeshSMO.Sensors.Gateway.MeshCore;
@@ -52,7 +54,19 @@ public static class MeshCoreGatewayServiceCollectionExtensions
                 static options => !string.IsNullOrWhiteSpace(options.DatabasePath),
                 "LocalTelemetry:DatabasePath is required.")
             .ValidateOnStart();
-        services.AddSingleton<ILocalTelemetryStore, SqliteLocalTelemetryStore>();
+
+        services.AddDbContextFactory<LocalOutboxDbContext>((serviceProvider, options) =>
+        {
+            var databasePath = Path.GetFullPath(
+                serviceProvider.GetRequiredService<IOptions<LocalTelemetryOptions>>().Value.DatabasePath);
+            options.UseSqlite(new SqliteConnectionStringBuilder
+            {
+                DataSource = databasePath,
+                Mode = SqliteOpenMode.ReadWriteCreate,
+            }.ToString());
+            options.AddInterceptors(SqliteOutboxConnectionInterceptor.Instance);
+        });
+        services.AddSingleton<ILocalTelemetryStore, LocalTelemetryStore>();
 
         // The repeater panel keeps a single global token: Worker and
         // SensorTelemetryPoller must share one login instead of invalidating

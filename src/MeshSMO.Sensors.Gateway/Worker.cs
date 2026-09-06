@@ -12,8 +12,7 @@ public sealed class Worker(
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await localTelemetryStore.InitializeAsync(stoppingToken);
-
+        // The outbox schema is migrated in Program.cs before hosted services start.
         if (options.Value.Mode == MeshCoreConnectionMode.Disabled)
         {
             logger.LogInformation("MeshSMO Sensors gateway started with MeshCore communication disabled");

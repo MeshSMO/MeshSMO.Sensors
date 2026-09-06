@@ -4,7 +4,8 @@ public sealed record PendingTelemetrySnapshot(
     long Id,
     DateTimeOffset CapturedAt,
     string Transport,
-    string PayloadJson);
+    string PayloadJson,
+    IReadOnlyList<LocalTelemetryReading> Readings);
 
 public sealed record LocalTelemetryReading(
     long SnapshotId,
@@ -12,10 +13,14 @@ public sealed record LocalTelemetryReading(
     double? NumericValue,
     string? TextValue);
 
+/// <summary>
+/// The gateway's local telemetry outbox (SQLite via EF Core). Writers append
+/// snapshots, the main API reads them (pull) or the push worker delivers them;
+/// rows are deleted only after the main API acknowledged the batch — that ack
+/// means the data is durably stored in PostgreSQL.
+/// </summary>
 public interface ILocalTelemetryStore
 {
-    Task InitializeAsync(CancellationToken cancellationToken);
-
     Task<long> AppendAsync(
         DateTimeOffset capturedAt,
         string transport,
@@ -24,10 +29,6 @@ public interface ILocalTelemetryStore
 
     Task<IReadOnlyList<PendingTelemetrySnapshot>> ReadPendingAsync(
         int maximumCount,
-        CancellationToken cancellationToken);
-
-    Task<IReadOnlyList<LocalTelemetryReading>> ReadReadingsAsync(
-        long snapshotId,
         CancellationToken cancellationToken);
 
     Task AcknowledgeAsync(IReadOnlyCollection<long> ids, CancellationToken cancellationToken);

@@ -5,6 +5,7 @@ using Microsoft.Data.Sqlite;
 using MeshSMO.Sensors.Gateway.LocalStorage;
 using MeshSMO.Sensors.Gateway.MeshCore;
 using MeshSMO.Sensors.Gateway.Polling;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -14,9 +15,15 @@ namespace MeshSMO.Sensors.UnitTests.Gateway.Polling;
 public sealed class SensorTelemetryPollerTests : IDisposable
 {
     private readonly string _storePath = Path.Combine(Path.GetTempPath(), $"poller-{Guid.NewGuid():N}.db");
+    private readonly List<ServiceProvider> _serviceProviders = [];
 
     public void Dispose()
     {
+        foreach (var provider in _serviceProviders)
+        {
+            provider.Dispose();
+        }
+
         SqliteConnection.ClearAllPools();
         foreach (var suffix in new[] { string.Empty, "-wal", "-shm" })
         {
@@ -46,8 +53,7 @@ public sealed class SensorTelemetryPollerTests : IDisposable
             ["temperature"], "bravo.yaml", []);
 
         var client = new FakeMeshCoreTelClient(requestStatuses: ["ok", "timeout"]);
-        var store = new SqliteLocalTelemetryStore(Options.Create(new LocalTelemetryOptions { DatabasePath = _storePath }));
-        await store.InitializeAsync(CancellationToken.None);
+        var store = await CreateStoreAsync();
 
         var poller = new SensorTelemetryPoller(
             client,
@@ -129,8 +135,7 @@ public sealed class SensorTelemetryPollerTests : IDisposable
             ["temperature"], "nopass.yaml", [], LoginPassword: "");
 
         var client = new FakeMeshCoreTelClient(requestStatuses: ["timeout"]);
-        var store = new SqliteLocalTelemetryStore(Options.Create(new LocalTelemetryOptions { DatabasePath = _storePath }));
-        await store.InitializeAsync(CancellationToken.None);
+        var store = await CreateStoreAsync();
 
         var poller = new SensorTelemetryPoller(
             client,
@@ -177,8 +182,7 @@ public sealed class SensorTelemetryPollerTests : IDisposable
             ["temperature"], "retry.yaml", []);
 
         var client = new FakeMeshCoreTelClient(requestStatuses: ["timeout", "ok"]);
-        var store = new SqliteLocalTelemetryStore(Options.Create(new LocalTelemetryOptions { DatabasePath = _storePath }));
-        await store.InitializeAsync(CancellationToken.None);
+        var store = await CreateStoreAsync();
 
         var poller = new SensorTelemetryPoller(
             client,
@@ -237,8 +241,7 @@ public sealed class SensorTelemetryPollerTests : IDisposable
             ["temperature"], "quiet.yaml", []);
 
         var client = new FakeMeshCoreTelClient(requestStatuses: ["timeout"]);
-        var store = new SqliteLocalTelemetryStore(Options.Create(new LocalTelemetryOptions { DatabasePath = _storePath }));
-        await store.InitializeAsync(CancellationToken.None);
+        var store = await CreateStoreAsync();
 
         var poller = new SensorTelemetryPoller(
             client,
@@ -287,8 +290,7 @@ public sealed class SensorTelemetryPollerTests : IDisposable
             ["temperature"], "garbled.yaml", []);
 
         var client = new FakeMeshCoreTelClient(requestStatuses: ["garbage"]);
-        var store = new SqliteLocalTelemetryStore(Options.Create(new LocalTelemetryOptions { DatabasePath = _storePath }));
-        await store.InitializeAsync(CancellationToken.None);
+        var store = await CreateStoreAsync();
 
         var poller = new SensorTelemetryPoller(
             client,
@@ -341,8 +343,7 @@ public sealed class SensorTelemetryPollerTests : IDisposable
             ["temperature"], "hidden.yaml", []);
 
         var client = new FakeMeshCoreTelClient(requestStatuses: []);
-        var store = new SqliteLocalTelemetryStore(Options.Create(new LocalTelemetryOptions { DatabasePath = _storePath }));
-        await store.InitializeAsync(CancellationToken.None);
+        var store = await CreateStoreAsync();
 
         var poller = new SensorTelemetryPoller(
             client,
@@ -365,6 +366,17 @@ public sealed class SensorTelemetryPollerTests : IDisposable
 
         Assert.Empty(client.Requests);
         Assert.Equal(0, await store.CountPendingAsync(CancellationToken.None));
+    }
+
+    private async Task<ILocalTelemetryStore> CreateStoreAsync()
+    {
+        var provider = new ServiceCollection()
+            .AddDbContextFactory<LocalOutboxDbContext>(options => options.UseSqlite($"Data Source={_storePath}"))
+            .BuildServiceProvider();
+        _serviceProviders.Add(provider);
+        var factory = provider.GetRequiredService<IDbContextFactory<LocalOutboxDbContext>>();
+        await LocalOutboxDatabase.MigrateAsync(factory, _storePath, CancellationToken.None);
+        return new LocalTelemetryStore(factory);
     }
 
     private static IServiceScopeFactory ScopeFactory(ISensorRegistry registry)

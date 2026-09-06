@@ -67,22 +67,19 @@ public sealed class TelemetryPushWorker(
             return;
         }
 
-        var items = new List<TelemetrySnapshotDto>(snapshots.Count);
-        foreach (var snapshot in snapshots)
-        {
-            var readings = await store.ReadReadingsAsync(snapshot.Id, cancellationToken);
-            items.Add(new TelemetrySnapshotDto(
+        var items = snapshots
+            .Select(snapshot => new TelemetrySnapshotDto(
                 snapshot.Id,
                 snapshot.CapturedAt,
                 snapshot.Transport,
                 snapshot.PayloadJson,
-                readings
+                snapshot.Readings
                     .Select(reading => new TelemetryReadingDto(
                         reading.MetricKey,
                         reading.NumericValue,
                         reading.TextValue))
-                    .ToArray()));
-        }
+                    .ToArray()))
+            .ToList();
 
         var pendingCount = await store.CountPendingAsync(cancellationToken);
         await client.PushAsync(new TelemetryBatchDto(pendingCount, items), cancellationToken);

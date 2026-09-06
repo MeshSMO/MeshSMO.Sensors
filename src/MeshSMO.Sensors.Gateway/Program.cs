@@ -3,6 +3,7 @@ using MeshSMO.Sensors.Gateway;
 using MeshSMO.Sensors.Gateway.Health;
 using MeshSMO.Sensors.Infrastructure;
 using MeshSMO.Sensors.Gateway.Api;
+using MeshSMO.Sensors.Gateway.LocalStorage;
 using MeshSMO.Sensors.Gateway.MeshCore;
 using MeshSMO.Sensors.Gateway.Polling;
 using MeshSMO.Sensors.Gateway.Push;
@@ -84,6 +85,10 @@ builder.Services.AddHttpClient<TelemetryPushClient>((serviceProvider, client) =>
 });
 
 var app = builder.Build();
+
+// Fail fast if the local outbox cannot be created/migrated: every hosted
+// service and the telemetry API depend on it.
+await LocalOutboxDatabase.MigrateAsync(app.Services);
 
 app.MapTelemetryApi();
 

@@ -26,7 +26,6 @@ public sealed class GatewayWorkerTests
         var appended = await store.Appended.Task.WaitAsync(cancellation.Token);
         await worker.StopAsync(CancellationToken.None);
 
-        Assert.True(store.Initialized);
         Assert.True(repeater.WasConnected);
         Assert.False(repeater.Connected);
         Assert.Equal("http", appended.Transport);
@@ -67,14 +66,6 @@ public sealed class GatewayWorkerTests
         public TaskCompletionSource<AppendedSnapshot> Appended { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public bool Initialized { get; private set; }
-
-        public Task InitializeAsync(CancellationToken cancellationToken)
-        {
-            Initialized = true;
-            return Task.CompletedTask;
-        }
-
         public Task<long> AppendAsync(
             DateTimeOffset capturedAt,
             string transport,
@@ -89,11 +80,6 @@ public sealed class GatewayWorkerTests
             int maximumCount,
             CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<PendingTelemetrySnapshot>>([]);
-
-        public Task<IReadOnlyList<LocalTelemetryReading>> ReadReadingsAsync(
-            long snapshotId,
-            CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<LocalTelemetryReading>>([]);
 
         public Task AcknowledgeAsync(IReadOnlyCollection<long> ids, CancellationToken cancellationToken) =>
             Task.CompletedTask;
