@@ -1,4 +1,5 @@
 using System.Text;
+using MeshSMO.Sensors.Domain.Sensors;
 using MeshSMO.Sensors.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -53,6 +54,16 @@ public static class SeoEndpoints
             IWebHostEnvironment environment,
             CancellationToken cancellationToken) =>
         {
+            SensorSlug slugValue;
+            try
+            {
+                slugValue = new SensorSlug(slug);
+            }
+            catch (ArgumentException)
+            {
+                return Results.NotFound();
+            }
+
             var webRoot = environment.WebRootPath ?? Path.Combine(environment.ContentRootPath, "wwwroot");
             var prerendered = Path.Combine(webRoot, "sensors", slug, "index.html");
             if (File.Exists(prerendered))
@@ -62,7 +73,7 @@ public static class SeoEndpoints
 
             var known = await dbContext.Sensors
                 .AsNoTracking()
-                .AnyAsync(sensor => sensor.Slug.Value == slug && sensor.Enabled && sensor.PublicVisible, cancellationToken);
+                .AnyAsync(sensor => sensor.Slug == slugValue && sensor.Enabled && sensor.PublicVisible, cancellationToken);
             if (known)
             {
                 var spaFallback = Path.Combine(webRoot, "__spa-fallback.html");

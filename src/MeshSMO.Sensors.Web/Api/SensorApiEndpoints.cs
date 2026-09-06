@@ -26,11 +26,21 @@ public static class SensorApiEndpoints
             SensorsDbContext dbContext,
             CancellationToken cancellationToken) =>
         {
+            SensorSlug slugValue;
+            try
+            {
+                slugValue = new SensorSlug(slug);
+            }
+            catch (ArgumentException)
+            {
+                return Results.NotFound(new { error = "NotFound" });
+            }
+
             var sensor = await dbContext.Sensors
                 .AsNoTracking()
                 .Include(entity => entity.Metrics)
                 .SingleOrDefaultAsync(
-                    entity => entity.Slug.Value == slug && entity.Enabled && entity.PublicVisible,
+                    entity => entity.Slug == slugValue && entity.Enabled && entity.PublicVisible,
                     cancellationToken);
             if (sensor is null)
             {
@@ -60,11 +70,21 @@ public static class SensorApiEndpoints
             SensorsDbContext dbContext,
             CancellationToken cancellationToken) =>
         {
+            SensorSlug slugValue;
+            try
+            {
+                slugValue = new SensorSlug(slug);
+            }
+            catch (ArgumentException)
+            {
+                return Results.NotFound(new { error = "NotFound" });
+            }
+
             var sensor = await dbContext.Sensors
                 .AsNoTracking()
                 .Include(entity => entity.Metrics)
                 .SingleOrDefaultAsync(
-                    entity => entity.Slug.Value == slug && entity.Enabled && entity.PublicVisible,
+                    entity => entity.Slug == slugValue && entity.Enabled && entity.PublicVisible,
                     cancellationToken);
             if (sensor is null)
             {
@@ -82,11 +102,21 @@ public static class SensorApiEndpoints
             SensorsDbContext dbContext,
             CancellationToken cancellationToken) =>
         {
+            SensorSlug slugValue;
+            try
+            {
+                slugValue = new SensorSlug(slug);
+            }
+            catch (ArgumentException)
+            {
+                return Results.NotFound(new { error = "NotFound" });
+            }
+
             var sensor = await dbContext.Sensors
                 .AsNoTracking()
                 .Include(entity => entity.Metrics)
                 .SingleOrDefaultAsync(
-                    entity => entity.Slug.Value == slug && entity.Enabled && entity.PublicVisible,
+                    entity => entity.Slug == slugValue && entity.Enabled && entity.PublicVisible,
                     cancellationToken);
             if (sensor is null)
             {
