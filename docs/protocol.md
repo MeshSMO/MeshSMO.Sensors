@@ -89,7 +89,7 @@ metric_key = mapping[(channel, lpp_type)]     // из registry YAML: telemetry.c
 
 SQLite (`telemetry_snapshots.payload_json`) и далее `GatewayIngestionWorker`:
 
-**Телеметрия репитера** — raw JSON ответа `/api/stats` (плоские readings строятся из него автоматически).
+**Телеметрия репитера** — raw JSON ответа `/api/stats`. Сбор — opt-in (`MeshCore:TelemetryCollectionEnabled`, по умолчанию выключен). Плоские readings в outbox/HTTP-контракте больше не строятся: payload_json — единственные данные снапшота.
 
 **Опрос датчика** (`type: "sensor_poll"`):
 
