@@ -72,6 +72,7 @@ services:
       Push__AllowInsecureHttp: ${GATEWAY_PUSH_ALLOW_INSECURE_HTTP:-false}
       MeshCore__Mode: ${MESHCORE_MODE:-Disabled}
       MeshCore__ReconnectDelaySeconds: 5
+      MeshCore__TelemetryCollectionEnabled: ${MESHCORE_TELEMETRY_COLLECTION_ENABLED:-false}
       MeshCore__TelemetryCollectionIntervalSeconds: 60
       MeshCore__Http__BaseAddress: ${MESHCORE_HTTP_BASE_ADDRESS:-}
       MeshCore__Http__AdminPassword: ${MESHCORE_HTTP_ADMIN_PASSWORD:-}

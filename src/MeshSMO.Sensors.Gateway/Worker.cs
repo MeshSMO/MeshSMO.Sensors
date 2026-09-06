@@ -20,6 +20,16 @@ public sealed class Worker(
             return;
         }
 
+        // Panel telemetry is opt-in: it duplicates repeater internals into the
+        // outbox and the main API does not consume it. Sensor polling is
+        // unaffected — the HTTP client logs its panel session in lazily.
+        if (!options.Value.TelemetryCollectionEnabled)
+        {
+            logger.LogInformation("Repeater telemetry collection is disabled (MeshCore:TelemetryCollectionEnabled)");
+            await Task.Delay(Timeout.InfiniteTimeSpan, stoppingToken).ConfigureAwait(false);
+            return;
+        }
+
         var retryDelay = TimeSpan.FromSeconds(options.Value.ReconnectDelaySeconds);
         var collectionInterval = TimeSpan.FromSeconds(options.Value.TelemetryCollectionIntervalSeconds);
         try
