@@ -8,8 +8,10 @@ using MeshSMO.Sensors.Application.Registry;
 using MeshSMO.Sensors.Domain.Polling;
 using MeshSMO.Sensors.Gateway.LocalStorage;
 using MeshSMO.Sensors.Gateway.MeshCore;
+using MeshSMO.Sensors.Gateway.Resilience;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Polly;
 
 namespace MeshSMO.Sensors.Gateway.Polling;
 
@@ -32,11 +34,14 @@ public sealed class SensorTelemetryPoller(
     ILocalTelemetryStore store,
     IOptions<MeshCoreOptions> meshOptions,
     IOptions<SensorPollingOptions> pollingOptions,
-    ILogger<SensorTelemetryPoller> logger) : BackgroundService
+    ILogger<SensorTelemetryPoller> logger,
+    [FromKeyedServices(GatewayResiliencePipelines.SensorPollingKey)] ResiliencePipeline? retryPipeline = null) : BackgroundService
 {
     /// <summary>Airtime guard: registry allows up to 10, we never fire more than 3 requests per cycle.</summary>
     private const int MaxAttemptsPerCycle = 3;
 
+    private readonly ResiliencePipeline _retryPipeline = retryPipeline ??
+        GatewayResiliencePipelines.CreateSensorPollingPipeline(pollingOptions.Value);
     private long _requestIdSeed = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -127,17 +132,19 @@ public sealed class SensorTelemetryPoller(
         var options = pollingOptions.Value;
         var timeoutMs = ResolveRequestTimeoutMs(sensor, options);
         var maxAttempts = Math.Clamp(sensor.PollMaxAttempts, 1, MaxAttemptsPerCycle);
+        var attempt = 0;
 
-        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        await _retryPipeline.ExecuteAsync(async token =>
         {
+            attempt++;
             var requestId = Interlocked.Increment(ref _requestIdSeed);
             var startedAt = DateTimeOffset.UtcNow;
             PollAttemptOutcome outcome;
             try
             {
-                outcome = await PollOnceAsync(sensor, requestId, startedAt, timeoutMs, cancellationToken).ConfigureAwait(false);
+                outcome = await PollOnceAsync(sensor, requestId, startedAt, timeoutMs, token).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
                 throw;
             }
@@ -157,30 +164,29 @@ public sealed class SensorTelemetryPoller(
                     (int)(DateTimeOffset.UtcNow - startedAt).TotalMilliseconds);
             }
 
-            await RecordAttemptAsync(sensor, requestId, attempt, startedAt, outcome, cancellationToken).ConfigureAwait(false);
+            await RecordAttemptAsync(sensor, requestId, attempt, startedAt, outcome, token).ConfigureAwait(false);
 
             if (outcome.Telemetry is not null)
-                break;
+                return;
 
             if (attempt >= maxAttempts)
-                break;
+                return;
 
             // An empty or undecodable body is a deterministic answer; retrying
             // would only burn LoRa airtime. Timeouts and transport errors are
             // transient and are retried.
             if (outcome.ErrorCode is "empty_response" or "undecodable_response")
-                break;
+                return;
 
             if (outcome.Status == PollAttemptStatus.TimedOut)
             {
                 // The node most likely has not added this repeater to its ACL
                 // yet; bootstrap the ANON login once before the retry.
-                await TryLoginOnceAsync(sensor, loginAttempted, cancellationToken).ConfigureAwait(false);
+                await TryLoginOnceAsync(sensor, loginAttempted, token).ConfigureAwait(false);
             }
 
-            var backoffMs = Random.Shared.Next(options.RetryBackoffMinMs, options.RetryBackoffMaxMs + 1);
-            await Task.Delay(TimeSpan.FromMilliseconds(backoffMs), cancellationToken).ConfigureAwait(false);
-        }
+            throw new SensorPollingRetryException();
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<PollAttemptOutcome> PollOnceAsync(

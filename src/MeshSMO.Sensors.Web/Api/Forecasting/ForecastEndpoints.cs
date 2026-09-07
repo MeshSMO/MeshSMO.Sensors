@@ -1,10 +1,11 @@
-using MeshSMO.Sensors.Domain.Sensors;
 using MeshSMO.Sensors.Application.Abstractions;
+using MeshSMO.Sensors.Domain.Sensors;
 using MeshSMO.Sensors.Forecasting;
 using MeshSMO.Sensors.Infrastructure.Persistence;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Polly.Timeout;
 
 namespace MeshSMO.Sensors.Web.Api.Forecasting;
 
@@ -94,7 +95,9 @@ public static class ForecastEndpoints
                 result,
                 horizonValue));
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (Exception exception) when (
+            exception is TimeoutRejectedException ||
+            exception is OperationCanceledException && !cancellationToken.IsCancellationRequested)
         {
             httpContext.Response.Headers.RetryAfter = "5";
             return Results.Json(

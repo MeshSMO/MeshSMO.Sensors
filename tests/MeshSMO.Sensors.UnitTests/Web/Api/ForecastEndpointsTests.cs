@@ -7,6 +7,7 @@ using MeshSMO.Sensors.Forecasting;
 using MeshSMO.Sensors.Infrastructure;
 using MeshSMO.Sensors.Infrastructure.Persistence;
 using MeshSMO.Sensors.Web.Api.Forecasting;
+using MeshSMO.Sensors.Web.Resilience;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -55,9 +56,11 @@ public sealed class ForecastEndpointsTests : IDisposable
             options.MinimumHistoryDays = 14;
             options.MaximumConcurrentTrainings = 1;
             options.MaximumCacheEntries = 8;
+            options.CalculationTimeoutSeconds = 1;
         });
         builder.Services.AddScoped<IForecastSeriesSource, FakeForecastSeriesSource>();
         builder.Services.AddSingleton<IForecastService>(_forecastService);
+        builder.Services.AddWebResiliencePipelines();
         builder.Services.AddSingleton<ForecastCoordinator>();
         _app = builder.Build();
         _app.MapForecastApi();
@@ -113,6 +116,21 @@ public sealed class ForecastEndpointsTests : IDisposable
         Assert.Equal(
             HttpStatusCode.NotFound,
             (await _client.GetAsync("/api/v1/sensors/hidden-node/forecast?metric=temperature&horizon=1h")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Forecast_WhenCalculationTimesOut_ReturnsServiceUnavailable()
+    {
+        _forecastService.Delay = TimeSpan.FromSeconds(2);
+
+        var response = await _client.GetAsync(
+            "/api/v1/sensors/forecast-node/forecast?metric=temperature&horizon=12h");
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Equal("5", response.Headers.RetryAfter?.ToString());
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("ForecastUnavailable", body.GetProperty("error").GetString());
+        Assert.Equal("Forecast calculation timed out.", body.GetProperty("message").GetString());
     }
 
     private static Sensor CreateSensor(string slug, bool visible, string publicKey) => new(
@@ -182,7 +200,7 @@ public sealed class ForecastEndpointsTests : IDisposable
             CancellationToken cancellationToken = default)
         {
             if (Delay > TimeSpan.Zero)
-                Thread.Sleep(Delay);
+                Task.Delay(Delay, cancellationToken).GetAwaiter().GetResult();
             CallCount++;
             var diagnostics = new ForecastDiagnostics(
                 "ssa",

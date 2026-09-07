@@ -6,6 +6,7 @@ using MeshSMO.Sensors.Gateway.LocalStorage;
 using MeshSMO.Sensors.Gateway.MeshCore;
 using MeshSMO.Sensors.Gateway.Polling;
 using MeshSMO.Sensors.Gateway.Push;
+using MeshSMO.Sensors.Gateway.Resilience;
 using MeshSMO.Sensors.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -20,9 +21,6 @@ builder.Services.AddHealthChecks()
     .AddCheck<SensorRegistryHealthCheck>("sensor-registry", tags: ["ready"]);
 builder.Services.AddSensorRegistry(builder.Configuration);
 builder.Services.AddMeshCoreGateway(builder.Configuration);
-builder.Services.AddHostedService<Worker>();
-builder.Services.AddHostedService<SensorTelemetryPoller>();
-builder.Services.AddHostedService<TelemetryPushWorker>();
 
 builder.Services
     .AddOptions<SensorPollingOptions>()
@@ -39,6 +37,11 @@ builder.Services
             && options.RetryBackoffMinMs <= options.RetryBackoffMaxMs,
         "SensorPolling:RetryBackoffMinMs/MaxMs must be between 0 and 60000, MinMs <= MaxMs.")
     .ValidateOnStart();
+
+builder.Services.AddGatewayResiliencePipelines();
+builder.Services.AddHostedService<Worker>();
+builder.Services.AddHostedService<SensorTelemetryPoller>();
+builder.Services.AddHostedService<TelemetryPushWorker>();
 
 builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull);
 
@@ -76,8 +79,11 @@ builder.Services.AddHttpClient<TelemetryPushClient>((serviceProvider, client) =>
     var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<TelemetryPushOptions>>().Value;
     if (options.ApiUrl is not null)
         client.BaseAddress = new($"{options.ApiUrl.AbsoluteUri.TrimEnd('/')}/");
-    client.Timeout = TimeSpan.FromSeconds(30);
-});
+    client.Timeout = Timeout.InfiniteTimeSpan;
+})
+// Ingest is idempotent by snapshot id, so the standard handler may safely
+// retry POST together with applying its timeout, limiter, and circuit breaker.
+.AddStandardResilienceHandler();
 
 var app = builder.Build();
 

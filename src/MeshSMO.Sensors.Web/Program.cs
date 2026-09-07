@@ -1,11 +1,12 @@
 using System.Threading.RateLimiting;
+using MeshSMO.Sensors.Forecasting;
 using MeshSMO.Sensors.Infrastructure;
 using MeshSMO.Sensors.Infrastructure.Persistence;
 using MeshSMO.Sensors.Web.Api;
 using MeshSMO.Sensors.Web.Api.Forecasting;
 using MeshSMO.Sensors.Web.Api.MeasurementHistory;
 using MeshSMO.Sensors.Web.GatewayIngestion;
-using MeshSMO.Sensors.Forecasting;
+using MeshSMO.Sensors.Web.Resilience;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -91,6 +92,7 @@ builder.Services
             (series.Minimum is null || series.Maximum is null || series.Minimum.Value < series.Maximum.Value)),
         "Forecasting series overrides are invalid.")
     .ValidateOnStart();
+builder.Services.AddWebResiliencePipelines();
 builder.Services.AddSingleton<IForecastService>(serviceProvider =>
     new MlNetForecastService(serviceProvider.GetRequiredService<IOptions<ForecastingOptions>>().Value));
 builder.Services.AddScoped<IForecastSeriesSource, PostgresForecastSeriesSource>();
@@ -123,8 +125,11 @@ builder.Services.AddHttpClient<GatewayTelemetryClient>((serviceProvider, client)
     var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<GatewayIngestionOptions>>().Value;
     if (options.BaseUrl is not null)
         client.BaseAddress = new($"{options.BaseUrl.AbsoluteUri.TrimEnd('/')}/");
-    client.Timeout = TimeSpan.FromSeconds(30);
-});
+    client.Timeout = Timeout.InfiniteTimeSpan;
+})
+// Fetch is read-only and ack is idempotent by snapshot id, so the standard
+// handler can safely retry both requests.
+.AddStandardResilienceHandler();
 builder.Services.AddHostedService<GatewayIngestionWorker>();
 
 var app = builder.Build();

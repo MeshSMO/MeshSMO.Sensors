@@ -1,8 +1,11 @@
 using System.Collections.Concurrent;
 using MeshSMO.Sensors.Application.Abstractions;
 using MeshSMO.Sensors.Forecasting;
+using MeshSMO.Sensors.Web.Resilience;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Polly;
 
 namespace MeshSMO.Sensors.Web.Api.Forecasting;
 
@@ -14,17 +17,20 @@ public sealed class ForecastCoordinator : IDisposable
     private readonly ForecastingOptions _options;
     private readonly ILogger<ForecastCoordinator> _logger;
     private readonly MemoryCache _cache;
+    private readonly ResiliencePipeline _calculationPipeline;
     private readonly SemaphoreSlim _trainingSlots;
 
     public ForecastCoordinator(
         IServiceScopeFactory scopeFactory,
         IClock clock,
         IOptions<ForecastingOptions> options,
+        [FromKeyedServices(WebResiliencePipelines.ForecastCalculationKey)] ResiliencePipeline calculationPipeline,
         ILogger<ForecastCoordinator> logger)
     {
         _scopeFactory = scopeFactory;
         _clock = clock;
         _options = options.Value;
+        _calculationPipeline = calculationPipeline;
         _logger = logger;
         _cache = new(new MemoryCacheOptions { SizeLimit = _options.MaximumCacheEntries });
         _trainingSlots = new(_options.MaximumConcurrentTrainings, _options.MaximumConcurrentTrainings);
@@ -53,7 +59,16 @@ public sealed class ForecastCoordinator : IDisposable
     private async Task<ForecastResult> CalculateAsync(
         ForecastCacheKey key,
         ForecastDescriptor descriptor,
-        TimeSpan horizon)
+        TimeSpan horizon) =>
+        await _calculationPipeline.ExecuteAsync(
+            async token => await CalculateCoreAsync(key, descriptor, horizon, token).ConfigureAwait(false),
+            CancellationToken.None).ConfigureAwait(false);
+
+    private async ValueTask<ForecastResult> CalculateCoreAsync(
+        ForecastCacheKey key,
+        ForecastDescriptor descriptor,
+        TimeSpan horizon,
+        CancellationToken cancellationToken)
     {
         var generatedAt = _clock.UtcNow;
         if (!_options.Enabled)
@@ -66,8 +81,7 @@ public sealed class ForecastCoordinator : IDisposable
                 TimeSpan.FromMinutes(_options.StepMinutes));
         }
 
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(_options.CalculationTimeoutSeconds));
-        await _trainingSlots.WaitAsync(timeout.Token).ConfigureAwait(false);
+        await _trainingSlots.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
@@ -85,10 +99,10 @@ public sealed class ForecastCoordinator : IDisposable
                 descriptor.Minimum,
                 descriptor.Maximum,
                 descriptor.MaximumMae);
-            var series = await source.ReadAsync(query, timeout.Token).ConfigureAwait(false);
+            var series = await source.ReadAsync(query, cancellationToken).ConfigureAwait(false);
             var result = await Task.Run(
-                () => service.Forecast(series, horizon, generatedAt, timeout.Token),
-                timeout.Token).ConfigureAwait(false);
+                () => service.Forecast(series, horizon, generatedAt, cancellationToken),
+                cancellationToken).ConfigureAwait(false);
             _cache.Set(
                 key,
                 result,

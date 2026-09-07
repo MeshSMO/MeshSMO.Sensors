@@ -1,8 +1,9 @@
-using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using MeshSMO.Sensors.Gateway.Resilience;
 using Microsoft.Extensions.Options;
+using Polly;
 
 namespace MeshSMO.Sensors.Gateway.MeshCore;
 
@@ -14,6 +15,8 @@ public sealed class MeshCoreTelHttpClient(
     private const int MaximumCommandBytes = 191;
     private const int MaximumPasswordBytes = 79;
     private const int MaximumErrorBodyLength = 512;
+    private readonly ResiliencePipeline<HttpResponseMessage> _authorizationPipeline =
+        GatewayResiliencePipelines.CreateAuthorizationPipeline();
     private readonly SemaphoreSlim _requestLock = new(1, 1);
     private readonly string _adminPassword = options.Value.Http.AdminPassword;
 
@@ -110,27 +113,29 @@ public sealed class MeshCoreTelHttpClient(
         await _requestLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var token = await session.GetTokenAsync(AuthenticateAsync, cancellationToken).ConfigureAwait(false);
-            for (var attempt = 0; attempt < 2; attempt++)
+            var authToken = await session.GetTokenAsync(AuthenticateAsync, cancellationToken).ConfigureAwait(false);
+            var attempt = 0;
+            using var response = await _authorizationPipeline.ExecuteAsync(async retryToken =>
             {
-                using var request = requestFactory();
-                request.Headers.TryAddWithoutValidation("X-Auth-Token", token);
-                using var response = await httpClient.SendAsync(
-                    request,
-                    HttpCompletionOption.ResponseHeadersRead,
-                    cancellationToken).ConfigureAwait(false);
-
-                if (response.StatusCode == HttpStatusCode.Unauthorized && attempt == 0)
+                if (attempt > 0)
                 {
-                    token = await session.RefreshTokenAsync(token, AuthenticateAsync, cancellationToken).ConfigureAwait(false);
-                    continue;
+                    authToken = await session.RefreshTokenAsync(
+                        authToken,
+                        AuthenticateAsync,
+                        retryToken).ConfigureAwait(false);
                 }
 
-                await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
-                return await readResponse(response, cancellationToken).ConfigureAwait(false);
-            }
+                attempt++;
+                using var request = requestFactory();
+                request.Headers.TryAddWithoutValidation("X-Auth-Token", authToken);
+                return await httpClient.SendAsync(
+                    request,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    retryToken).ConfigureAwait(false);
+            }, cancellationToken).ConfigureAwait(false);
 
-            throw new InvalidOperationException("The MeshCoreTel authorization retry loop exited unexpectedly.");
+            await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+            return await readResponse(response, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
