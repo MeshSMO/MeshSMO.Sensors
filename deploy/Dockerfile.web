@@ -27,8 +27,16 @@ WORKDIR /app
 COPY --from=backend /app/publish ./
 COPY --from=frontend /src/src/web/.output/public ./wwwroot
 ENV ASPNETCORE_HTTP_PORTS=8080
-# curl is needed by the compose healthcheck (/health/ready).
-RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+# curl is needed by the compose healthcheck (/health/ready). ML.NET TimeSeries
+# loads libMklImports.so, which requires the OpenMP runtime as libiomp5.so.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl libomp5 \
+    && omp_path="$(find /usr/lib -name libomp.so.5 -print -quit)" \
+    && test -n "$omp_path" \
+    && { test -e "$(dirname "$omp_path")/libiomp5.so" \
+        || ln -s "$(basename "$omp_path")" "$(dirname "$omp_path")/libiomp5.so"; } \
+    && ldd /app/runtimes/linux-x64/native/libMklImports.so | grep -q 'libiomp5.so => /' \
+    && rm -rf /var/lib/apt/lists/*
 USER $APP_UID
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "MeshSMO.Sensors.Web.dll"]
