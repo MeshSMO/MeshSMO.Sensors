@@ -1,0 +1,112 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  schedule:
+    - cron: "23 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+
+          - language: javascript-typescript
+            build-mode: none
+
+          # Для C# намеренно используем реальную сборку решения.
+          # Это дает CodeQL больше информации о зависимостях и
+          # сгенерированном коде, чем build-mode: none.
+          - language: csharp
+            build-mode: manual
+
+    concurrency:
+      group: codeql-${{ github.ref }}-${{ matrix.language }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      # C# проект использует .NET 10 и при сборке решения вызывает
+      # сборку frontend через .esproj, поэтому окружение повторяет CI.
+      - name: Setup .NET
+        if: matrix.language == 'csharp'
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Setup Node.js
+        if: matrix.language == 'csharp'
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/web/package-lock.json
+
+      - name: Install ML.NET native dependencies
+        if: matrix.language == 'csharp'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libomp5
+
+          omp_path="$(find /usr/lib -name libomp.so.5 -print -quit)"
+          test -n "$omp_path"
+
+          test -e "$(dirname "$omp_path")/libiomp5.so" || \
+            sudo ln -s "$(basename "$omp_path")" "$(dirname "$omp_path")/libiomp5.so"
+
+      # Restore можно делать до CodeQL init.
+      # Сама компиляция обязательно должна идти после init при manual mode.
+      - name: Restore .NET tools
+        if: matrix.language == 'csharp'
+        run: dotnet tool restore
+
+      - name: Restore .NET dependencies
+        if: matrix.language == 'csharp'
+        run: dotnet restore MeshSMO.Sensors.slnx
+
+      - name: Restore frontend dependencies
+        if: matrix.language == 'csharp'
+        working-directory: src/web
+        run: npm ci
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-extended
+
+      - name: Build C# solution
+        if: matrix.language == 'csharp'
+        run: >
+          dotnet build MeshSMO.Sensors.slnx
+          --configuration Release
+          --no-restore
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
