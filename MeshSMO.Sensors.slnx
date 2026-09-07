@@ -7,6 +7,7 @@
     <Project Path="src/MeshSMO.Sensors.Application/MeshSMO.Sensors.Application.csproj" />
     <Project Path="src/MeshSMO.Sensors.DbMigrator/MeshSMO.Sensors.DbMigrator.csproj" />
     <Project Path="src/MeshSMO.Sensors.Domain/MeshSMO.Sensors.Domain.csproj" />
+    <Project Path="src/MeshSMO.Sensors.Forecasting/MeshSMO.Sensors.Forecasting.csproj" />
     <Project Path="src/MeshSMO.Sensors.Gateway/MeshSMO.Sensors.Gateway.csproj" />
     <Project Path="src/MeshSMO.Sensors.Infrastructure/MeshSMO.Sensors.Infrastructure.csproj" />
     <Project Path="src/MeshSMO.Sensors.Web/MeshSMO.Sensors.Web.csproj" />

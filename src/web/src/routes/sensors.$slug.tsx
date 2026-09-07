@@ -6,13 +6,18 @@ import type { DateRange } from "react-day-picker";
 import { EmptyState, PageShell, SkeletonLine } from "@/components/site/Shell";
 import { StatusBadge } from "@/components/site/StatusBadge";
 import {
+  forecastHorizonLabels,
+  forecastHorizons,
   rangeLabels,
   ranges,
   resolveRange,
+  useForecast,
   useLatest,
   useMeasurementsMany,
   useSensor,
   useStatus,
+  type ForecastAvailability,
+  type ForecastHorizon,
   type RangeKey,
 } from "@/lib/api";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -20,7 +25,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
-import { CalendarDays, ChevronDown, Clock } from "lucide-react";
+import { CalendarDays, ChevronDown, Clock, Sparkles } from "lucide-react";
 import { getRegistrySensor } from "@/lib/registry";
 import {
   formatCoordinate,
@@ -44,6 +49,7 @@ type Search = {
   from?: string;
   to?: string;
   mode?: ChartMode;
+  forecast?: ForecastHorizon;
 };
 
 export const Route = createFileRoute("/sensors/$slug")({
@@ -58,6 +64,9 @@ export const Route = createFileRoute("/sensors/$slug")({
     const from = str("from");
     const to = str("to");
     const mode = search["mode"] === "combined" ? ("combined" as const) : undefined;
+    const forecast = forecastHorizons.includes(search["forecast"] as ForecastHorizon)
+      ? (search["forecast"] as ForecastHorizon)
+      : undefined;
     return {
       ...(metric ? { metric } : {}),
       ...(metrics ? { metrics } : {}),
@@ -65,6 +74,7 @@ export const Route = createFileRoute("/sensors/$slug")({
       ...(from ? { from } : {}),
       ...(to ? { to } : {}),
       ...(mode ? { mode } : {}),
+      ...(forecast ? { forecast } : {}),
     };
   },
   head: ({ params }) => {
@@ -227,6 +237,7 @@ function SensorPage() {
         selected={selected}
         range={range}
         mode={mode}
+        forecast={search.forecast}
         from={search.from}
         to={search.to}
         hasExplicitParams={Boolean(
@@ -235,7 +246,8 @@ function SensorPage() {
           search.range ??
           search.from ??
           search.to ??
-          search.mode,
+          search.mode ??
+          search.forecast,
         )}
       />
 
@@ -309,7 +321,7 @@ function Readings({ slug, metrics, poll }: { slug: string; metrics: string[]; po
 
 const PREFS_KEY = "meshsmo:sensor-history";
 
-type HistoryPrefs = Pick<Search, "metrics" | "range" | "from" | "to" | "mode">;
+type HistoryPrefs = Pick<Search, "metrics" | "range" | "from" | "to" | "mode" | "forecast">;
 
 function readHistoryPrefs(slug: string): HistoryPrefs | null {
   try {
@@ -341,6 +353,7 @@ function History({
   mode,
   from,
   to,
+  forecast,
   hasExplicitParams,
 }: {
   slug: string;
@@ -350,6 +363,7 @@ function History({
   mode: ChartMode;
   from?: string | undefined;
   to?: string | undefined;
+  forecast?: ForecastHorizon | undefined;
   hasExplicitParams: boolean;
 }) {
   const navigate = Route.useNavigate();
@@ -387,6 +401,7 @@ function History({
           if (saved.from) next.from = saved.from;
           if (saved.to) next.to = saved.to;
           if (saved.mode) next.mode = saved.mode;
+          if (saved.forecast) next.forecast = saved.forecast;
           if (Object.keys(next).length > 0) await update(next);
         }
       }
@@ -408,6 +423,7 @@ function History({
     if (from) prefs.from = from;
     if (to) prefs.to = to;
     if (mode === "combined") prefs.mode = "combined";
+    if (forecast) prefs.forecast = forecast;
 
     // selected — новый массив на каждый рендер; пишем только при реальном
     // изменении значений, иначе effect срабатывает после каждого рендера.
@@ -417,7 +433,7 @@ function History({
     lastSavedRef.current = { slug, json };
 
     writeHistoryPrefs(slug, prefs);
-  }, [prefsReady, slug, selected, range, from, to, mode]);
+  }, [prefsReady, slug, selected, range, from, to, mode, forecast]);
 
   const custom = { from, to };
   const results = useMeasurementsMany(slug, selected, range, custom);
@@ -431,6 +447,8 @@ function History({
     isError: results[index]?.isError ?? false,
   }));
   const withData = series.filter((s) => s.points.length > 0);
+  const forecastEnabled = forecast !== undefined && mode === "separate" && selected.length === 1;
+  const forecastQuery = useForecast(slug, selected[0], forecast ?? "24h", forecastEnabled);
 
   const toggleMetric = (key: string) => {
     const next = selected.includes(key) ? selected.filter((m) => m !== key) : [...selected, key];
@@ -477,7 +495,12 @@ function History({
               key={key}
               type="button"
               aria-pressed={mode === key}
-              onClick={() => update({ mode: key === "combined" ? "combined" : undefined })}
+              onClick={() =>
+                update({
+                  mode: key === "combined" ? "combined" : undefined,
+                  forecast: key === "combined" ? undefined : forecast,
+                })
+              }
               className={`px-3 py-1.5 text-xs transition-colors ${
                 mode === key
                   ? "bg-surface-raised text-foreground"
@@ -488,7 +511,55 @@ function History({
             </button>
           ))}
         </div>
+
+        <button
+          type="button"
+          aria-pressed={forecastEnabled}
+          disabled={mode === "combined" || selected.length !== 1}
+          onClick={() => update({ forecast: forecastEnabled ? undefined : "24h" })}
+          className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+            forecastEnabled
+              ? "border-accent bg-accent/10 text-accent"
+              : "border-border text-muted-foreground hover:text-foreground"
+          }`}
+          title={selected.length !== 1 ? "Для прогноза выберите один показатель" : undefined}
+        >
+          <Sparkles className="h-3.5 w-3.5" aria-hidden />
+          AI-прогноз
+        </button>
+
+        {forecastEnabled ? (
+          <div className="flex overflow-hidden rounded-md border border-border">
+            {forecastHorizons.map((key) => (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={forecast === key}
+                onClick={() => update({ forecast: key })}
+                className={`num px-3 py-1.5 text-xs transition-colors ${
+                  forecast === key
+                    ? "bg-surface-raised text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {forecastHorizonLabels[key]}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
+
+      {forecastEnabled ? (
+        <p className="mt-2 text-xs text-muted-foreground" aria-live="polite">
+          {forecastQuery.isPending
+            ? "Строим прогноз по истории измерений…"
+            : forecastQuery.isError
+              ? "Не удалось построить прогноз. Попробуйте ещё раз позже."
+              : forecastQuery.data?.availability === "ready"
+                ? "Пунктиром показан расчётный прогноз; полоса отражает его неопределённость."
+                : forecastAvailabilityMessage(forecastQuery.data?.availability)}
+        </p>
+      ) : null}
 
       <div className="mt-3 flex flex-wrap gap-2">
         {ranges.map((key) => (
@@ -544,7 +615,12 @@ function History({
               {s.points.length > 0 ? (
                 <>
                   <Suspense fallback={<SkeletonLine className="h-72 w-full" />}>
-                    <MetricChart points={s.points} metricKey={s.metricKey} unit={s.unit} />
+                    <MetricChart
+                      points={s.points}
+                      metricKey={s.metricKey}
+                      unit={s.unit}
+                      forecast={forecastEnabled ? forecastQuery.data : undefined}
+                    />
                   </Suspense>
                   <ChartSummary metricKey={s.metricKey} points={s.points} />
                 </>
@@ -580,6 +656,23 @@ function ChartPlaceholder({ pending }: { pending: boolean }) {
       description="История появится, когда датчик начнёт передавать данные."
     />
   );
+}
+
+function forecastAvailabilityMessage(availability: ForecastAvailability | undefined): string {
+  switch (availability) {
+    case "insufficient_data":
+      return "Для прогноза пока недостаточно истории измерений.";
+    case "sparse_data":
+      return "Прогноз недоступен: в истории слишком много пропусков.";
+    case "stale_data":
+      return "Прогноз недоступен: последние показания устарели.";
+    case "low_quality":
+      return "Модель не прошла проверку качества на истории этого показателя.";
+    case "disabled":
+      return "AI-прогноз пока отключён для этого показателя.";
+    default:
+      return "Прогноз пока недоступен.";
+  }
 }
 
 function ChartSummary({

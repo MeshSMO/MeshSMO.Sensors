@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\MeshSMO.Sensors.Application\MeshSMO.Sensors.Application.csproj" />
+    <ProjectReference Include="..\MeshSMO.Sensors.Forecasting\MeshSMO.Sensors.Forecasting.csproj" />
     <ProjectReference Include="..\MeshSMO.Sensors.Infrastructure\MeshSMO.Sensors.Infrastructure.csproj" />
     <!-- The frontend is built by the node stage of deploy/Dockerfile.web and
          copied into wwwroot; the esproj is skipped in that environment. -->

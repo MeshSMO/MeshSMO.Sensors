@@ -36,6 +36,7 @@
 - **BFF не знает про MeshCore**: ни serial, ни пакетный формат не протекают в `Web`. Web оперирует снапшотами outbox.
 - **Gateway не знает про PostgreSQL**: он пишет только в локальную SQLite и отдаёт данные по API. Web может быть недоступен/перезапускаться — сбор продолжается.
 - **Frontend не знает про LoRa**: только `/api/v1/*`.
+- **Forecasting не меняет телеметрию**: отдельная библиотека ML.NET читает один числовой ряд `(sensor_id, metric_key)` через BFF, строит результат on demand и ничего не записывает в PostgreSQL.
 - Registry — deployment-local (`config/sensors/*.yaml` gitignored: могут содержать чувствительные данные). В git — только `schema.json` и сгенерированный публичный снапшот `src/web/src/generated/sensorRegistry.json`. Локальные YAML — источник истины для синхронизации таблицы `sensors` и генерации prerender-маршрутов.
 
 ## 2. Потоки данных
@@ -77,6 +78,10 @@ Ack — только после коммита транзакции (pull: `POST
 
 `/api/v1/sensors`, `/sensors/{slug}`, `/sensors/{slug}/status` (материализованный `sensor_status`, фолбэк `Unknown`), `/sensors/{slug}/latest` (последние значения с `displayName`/`unit` из `sensor_metrics`), `/dashboard` (агрегат одним payload'ом), `/sitemap.xml`. Больше нет ничего — фронт живёт на этих эндпоинтах.
 
+### 2.5. Прогнозирование
+
+`GET /api/v1/sensors/{slug}/forecast?metric=...&horizon=1h|6h|12h|24h` читает только числовые значения выбранной пары датчик/метрика. PostgreSQL агрегирует историю в равномерные UTC-buckets; `MeshSMO.Sensors.Forecasting` проверяет полноту ряда, выполняет rolling backtest SSA против last-value и seasonal-naive baseline и возвращает прогноз только после quality gate. Готовый ответ кратковременно кешируется в памяти BFF; single-flight и глобальный semaphore ограничивают CPU. Прогнозные точки и модели в БД не сохраняются. Подробный контракт: [docs/sensor-forecasting-spec.md](./docs/sensor-forecasting-spec.md).
+
 ## 3. Модель данных (PostgreSQL)
 
 | Таблица | Назначение | Ключевые ограничения |
@@ -110,6 +115,7 @@ Ack — только после коммита транзакции (pull: `POST
 | 6 | Registry-маппинг каналов (`telemetry.channels`) в YAML | канал ≠ смысл; имена/юниты/отображение — версионируются в Git, а не в БД |
 | 7 | TanStack Start в SPA-режиме (без SSR) + prerender статикой из registry + JSON-снапшот на prebuild | SEO без Node-SSR runtime; reproducible builds |
 | 8 | TLS 1.2 + static-RSA cipher pinning в HTTP-клиенте репитера | ESP32-firmware не поднимает TLS 1.3/ECDHE; из Linux-контейнеров иначе не подключиться |
+| 9 | ML.NET SSA per `(sensor_id, metric_key)`, on demand, без DB persistence | разные датчики и физические величины имеют разные ряды; backtest и MASE не позволяют выдавать слабую модель за полезный прогноз |
 
 ## 6. Известные ограничения / что дальше
 

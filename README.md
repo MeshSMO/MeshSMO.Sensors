@@ -8,7 +8,8 @@
 - локальная SQLite outbox в gateway; sensor-web выгружает её в PostgreSQL (ack + идемпотентность);
 - PostgreSQL-модель (sensors, measurements, gateway telemetry), one-shot DbMigrator;
 - реестр датчиков в YAML (deployment-local, в git не хранится) с валидацией, синхронизацией и prerender-маршрутами;
-- публичный `/api/v1` (sensors, latest, status, dashboard), sitemap.xml, robots.txt;
+- публичный `/api/v1` (sensors, latest, status, dashboard, history и on-demand forecast), sitemap.xml, robots.txt;
+- per-sensor/per-metric прогнозирование через ML.NET SSA с rolling backtest, quality gate и без хранения прогнозов в БД;
 - React Router Framework Mode с `ssr: false`, prerender и SPA fallback;
 - полный стек в Docker (`deploy/compose.yaml`), CI на GitHub Actions.
 
@@ -23,6 +24,7 @@
 | [docs/protocol.md](./docs/protocol.md) | wire-протоколы: REQ/ANON, Cayenne LPP, payload'ы outbox |
 | [docs/MeshSMO-Sensors-IMPLEMENTATION_SPEC.md](./docs/MeshSMO-Sensors-IMPLEMENTATION_SPEC.md) | полная спека и план фаз |
 | [docs/repeater-firmware-acquisition-spec.md](./docs/repeater-firmware-acquisition-spec.md) | контракт прошивки репитера (acquisition) |
+| [docs/sensor-forecasting-spec.md](./docs/sensor-forecasting-spec.md) | архитектура, API, quality gates и план AI-прогноза |
 
 ## Локальная проверка без Docker
 
@@ -44,6 +46,15 @@ dotnet run --project src/MeshSMO.Sensors.Web --launch-profile http
 `dotnet publish src/MeshSMO.Sensors.Web` также собирает frontend и включает `.output/public` в `wwwroot`; Node.js в production runtime не нужен.
 
 Отдельные frontend-команды по-прежнему доступны из `src/web` для быстрых проверок `npm run lint`, `npm run typecheck` и `npm run build`.
+
+Forecast API выключен по умолчанию. Для локальной проверки после накопления достаточной истории:
+
+```powershell
+$env:Forecasting__Enabled = "true"
+dotnet run --project src/MeshSMO.Sensors.Web --launch-profile http
+```
+
+Прогноз строится по запросу отдельно для каждой пары датчик/метрика, кешируется в памяти на короткое время и не создаёт таблиц или записей в PostgreSQL.
 
 ## Gateway и MeshCoreTel Repeater
 

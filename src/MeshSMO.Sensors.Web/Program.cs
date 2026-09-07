@@ -2,8 +2,10 @@ using System.Threading.RateLimiting;
 using MeshSMO.Sensors.Infrastructure;
 using MeshSMO.Sensors.Infrastructure.Persistence;
 using MeshSMO.Sensors.Web.Api;
+using MeshSMO.Sensors.Web.Api.Forecasting;
 using MeshSMO.Sensors.Web.Api.MeasurementHistory;
 using MeshSMO.Sensors.Web.GatewayIngestion;
+using MeshSMO.Sensors.Forecasting;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -57,6 +59,42 @@ builder.Services.AddTransient<GatewayIngestOptions>(
     sp => sp.GetRequiredService<IOptions<GatewayIngestOptions>>().Value);
 builder.Services.AddScoped<GatewayTelemetryImporter>();
 builder.Services.AddScoped<MeasurementHistoryReader>();
+builder.Services
+    .AddOptions<ForecastingOptions>()
+    .Bind(builder.Configuration.GetSection(ForecastingOptions.SectionName))
+    .Validate(
+        static options => options.StepMinutes > 0 && 60 % options.StepMinutes == 0,
+        "Forecasting:StepMinutes must be a positive divisor of one hour.")
+    .Validate(
+        static options => options.TrainingWindowDays > 0 &&
+            options.MinimumHistoryDays > 0 &&
+            options.MinimumHistoryDays <= options.TrainingWindowDays,
+        "Forecasting history windows are invalid.")
+    .Validate(
+        static options => options.MinimumCoverage is > 0 and <= 1 &&
+            options.ConfidenceLevel is > 0 and < 1 &&
+            options.MinimumIntervalCoverage is >= 0 and <= 1 &&
+            options.MaximumMase > 0,
+        "Forecasting quality thresholds are invalid.")
+    .Validate(
+        static options => options.BacktestFolds >= 3 &&
+            options.ResultCacheMinutes > 0 &&
+            options.MaximumCacheEntries > 0 &&
+            options.MaximumConcurrentTrainings > 0 &&
+            options.CalculationTimeoutSeconds > 0,
+        "Forecasting resource limits are invalid.")
+    .Validate(
+        static options => options.Series.Values.All(static series =>
+            series.MaximumMae is null or > 0 &&
+            (series.Minimum is null || double.IsFinite(series.Minimum.Value)) &&
+            (series.Maximum is null || double.IsFinite(series.Maximum.Value)) &&
+            (series.Minimum is null || series.Maximum is null || series.Minimum.Value < series.Maximum.Value)),
+        "Forecasting series overrides are invalid.")
+    .ValidateOnStart();
+builder.Services.AddSingleton<IForecastService>(serviceProvider =>
+    new MlNetForecastService(serviceProvider.GetRequiredService<IOptions<ForecastingOptions>>().Value));
+builder.Services.AddScoped<IForecastSeriesSource, PostgresForecastSeriesSource>();
+builder.Services.AddSingleton<ForecastCoordinator>();
 
 // Public API rate limiting: per-IP fixed window. Only endpoints tagged with
 // the "public-api" policy are limited; ingest stays unlimited (gateway→web).
@@ -68,6 +106,13 @@ builder.Services.AddRateLimiter(options =>
         _ => new()
         {
             PermitLimit = 120,
+            Window = TimeSpan.FromMinutes(1),
+        }));
+    options.AddPolicy("forecast-api", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+        _ => new()
+        {
+            PermitLimit = 20,
             Window = TimeSpan.FromMinutes(1),
         }));
 });
@@ -127,6 +172,8 @@ app.MapGet("/api/v1/telemetry/snapshots", async Task<IResult> (
 app.MapSensorApi();
 
 app.MapMeasurementHistoryApi();
+
+app.MapForecastApi();
 
 app.MapOpenApi();
 

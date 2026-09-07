@@ -76,6 +76,56 @@ export type MeasurementsResponse = {
   points: MeasurementPoint[];
 };
 
+export const forecastHorizons = ["1h", "6h", "12h", "24h"] as const;
+export type ForecastHorizon = (typeof forecastHorizons)[number];
+
+export const forecastHorizonLabels: Record<ForecastHorizon, string> = {
+  "1h": "1 ч",
+  "6h": "6 ч",
+  "12h": "12 ч",
+  "24h": "24 ч",
+};
+
+export type ForecastAvailability =
+  "ready" | "insufficient_data" | "sparse_data" | "stale_data" | "low_quality" | "disabled";
+
+export type ForecastPoint = {
+  timestamp: string;
+  predicted: number;
+  lower: number;
+  upper: number;
+};
+
+export type ForecastResponse = {
+  sensor: { slug: string; displayName: string };
+  metric: { key: string; unit: string | null };
+  availability: ForecastAvailability;
+  reason: string | null;
+  generatedAt: string;
+  lastObservationAt: string | null;
+  range: {
+    from: string | null;
+    to: string | null;
+    horizon: ForecastHorizon;
+    step: string;
+  };
+  model: {
+    kind: string;
+    windowSize: number;
+    trainingPoints: number;
+    trainingFrom: string;
+    trainingTo: string;
+    observedCoverage: number;
+    interpolatedPoints: number;
+    mae: number;
+    rmse: number;
+    mase: number;
+    intervalCoverage: number;
+    confidenceLevel: number;
+  } | null;
+  points: ForecastPoint[];
+};
+
 async function apiGet<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     headers: { Accept: "application/json" },
@@ -226,5 +276,23 @@ export function useMeasurementsMany(
 ) {
   return useQueries({
     queries: metrics.map((metric) => measurementsOptions(slug, metric, range, custom)),
+  });
+}
+
+export function useForecast(
+  slug: string,
+  metric: string | undefined,
+  horizon: ForecastHorizon,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ["forecast", slug, metric, horizon] as const,
+    queryFn: () => {
+      const params = new URLSearchParams({ metric: metric!, horizon });
+      return apiGet<ForecastResponse>(`/sensors/${slug}/forecast?${params.toString()}`);
+    },
+    enabled: isBrowser && enabled && metric !== undefined,
+    staleTime: 5 * 60_000,
+    retry: 0,
   });
 }
