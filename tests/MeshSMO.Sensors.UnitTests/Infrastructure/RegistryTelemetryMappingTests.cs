@@ -1,7 +1,7 @@
 using MeshSMO.Sensors.Application.Registry;
+using MeshSMO.Sensors.Infrastructure.Registry;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
-using MeshSMO.Sensors.Infrastructure.Registry;
 using Microsoft.Extensions.Options;
 
 namespace MeshSMO.Sensors.UnitTests.Infrastructure;
@@ -118,8 +118,8 @@ public sealed class RegistryTelemetryMappingTests : IDisposable
         var exception = await Assert.ThrowsAsync<SensorRegistryValidationException>(
             () => registry.LoadAsync(CancellationToken.None));
 
-        Assert.Contains(exception.Errors, error => error.Contains("unknown type 'radiation'"));
-        Assert.Contains(exception.Errors, error => error.Contains("is mapped more than once"));
+        Assert.Contains(exception.Errors, error => error.Contains("unknown type 'radiation'", StringComparison.Ordinal));
+        Assert.Contains(exception.Errors, error => error.Contains("is mapped more than once", StringComparison.Ordinal));
     }
 
     private IHostEnvironment TestHostEnvironment { get; } = new TestEnvironment();
@@ -133,9 +133,7 @@ public sealed class RegistryTelemetryMappingTests : IDisposable
     public void Dispose()
     {
         if (Directory.Exists(_directory))
-        {
             Directory.Delete(_directory, recursive: true);
-        }
     }
 
     private sealed class TestEnvironment : IHostEnvironment

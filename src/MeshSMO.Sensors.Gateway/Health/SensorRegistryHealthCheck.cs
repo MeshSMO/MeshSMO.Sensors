@@ -1,6 +1,6 @@
 using MeshSMO.Sensors.Application.Registry;
-using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace MeshSMO.Sensors.Gateway.Health;
 
@@ -19,13 +19,13 @@ public sealed class SensorRegistryHealthCheck(IServiceScopeFactory scopeFactory)
         {
             using var scope = scopeFactory.CreateScope();
             var registry = scope.ServiceProvider.GetRequiredService<ISensorRegistry>();
-            var sensors = await registry.LoadAsync(cancellationToken);
+            var sensors = await registry.LoadAsync(cancellationToken).ConfigureAwait(false);
             return HealthCheckResult.Healthy(
                 $"Registry loaded with {sensors.Count} sensor definition(s).");
         }
         catch (Exception exception)
         {
-            return new HealthCheckResult(
+            return new(
                 context.Registration.FailureStatus,
                 "Sensor registry could not be loaded.",
                 exception);

@@ -16,35 +16,34 @@ builder.Logging.AddSimpleConsole(options =>
     options.TimestampFormat = "yyyy-MM-dd HH:mm:ss ";
 });
 if (validateRegistryOnly)
-{
     builder.Services.AddSensorRegistry(builder.Configuration);
-}
 else
-{
     builder.Services.AddSensorsInfrastructure(builder.Configuration);
-}
 
 using var host = builder.Build();
-await using var scope = host.Services.CreateAsyncScope();
-var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DbMigrator");
-
-if (validateRegistryOnly)
+var scope = host.Services.CreateAsyncScope();
+await using (scope.ConfigureAwait(false))
 {
-    var registry = scope.ServiceProvider.GetRequiredService<ISensorRegistry>();
-    var sensors = await registry.LoadAsync(CancellationToken.None);
-    logger.LogInformation("Sensor registry is valid: {Total} sensor definitions", sensors.Count);
-    return;
+    var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DbMigrator");
+
+    if (validateRegistryOnly)
+    {
+        var registry = scope.ServiceProvider.GetRequiredService<ISensorRegistry>();
+        var sensors = await registry.LoadAsync(CancellationToken.None);
+        logger.LogInformation("Sensor registry is valid: {Total} sensor definitions", sensors.Count);
+        return;
+    }
+
+    logger.LogInformation("Applying MeshSMO Sensors database migrations");
+    var dbContext = scope.ServiceProvider.GetRequiredService<SensorsDbContext>();
+    await dbContext.Database.MigrateAsync();
+
+    logger.LogInformation("Synchronizing GitOps sensor registry");
+    var synchronizer = scope.ServiceProvider.GetRequiredService<ISensorRegistrySynchronizer>();
+    var result = await synchronizer.SynchronizeAsync(CancellationToken.None);
+    logger.LogInformation(
+        "Sensor registry synchronized: {Added} added, {Updated} updated, {Total} total",
+        result.Added,
+        result.Updated,
+        result.Total);
 }
-
-logger.LogInformation("Applying MeshSMO Sensors database migrations");
-var dbContext = scope.ServiceProvider.GetRequiredService<SensorsDbContext>();
-await dbContext.Database.MigrateAsync();
-
-logger.LogInformation("Synchronizing GitOps sensor registry");
-var synchronizer = scope.ServiceProvider.GetRequiredService<ISensorRegistrySynchronizer>();
-var result = await synchronizer.SynchronizeAsync(CancellationToken.None);
-logger.LogInformation(
-    "Sensor registry synchronized: {Added} added, {Updated} updated, {Total} total",
-    result.Added,
-    result.Updated,
-    result.Total);

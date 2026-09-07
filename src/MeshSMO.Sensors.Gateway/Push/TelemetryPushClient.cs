@@ -24,13 +24,11 @@ public sealed class TelemetryPushClient(HttpClient httpClient, IOptions<Telemetr
         };
         var apiKey = options.Value.ApiKey;
         if (!string.IsNullOrWhiteSpace(apiKey))
-        {
             request.Headers.Add("X-Api-Key", apiKey);
-        }
 
-        using var response = await httpClient.SendAsync(request, cancellationToken);
+        using var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
-        var result = await response.Content.ReadFromJsonAsync<TelemetryPushResponse>(cancellationToken);
+        var result = await response.Content.ReadFromJsonAsync<TelemetryPushResponse>(cancellationToken).ConfigureAwait(false);
         return result?.Accepted ?? 0;
     }
 }

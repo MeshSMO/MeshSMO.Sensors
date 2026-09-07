@@ -12,14 +12,14 @@ public sealed class TelemetryPushWorkerTests
     {
         var store = new FakeTelemetryStore(
         [
-            new PendingTelemetrySnapshot(9, DateTimeOffset.UnixEpoch, "Serial", """{"type":"sensor_poll"}""", []),
+            new(9, DateTimeOffset.UnixEpoch, "Serial", """{"type":"sensor_poll"}""", []),
         ]);
         string? apiKey = null;
         string? body = null;
         var handler = new StubHttpMessageHandler(async request =>
         {
             apiKey = request.Headers.TryGetValues("X-Api-Key", out var values) ? values.SingleOrDefault() : null;
-            body = await request.Content!.ReadAsStringAsync();
+            body = await request.Content!.ReadAsStringAsync().ConfigureAwait(false);
             return (System.Net.HttpStatusCode.OK, """{"accepted":1}""");
         });
         var client = CreateClient(handler, "secret", intervalSeconds: 1);
@@ -28,7 +28,7 @@ public sealed class TelemetryPushWorkerTests
             client,
             Options.Create(new TelemetryPushOptions
             {
-                ApiUrl = new Uri("http://localhost/"),
+                ApiUrl = new("http://localhost/"),
                 ApiKey = "secret",
                 BatchSize = 50,
                 IntervalSeconds = 1,
@@ -54,7 +54,7 @@ public sealed class TelemetryPushWorkerTests
     {
         var store = new FakeTelemetryStore(
         [
-            new PendingTelemetrySnapshot(9, DateTimeOffset.UnixEpoch, "Serial", """{"type":"sensor_poll"}""", []),
+            new(9, DateTimeOffset.UnixEpoch, "Serial", """{"type":"sensor_poll"}""", []),
         ]);
         var pushed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var handler = new StubHttpMessageHandler(_ =>
@@ -68,7 +68,7 @@ public sealed class TelemetryPushWorkerTests
             client,
             Options.Create(new TelemetryPushOptions
             {
-                ApiUrl = new Uri("http://localhost/"),
+                ApiUrl = new("http://localhost/"),
                 ApiKey = "secret",
                 BatchSize = 50,
                 IntervalSeconds = 3600,
@@ -94,7 +94,7 @@ public sealed class TelemetryPushWorkerTests
             client,
             Options.Create(new TelemetryPushOptions
             {
-                ApiUrl = new Uri("http://localhost/"),
+                ApiUrl = new("http://localhost/"),
                 ApiKey = "secret",
                 IntervalSeconds = 1,
             }),
@@ -132,8 +132,8 @@ public sealed class TelemetryPushWorkerTests
 
     private static TelemetryPushClient CreateClient(StubHttpMessageHandler handler, string apiKey, int intervalSeconds) =>
         new(
-            new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") },
-            Options.Create(new TelemetryPushOptions { ApiUrl = new Uri("http://localhost/"), ApiKey = apiKey }));
+            new(handler) { BaseAddress = new("http://localhost/") },
+            Options.Create(new TelemetryPushOptions { ApiUrl = new("http://localhost/"), ApiKey = apiKey }));
 
     private sealed class FakeTelemetryStore(IReadOnlyList<PendingTelemetrySnapshot> pending) : ILocalTelemetryStore
     {
@@ -181,8 +181,8 @@ public sealed class TelemetryPushWorkerTests
             CancellationToken cancellationToken)
         {
             RequestCount++;
-            var (statusCode, content) = await responder(request);
-            return new HttpResponseMessage(statusCode) { Content = new StringContent(content) };
+            var (statusCode, content) = await responder(request).ConfigureAwait(false);
+            return new(statusCode) { Content = new StringContent(content) };
         }
     }
 }

@@ -219,11 +219,7 @@ function SensorPage() {
         ))}
       </ul>
 
-      <Readings
-        slug={slug}
-        metrics={registry.metrics}
-        poll={registry.pollIntervalSeconds ?? undefined}
-      />
+      <Readings slug={slug} metrics={registry.metrics} poll={registry.pollIntervalSeconds ?? 60} />
 
       <History
         slug={slug}
@@ -233,6 +229,14 @@ function SensorPage() {
         mode={mode}
         from={search.from}
         to={search.to}
+        hasExplicitParams={Boolean(
+          search.metric ??
+          search.metrics ??
+          search.range ??
+          search.from ??
+          search.to ??
+          search.mode,
+        )}
       />
 
       <Diagnostics
@@ -257,15 +261,7 @@ function SensorHeader({ slug }: { slug: string }) {
   );
 }
 
-function Readings({
-  slug,
-  metrics,
-  poll,
-}: {
-  slug: string;
-  metrics: string[];
-  poll: number | undefined;
-}) {
+function Readings({ slug, metrics, poll }: { slug: string; metrics: string[]; poll: number }) {
   const { data, isPending, isError } = useLatest(slug, poll);
   const values = new Map((data?.values ?? []).map((v) => [v.metric, v]));
   // Ключи: реестр + всё, что реально прислал BFF (маппнутые ключи вроде
@@ -311,6 +307,32 @@ function Readings({
   );
 }
 
+const PREFS_KEY = "meshsmo:sensor-history";
+
+type HistoryPrefs = Pick<Search, "metrics" | "range" | "from" | "to" | "mode">;
+
+function readHistoryPrefs(slug: string): HistoryPrefs | null {
+  try {
+    const raw = window.localStorage.getItem(PREFS_KEY);
+    if (!raw) return null;
+    const all = JSON.parse(raw) as Record<string, HistoryPrefs>;
+    return all[slug] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function writeHistoryPrefs(slug: string, prefs: HistoryPrefs): void {
+  try {
+    const raw = window.localStorage.getItem(PREFS_KEY);
+    const all = (raw ? JSON.parse(raw) : {}) as Record<string, HistoryPrefs>;
+    all[slug] = prefs;
+    window.localStorage.setItem(PREFS_KEY, JSON.stringify(all));
+  } catch {
+    // localStorage может быть недоступен (приватный режим) — просто пропускаем.
+  }
+}
+
 function History({
   slug,
   metrics,
@@ -319,6 +341,7 @@ function History({
   mode,
   from,
   to,
+  hasExplicitParams,
 }: {
   slug: string;
   metrics: string[];
@@ -327,6 +350,7 @@ function History({
   mode: ChartMode;
   from?: string | undefined;
   to?: string | undefined;
+  hasExplicitParams: boolean;
 }) {
   const navigate = Route.useNavigate();
   const update = (next: { [K in keyof Search]?: Search[K] | undefined }) =>
@@ -342,6 +366,34 @@ function History({
       replace: true,
       resetScroll: false,
     });
+
+  // Восстановление сохранённых настроек: только после гидрации и только
+  // если в адресе нет явных параметров.
+  useEffect(() => {
+    if (hasExplicitParams) return;
+
+    const saved = readHistoryPrefs(slug);
+    if (!saved) return;
+
+    const next: { [K in keyof Search]?: Search[K] | undefined } = {};
+    if (saved.metrics) next.metrics = saved.metrics;
+    if (saved.range) next.range = saved.range;
+    if (saved.from) next.from = saved.from;
+    if (saved.to) next.to = saved.to;
+    if (saved.mode) next.mode = saved.mode;
+    if (Object.keys(next).length > 0) update(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug]);
+
+  // Сохранение текущего выбора для этого датчика.
+  useEffect(() => {
+    const prefs: HistoryPrefs = { metrics: selected.join(","), range };
+    if (from) prefs.from = from;
+    if (to) prefs.to = to;
+    if (mode === "combined") prefs.mode = "combined";
+
+    writeHistoryPrefs(slug, prefs);
+  }, [slug, selected, range, from, to, mode]);
 
   const custom = { from, to };
   const results = useMeasurementsMany(slug, selected, range, custom);

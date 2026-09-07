@@ -18,16 +18,16 @@ public sealed class TelemetryPushClientTests
         {
             requestUrl = request.RequestUri?.PathAndQuery;
             apiKey = request.Headers.TryGetValues("X-Api-Key", out var values) ? values.SingleOrDefault() : null;
-            body = await request.Content!.ReadAsStringAsync();
+            body = await request.Content!.ReadAsStringAsync().ConfigureAwait(false);
             return (HttpStatusCode.OK, """{"accepted":2}""");
         });
         var client = CreateClient(handler, "secret-key");
         var batch = new TelemetryBatchDto(2,
         [
-            new TelemetrySnapshotDto(11, DateTimeOffset.UnixEpoch, "Serial", """{"a":1}""",
-                [new TelemetryReadingDto("core.battery_mv", 4100, null)]),
-            new TelemetrySnapshotDto(12, DateTimeOffset.UnixEpoch, "Serial", """{"a":2}""",
-                [new TelemetryReadingDto("radio.rssi", -92, null)]),
+            new(11, DateTimeOffset.UnixEpoch, "Serial", """{"a":1}""",
+                [new("core.battery_mv", 4100, null)]),
+            new(12, DateTimeOffset.UnixEpoch, "Serial", """{"a":2}""",
+                [new("radio.rssi", -92, null)]),
         ]);
 
         var accepted = await client.PushAsync(batch, CancellationToken.None);
@@ -60,8 +60,8 @@ public sealed class TelemetryPushClientTests
 
     private static TelemetryPushClient CreateClient(StubHttpMessageHandler handler, string? apiKey) =>
         new(
-            new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") },
-            Options.Create(new TelemetryPushOptions { ApiUrl = new Uri("http://localhost/"), ApiKey = apiKey }));
+            new(handler) { BaseAddress = new("http://localhost/") },
+            Options.Create(new TelemetryPushOptions { ApiUrl = new("http://localhost/"), ApiKey = apiKey }));
 
     private sealed class StubHttpMessageHandler(
         Func<HttpRequestMessage, Task<(HttpStatusCode, string)>> responder) : HttpMessageHandler
@@ -75,8 +75,8 @@ public sealed class TelemetryPushClientTests
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
-            var (statusCode, content) = await responder(request);
-            return new HttpResponseMessage(statusCode) { Content = new StringContent(content) };
+            var (statusCode, content) = await responder(request).ConfigureAwait(false);
+            return new(statusCode) { Content = new StringContent(content) };
         }
     }
 }

@@ -22,6 +22,8 @@ public readonly partial record struct SensorSlug
 
     public override string ToString() => Value;
 
+#pragma warning disable MA0009
     [GeneratedRegex("^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){1,61}[a-z0-9]$", RegexOptions.CultureInvariant)]
+#pragma warning restore MA0009
     private static partial Regex SlugPattern();
 }

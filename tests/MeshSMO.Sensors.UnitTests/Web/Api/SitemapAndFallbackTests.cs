@@ -2,8 +2,8 @@ using System.Net;
 using System.Xml.Linq;
 using MeshSMO.Sensors.Domain.Sensors;
 using MeshSMO.Sensors.Infrastructure;
-using MeshSMO.Sensors.Web.Api;
 using MeshSMO.Sensors.Infrastructure.Persistence;
+using MeshSMO.Sensors.Web.Api;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -27,7 +27,7 @@ public sealed class SitemapAndFallbackTests : IDisposable
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
-        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             ["ConnectionStrings:Sensors"] = "Host=localhost;Database=unused",
             ["Registry:Directory"] = Path.Combine(Path.GetTempPath(), $"registry-{Guid.NewGuid():N}"),
@@ -35,8 +35,8 @@ public sealed class SitemapAndFallbackTests : IDisposable
         });
         builder.Logging.ClearProviders();
         builder.Services.AddSensorsInfrastructure(builder.Configuration);
-        builder.Services.RemoveAll(typeof(DbContextOptions<SensorsDbContext>));
-        builder.Services.RemoveAll(typeof(IDbContextOptionsConfiguration<SensorsDbContext>));
+        builder.Services.RemoveAll<DbContextOptions<SensorsDbContext>>();
+        builder.Services.RemoveAll<IDbContextOptionsConfiguration<SensorsDbContext>>();
         builder.Services.AddDbContext<SensorsDbContext>(options => options.UseInMemoryDatabase(_databaseName));
         builder.Services.AddHealthChecks();
         _app = builder.Build();
@@ -46,9 +46,9 @@ public sealed class SitemapAndFallbackTests : IDisposable
 
         using var scope = _app.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<SensorsDbContext>();
-        dbContext.Sensors.Add(new Sensor(
-            new SensorId(Guid.NewGuid()),
-            new SensorSlug("smolensk-center"),
+        dbContext.Sensors.Add(new(
+            new(Guid.NewGuid()),
+            new("smolensk-center"),
             "Смоленск — центр",
             null,
             "pub-key-sitemap",
@@ -78,8 +78,8 @@ public sealed class SitemapAndFallbackTests : IDisposable
         var xml = XDocument.Parse(await response.Content.ReadAsStringAsync());
         var ns = xml.Root!.Name.Namespace;
         var locs = xml.Root.Descendants(ns + "loc").Select(element => element.Value).ToArray();
-        Assert.Contains("https://sensors.meshsmo.ru/sensors/smolensk-center", locs);
-        Assert.Contains("https://sensors.meshsmo.ru/sensors", locs);
+        Assert.Contains("https://sensors.meshsmo.ru/sensors/smolensk-center", locs, StringComparer.Ordinal);
+        Assert.Contains("https://sensors.meshsmo.ru/sensors", locs, StringComparer.Ordinal);
         Assert.Equal(4, locs.Length);
     }
 

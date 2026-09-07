@@ -6,17 +6,13 @@ public static class RegistryDuration
 {
     public static bool TryParse(string? value, out TimeSpan duration)
     {
-        duration = default;
+        duration = TimeSpan.Zero;
         if (string.IsNullOrWhiteSpace(value))
-        {
             return false;
-        }
 
         var unitLength = value.EndsWith("ms", StringComparison.Ordinal) ? 2 : 1;
         if (value.Length <= unitLength || !double.TryParse(value[..^unitLength], NumberStyles.None, CultureInfo.InvariantCulture, out var amount))
-        {
             return false;
-        }
 
         try
         {
@@ -27,7 +23,7 @@ public static class RegistryDuration
                 "m" => TimeSpan.FromMinutes(amount),
                 "h" => TimeSpan.FromHours(amount),
                 "d" => TimeSpan.FromDays(amount),
-                _ => default,
+                _ => TimeSpan.Zero,
             };
         }
         catch (OverflowException)

@@ -22,7 +22,7 @@ public static class MeasurementHistoryEndpoints
             SensorSlug slugValue;
             try
             {
-                slugValue = new SensorSlug(slug);
+                slugValue = new(slug);
             }
             catch (ArgumentException)
             {
@@ -34,30 +34,20 @@ public static class MeasurementHistoryEndpoints
                 .Include(entity => entity.Metrics)
                 .SingleOrDefaultAsync(
                     entity => entity.Slug == slugValue && entity.Enabled && entity.PublicVisible,
-                    cancellationToken);
+                    cancellationToken).ConfigureAwait(false);
             if (sensor is null)
-            {
                 return Results.NotFound(new { error = "NotFound" });
-            }
 
             if (!MeasurementResolutionPolicy.TryParse(resolution, out var requestedResolution))
-            {
                 return Validation("resolution must be one of: auto, raw, 5m, 15m, 1h, 6h, 1d.");
-            }
             if (string.IsNullOrWhiteSpace(metric))
-            {
                 return Validation("metric is required.");
-            }
             if (from is null || to is null)
-            {
                 return Validation("from and to are required and must be ISO-8601 timestamps.");
-            }
             var fromValue = from.Value.ToUniversalTime();
             var toValue = to.Value.ToUniversalTime();
             if (fromValue >= toValue)
-            {
                 return Validation("from must be earlier than to.");
-            }
 
             var range = toValue - fromValue;
             var effectiveResolution = requestedResolution ?? MeasurementResolutionPolicy.ResolveAuto(range);
@@ -70,7 +60,7 @@ public static class MeasurementHistoryEndpoints
             }
 
             var metricMeta = sensor.Metrics
-                .SingleOrDefault(entity => entity.MetricKey == metric);
+                .SingleOrDefault(entity => string.Equals(entity.MetricKey, metric, StringComparison.Ordinal));
             if (metricMeta is null)
             {
                 return Validation(
@@ -83,7 +73,7 @@ public static class MeasurementHistoryEndpoints
                 fromValue,
                 toValue,
                 effectiveResolution,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
             return Results.Ok(new
             {
                 sensor = new { slug = sensor.Slug.Value, displayName = sensor.DisplayName },

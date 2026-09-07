@@ -27,7 +27,7 @@ internal static class RepeaterSerialResponseParser
     {
         const string suffix = " vars";
         if (value.EndsWith(suffix, StringComparison.Ordinal) &&
-            int.TryParse(value.AsSpan(0, value.Length - suffix.Length), out count))
+            int.TryParse(value.AsSpan(0, value.Length - suffix.Length), System.Globalization.CultureInfo.InvariantCulture, out count))
         {
             return true;
         }
@@ -39,16 +39,14 @@ internal static class RepeaterSerialResponseParser
     public static RepeaterSensorPage ParseSensorPage(IReadOnlyList<string> lines)
     {
         if (lines.Count == 0 || !TryParseSensorCount(lines[0], out var count))
-        {
-            return new RepeaterSensorPage(0, new Dictionary<string, string>(), null);
-        }
+            return new(0, new Dictionary<string, string>(StringComparer.Ordinal), null);
 
         var values = new Dictionary<string, string>(StringComparer.Ordinal);
         int? next = null;
         foreach (var line in lines.Skip(1))
         {
             if (line.StartsWith(NextPrefix, StringComparison.Ordinal) &&
-                int.TryParse(line.AsSpan(NextPrefix.Length), out var nextValue))
+                int.TryParse(line.AsSpan(NextPrefix.Length), System.Globalization.CultureInfo.InvariantCulture, out var nextValue))
             {
                 next = nextValue;
                 continue;
@@ -56,11 +54,9 @@ internal static class RepeaterSerialResponseParser
 
             var separator = line.IndexOf('=');
             if (separator > 0)
-            {
                 values[line[..separator]] = line[(separator + 1)..];
-            }
         }
 
-        return new RepeaterSensorPage(count, values, next);
+        return new(count, values, next);
     }
 }

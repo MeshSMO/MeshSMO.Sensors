@@ -2,15 +2,6 @@ using MeshSMO.Sensors.Domain.Sensors;
 
 namespace MeshSMO.Sensors.Domain.Polling;
 
-public enum PollAttemptStatus
-{
-    Started,
-    Succeeded,
-    TimedOut,
-    Failed,
-    Cancelled,
-}
-
 public sealed class PollAttempt
 {
     private PollAttempt()

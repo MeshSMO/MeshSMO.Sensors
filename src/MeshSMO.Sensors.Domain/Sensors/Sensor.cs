@@ -88,19 +88,13 @@ public sealed class Sensor
         ArgumentException.ThrowIfNullOrWhiteSpace(protocolId);
 
         if (pollInterval <= TimeSpan.Zero || pollInterval.TotalSeconds > int.MaxValue)
-        {
             throw new ArgumentOutOfRangeException(nameof(pollInterval));
-        }
 
         if (pollTimeout <= TimeSpan.Zero || pollTimeout.TotalSeconds > int.MaxValue)
-        {
             throw new ArgumentOutOfRangeException(nameof(pollTimeout));
-        }
 
         if (pollMaxAttempts is < 1 or > 10)
-        {
             throw new ArgumentOutOfRangeException(nameof(pollMaxAttempts));
-        }
 
         var metricKeys = metrics
             .Select(metric => metric.Trim())
@@ -110,9 +104,7 @@ public sealed class Sensor
             .ToArray();
 
         if (metricKeys.Length == 0)
-        {
             throw new ArgumentException("A sensor must expose at least one metric.", nameof(metrics));
-        }
 
         Slug = slug;
         DisplayName = displayName.Trim();
@@ -132,14 +124,10 @@ public sealed class Sensor
 
         var removed = Metrics.Where(existing => !metricKeys.Contains(existing.MetricKey, StringComparer.Ordinal)).ToArray();
         foreach (var metric in removed)
-        {
             Metrics.Remove(metric);
-        }
 
         var existingKeys = Metrics.Select(metric => metric.MetricKey).ToHashSet(StringComparer.Ordinal);
         foreach (var metricKey in metricKeys.Where(metricKey => !existingKeys.Contains(metricKey)))
-        {
-            Metrics.Add(new SensorMetric(Id, metricKey));
-        }
+            Metrics.Add(new(Id, metricKey));
     }
 }

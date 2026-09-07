@@ -1,0 +1,29 @@
+{
+  // Shared workspace formatting rules. Prettier (src/web/.prettierrc) is the
+  // canonical formatter for web files; .editorconfig drives the rest (C#, XML, YAML).
+  // Line endings are enforced by .gitattributes (always LF) — keep files.eol in sync.
+  "files.eol": "\n",
+  "editor.formatOnSave": true,
+
+  // Prettier is the default formatter only for languages it owns; C#/XML keep
+  // their own formatters, which follow .editorconfig.
+  "[typescript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[typescriptreact]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[javascript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[json]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[jsonc]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[css]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[scss]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[html]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[markdown]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[yaml]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "prettier.requireConfig": true,
+
+  // ESLint (flat config lives in src/web/eslint.config.js) + auto-fix on save,
+  // which also applies prettier/prettier fixes.
+  "eslint.useFlatConfig": true,
+  "eslint.workingDirectories": [{ "pattern": "src/web" }],
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  }
+}

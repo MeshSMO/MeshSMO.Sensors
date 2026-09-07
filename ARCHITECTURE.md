@@ -42,7 +42,7 @@
 
 ### 2.1. Телеметрия самого репитера
 
-`Worker` (BackgroundService): connect → `ver` handshake → раз в `MeshCore:TelemetryCollectionIntervalSeconds` → `GetTelemetryAsync` (HTTP `GET /api/stats` либо serial CLI `stats-core/radio/packets` + `sensor list`) → `ILocalTelemetryStore.AppendAsync` (snapshot + плоские readings в SQLite) → ack-цикл web'а выгружает.
+`Worker` (BackgroundService), **opt-in и по умолчанию выключен** (`MeshCore:TelemetryCollectionEnabled`, compose-переменная `MESHCORE_TELEMETRY_COLLECTION_ENABLED`; сбор не влияет на опрос датчиков — панельная сессия логинится лениво): connect → `ver` handshake → раз в `MeshCore:TelemetryCollectionIntervalSeconds` → `GetTelemetryAsync` (HTTP `GET /api/stats` либо serial CLI `stats-core/radio/packets` + `sensor list`) → `ILocalTelemetryStore.AppendAsync` (snapshot + плоские readings в SQLite) → ack-цикл web'а выгружает. Выключено осознанно: сырой статус панели репитера (core.*, archive.*, конфиги, events) никто в web не потребляет, а он раздувает landing-таблицы.
 
 ### 2.2. Опрос датчиков (основной продуктовый путь)
 

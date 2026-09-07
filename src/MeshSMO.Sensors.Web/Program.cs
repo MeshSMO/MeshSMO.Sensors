@@ -65,7 +65,7 @@ builder.Services.AddRateLimiter(options =>
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.AddPolicy("public-api", context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
-        _ => new FixedWindowRateLimiterOptions
+        _ => new()
         {
             PermitLimit = 120,
             Window = TimeSpan.FromMinutes(1),
@@ -77,9 +77,7 @@ builder.Services.AddHttpClient<GatewayTelemetryClient>((serviceProvider, client)
 {
     var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<GatewayIngestionOptions>>().Value;
     if (options.BaseUrl is not null)
-    {
-        client.BaseAddress = new Uri($"{options.BaseUrl.AbsoluteUri.TrimEnd('/')}/");
-    }
+        client.BaseAddress = new($"{options.BaseUrl.AbsoluteUri.TrimEnd('/')}/");
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 builder.Services.AddHostedService<GatewayIngestionWorker>();
@@ -90,11 +88,11 @@ app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseRateLimiter();
 
-app.MapHealthChecks("/health/live", new HealthCheckOptions
+app.MapHealthChecks("/health/live", new()
 {
     Predicate = _ => false,
 });
-app.MapHealthChecks("/health/ready", new HealthCheckOptions
+app.MapHealthChecks("/health/ready", new()
 {
     Predicate = registration => registration.Tags.Contains("ready"),
 });
@@ -122,7 +120,7 @@ app.MapGet("/api/v1/telemetry/snapshots", async Task<IResult> (
             importedAt = snapshot.ImportedAt,
             transport = snapshot.Transport,
         })
-        .ToListAsync(cancellationToken);
+        .ToListAsync(cancellationToken).ConfigureAwait(false);
     return Results.Ok(new { snapshots });
 });
 

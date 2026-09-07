@@ -12,6 +12,8 @@
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
     <PackageReference Include="System.IO.Ports" />
+    <PackageReference Include="Meziantou.Analyzer" />
+    <PackageReference Include="Roslynator.Analyzers" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\MeshSMO.Sensors.Application\MeshSMO.Sensors.Application.csproj" />

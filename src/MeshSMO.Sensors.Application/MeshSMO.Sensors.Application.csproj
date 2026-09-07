@@ -2,6 +2,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\MeshSMO.Sensors.Domain\MeshSMO.Sensors.Domain.csproj" />
+    <PackageReference Include="Meziantou.Analyzer" />
+    <PackageReference Include="Roslynator.Analyzers" />
   </ItemGroup>
 
 </Project>

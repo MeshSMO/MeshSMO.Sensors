@@ -42,7 +42,7 @@ public sealed class GatewayIngestionWorker(
         {
             try
             {
-                await IngestPendingBatchAsync(ingestionOptions, stoppingToken);
+                await IngestPendingBatchAsync(ingestionOptions, stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -58,7 +58,7 @@ public sealed class GatewayIngestionWorker(
 
             try
             {
-                await timer.WaitForNextTickAsync(stoppingToken);
+                await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -69,24 +69,23 @@ public sealed class GatewayIngestionWorker(
 
     private async Task IngestPendingBatchAsync(GatewayIngestionOptions ingestionOptions, CancellationToken cancellationToken)
     {
-        var batch = await client.FetchPendingAsync(ingestionOptions.BatchSize, cancellationToken);
+        var batch = await client.FetchPendingAsync(ingestionOptions.BatchSize, cancellationToken).ConfigureAwait(false);
         if (batch is null || batch.Snapshots.Count == 0)
-        {
             return;
-        }
 
         List<long> ackIds;
         int imported;
-        await using (var scope = scopeFactory.CreateAsyncScope())
+        var scope = scopeFactory.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
         {
             var importer = scope.ServiceProvider.GetRequiredService<GatewayTelemetryImporter>();
-            imported = await importer.ImportBatchAsync(batch.Snapshots, cancellationToken);
+            imported = await importer.ImportBatchAsync(batch.Snapshots, cancellationToken).ConfigureAwait(false);
             ackIds = batch.Snapshots.Select(snapshot => snapshot.Id).ToList();
         }
 
         // Acknowledge only after the PostgreSQL write committed; already stored
         // snapshots are acknowledged as well so the gateway outbox can shrink.
-        await client.AcknowledgeAsync(ackIds, cancellationToken);
+        await client.AcknowledgeAsync(ackIds, cancellationToken).ConfigureAwait(false);
         logger.LogInformation(
             "Imported {ImportedCount} of {BatchCount} gateway telemetry snapshots",
             imported,

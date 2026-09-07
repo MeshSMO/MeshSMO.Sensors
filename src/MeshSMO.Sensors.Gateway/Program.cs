@@ -1,12 +1,12 @@
 using System.Text.Json.Serialization;
 using MeshSMO.Sensors.Gateway;
-using MeshSMO.Sensors.Gateway.Health;
-using MeshSMO.Sensors.Infrastructure;
 using MeshSMO.Sensors.Gateway.Api;
+using MeshSMO.Sensors.Gateway.Health;
 using MeshSMO.Sensors.Gateway.LocalStorage;
 using MeshSMO.Sensors.Gateway.MeshCore;
 using MeshSMO.Sensors.Gateway.Polling;
 using MeshSMO.Sensors.Gateway.Push;
+using MeshSMO.Sensors.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
@@ -40,10 +40,7 @@ builder.Services
         "SensorPolling:RetryBackoffMinMs/MaxMs must be between 0 and 60000, MinMs <= MaxMs.")
     .ValidateOnStart();
 
-builder.Services.ConfigureHttpJsonOptions(options =>
-{
-    options.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
-});
+builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull);
 
 builder.Services
     .AddOptions<GatewayApiOptions>()
@@ -64,7 +61,7 @@ builder.Services
         "Push:ApiKey is required when Push:ApiUrl is configured.")
     .Validate(
         static options => options.ApiUrl is null || options.AllowInsecureHttp ||
-            options.ApiUrl.Scheme == Uri.UriSchemeHttps,
+string.Equals(options.ApiUrl.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal),
         "Push:ApiUrl must use HTTPS unless Push:AllowInsecureHttp is enabled.")
     .Validate(
         static options => options.BatchSize > 0,
@@ -78,9 +75,7 @@ builder.Services.AddHttpClient<TelemetryPushClient>((serviceProvider, client) =>
 {
     var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<TelemetryPushOptions>>().Value;
     if (options.ApiUrl is not null)
-    {
-        client.BaseAddress = new Uri($"{options.ApiUrl.AbsoluteUri.TrimEnd('/')}/");
-    }
+        client.BaseAddress = new($"{options.ApiUrl.AbsoluteUri.TrimEnd('/')}/");
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 
@@ -88,7 +83,7 @@ var app = builder.Build();
 
 // Fail fast if the local outbox cannot be created/migrated: every hosted
 // service and the telemetry API depend on it.
-await LocalOutboxDatabase.MigrateAsync(app.Services);
+await LocalOutboxDatabase.MigrateAsync(app.Services).ConfigureAwait(false);
 
 app.MapTelemetryApi();
 

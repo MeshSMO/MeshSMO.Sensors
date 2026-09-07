@@ -166,21 +166,19 @@ public sealed class GatewayIngestEndpointsTests : IDisposable
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
-        var configuration = new Dictionary<string, string?>
+        var configuration = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             ["ConnectionStrings:Sensors"] = "Host=localhost;Database=unused",
             ["Registry:Directory"] = Path.Combine(Path.GetTempPath(), $"registry-{Guid.NewGuid():N}"),
         };
         foreach (var (key, value) in settings)
-        {
             configuration[key] = value;
-        }
 
         builder.Configuration.AddInMemoryCollection(configuration);
         builder.Logging.ClearProviders();
         builder.Services.AddSensorsInfrastructure(builder.Configuration);
-        builder.Services.RemoveAll(typeof(DbContextOptions<SensorsDbContext>));
-        builder.Services.RemoveAll(typeof(IDbContextOptionsConfiguration<SensorsDbContext>));
+        builder.Services.RemoveAll<DbContextOptions<SensorsDbContext>>();
+        builder.Services.RemoveAll<IDbContextOptionsConfiguration<SensorsDbContext>>();
         builder.Services.AddDbContext<SensorsDbContext>(options =>
             options.UseInMemoryDatabase(_databaseName));
         builder.Services.AddHealthChecks();
@@ -197,9 +195,9 @@ public sealed class GatewayIngestEndpointsTests : IDisposable
 
         using var scope = app.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<SensorsDbContext>();
-        dbContext.Sensors.Add(new Sensor(
-            new SensorId(Guid.NewGuid()),
-            new SensorSlug("smolensk-center"),
+        dbContext.Sensors.Add(new(
+            new(Guid.NewGuid()),
+            new("smolensk-center"),
             "Смоленск — центр",
             null,
             "pub-key-1",

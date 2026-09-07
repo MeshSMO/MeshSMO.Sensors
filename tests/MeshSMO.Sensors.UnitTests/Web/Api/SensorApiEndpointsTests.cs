@@ -3,17 +3,17 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using MeshSMO.Sensors.Domain.Sensors;
 using MeshSMO.Sensors.Infrastructure;
-using MeshSMO.Sensors.Web.Api;
 using MeshSMO.Sensors.Infrastructure.Persistence;
+using MeshSMO.Sensors.Web.Api;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 
 namespace MeshSMO.Sensors.UnitTests.Web.Api;
@@ -28,15 +28,15 @@ public sealed class SensorApiEndpointsTests : IDisposable
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
-        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             ["ConnectionStrings:Sensors"] = "Host=localhost;Database=unused",
             ["Registry:Directory"] = Path.Combine(Path.GetTempPath(), $"registry-{Guid.NewGuid():N}"),
         });
         builder.Logging.ClearProviders();
         builder.Services.AddSensorsInfrastructure(builder.Configuration);
-        builder.Services.RemoveAll(typeof(DbContextOptions<SensorsDbContext>));
-        builder.Services.RemoveAll(typeof(IDbContextOptionsConfiguration<SensorsDbContext>));
+        builder.Services.RemoveAll<DbContextOptions<SensorsDbContext>>();
+        builder.Services.RemoveAll<IDbContextOptionsConfiguration<SensorsDbContext>>();
         builder.Services.AddDbContext<SensorsDbContext>(options =>
             options.UseInMemoryDatabase(_databaseName));
         builder.Services.AddHealthChecks();
@@ -48,8 +48,8 @@ public sealed class SensorApiEndpointsTests : IDisposable
         var dbContext = scope.ServiceProvider.GetRequiredService<SensorsDbContext>();
         var now = DateTimeOffset.UtcNow;
         var publicSensor = new Sensor(
-            new SensorId(Guid.NewGuid()),
-            new SensorSlug("smolensk-center"),
+            new(Guid.NewGuid()),
+            new("smolensk-center"),
             "Смоленск — центр",
             "Метеодатчик MeshSMO в центральной части Смоленска.",
             "pub-key-1",
@@ -66,8 +66,8 @@ public sealed class SensorApiEndpointsTests : IDisposable
             ["temperature", "humidity"],
             now);
         var hiddenSensor = new Sensor(
-            new SensorId(Guid.NewGuid()),
-            new SensorSlug("private-node"),
+            new(Guid.NewGuid()),
+            new("private-node"),
             "Private node",
             null,
             "pub-key-2",
@@ -84,7 +84,7 @@ public sealed class SensorApiEndpointsTests : IDisposable
             ["battery"],
             now);
         dbContext.Sensors.AddRange(publicSensor, hiddenSensor);
-        dbContext.SensorStatuses.Add(new SensorStatusSnapshot(publicSensor.Id, now) { State = SensorState.Online });
+        dbContext.SensorStatuses.Add(new(publicSensor.Id, now) { State = SensorState.Online });
         dbContext.SaveChanges();
         _client = (_app.Services.GetRequiredService<IServer>() as TestServer)!.CreateClient();
     }

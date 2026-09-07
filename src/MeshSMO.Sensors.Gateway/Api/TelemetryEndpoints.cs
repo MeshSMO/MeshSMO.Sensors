@@ -15,20 +15,20 @@ public static class TelemetryEndpoints
             var apiKey = apiOptions.ApiKey;
             application.Use(async (context, next) =>
             {
-                if (context.Request.Path.StartsWithSegments("/api/telemetry") &&
+                if (context.Request.Path.StartsWithSegments("/api/telemetry", StringComparison.Ordinal) &&
                     !string.Equals(context.Request.Headers["X-Api-Key"], apiKey, StringComparison.Ordinal))
                 {
                     context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    await context.Response.WriteAsJsonAsync(new { error = "Unauthorized" });
+                    await context.Response.WriteAsJsonAsync(new { error = "Unauthorized" }).ConfigureAwait(false);
                     return;
                 }
 
-                await next();
+                await next().ConfigureAwait(false);
             });
         }
 
-        app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
-        app.MapHealthChecks("/health/ready", new HealthCheckOptions
+        app.MapHealthChecks("/health/live", new() { Predicate = _ => false });
+        app.MapHealthChecks("/health/ready", new()
         {
             Predicate = registration => registration.Tags.Contains("ready"),
         });
@@ -42,8 +42,8 @@ public static class TelemetryEndpoints
             var requested = maxCount is null or < 1 ? 100 : maxCount.Value;
             var limit = Math.Min(requested, options.Value.MaximumBatchSize);
 
-            var snapshots = await store.ReadPendingAsync(limit, cancellationToken);
-            var pendingCount = await store.CountPendingAsync(cancellationToken);
+            var snapshots = await store.ReadPendingAsync(limit, cancellationToken).ConfigureAwait(false);
+            var pendingCount = await store.CountPendingAsync(cancellationToken).ConfigureAwait(false);
 
             var items = snapshots
                 .Select(snapshot => new TelemetrySnapshotDto(
@@ -68,11 +68,9 @@ public static class TelemetryEndpoints
             CancellationToken cancellationToken) =>
         {
             if (request.Ids.Count == 0)
-            {
                 return Results.Ok(new AcknowledgeResponse(0));
-            }
 
-            await store.AcknowledgeAsync(request.Ids.ToArray(), cancellationToken);
+            await store.AcknowledgeAsync(request.Ids.ToArray(), cancellationToken).ConfigureAwait(false);
             return Results.Ok(new AcknowledgeResponse(request.Ids.Count));
         });
 

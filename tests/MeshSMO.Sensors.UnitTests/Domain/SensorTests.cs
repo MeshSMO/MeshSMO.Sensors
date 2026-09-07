@@ -7,7 +7,7 @@ public sealed class SensorTests
     [Fact]
     public void ApplyConfiguration_reconciles_metric_keys()
     {
-        var now = DateTimeOffset.Parse("2026-09-05T12:00:00Z");
+        var now = DateTimeOffset.Parse("2026-09-05T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
         var sensor = CreateSensor(["temperature", "humidity"], now);
 
         sensor.ApplyConfiguration(
@@ -28,14 +28,14 @@ public sealed class SensorTests
             ["temperature", "battery"],
             now.AddMinutes(1));
 
-        Assert.Equal(["battery", "temperature"], sensor.Metrics.Select(metric => metric.MetricKey).Order());
+        Assert.Equal(["battery", "temperature"], sensor.Metrics.Select(metric => metric.MetricKey).Order(StringComparer.Ordinal), StringComparer.Ordinal);
         Assert.Equal(600, sensor.PollIntervalSeconds);
     }
 
     private static Sensor CreateSensor(string[] metrics, DateTimeOffset now) =>
         new(
             SensorId.New(),
-            new SensorSlug("test-sensor"),
+            new("test-sensor"),
             "Test sensor",
             null,
             "public-key",

@@ -15,6 +15,13 @@ public sealed class MeshCoreOptions
 
     public int ReconnectDelaySeconds { get; set; } = 5;
 
+    /// <summary>
+    /// Collects the repeater panel telemetry (core.*, archive.*, history.*,
+    /// ...) into the local outbox. Off by default: the raw panel status is not
+    /// consumed by the main API and leaks repeater internals into storage.
+    /// </summary>
+    public bool TelemetryCollectionEnabled { get; set; }
+
     public int TelemetryCollectionIntervalSeconds { get; set; } = 60;
 
     public MeshCoreHttpOptions Http { get; set; } = new();

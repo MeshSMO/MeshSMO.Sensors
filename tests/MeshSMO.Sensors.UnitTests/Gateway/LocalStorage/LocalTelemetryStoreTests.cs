@@ -53,7 +53,7 @@ public sealed class LocalTelemetryStoreTests
 
         var temperature = Assert.Single(
             pending[0].Readings,
-            reading => reading.MetricKey == "sensors.temperature");
+            reading => string.Equals(reading.MetricKey, "sensors.temperature", StringComparison.Ordinal));
         Assert.Equal(21.5, temperature.NumericValue);
         Assert.Null(temperature.TextValue);
 
@@ -122,12 +122,9 @@ public sealed class LocalTelemetryStoreTests
 
     private sealed class TemporarySqliteDatabase : IDisposable
     {
-        public TemporarySqliteDatabase()
-        {
-            Path = System.IO.Path.Combine(
+        public TemporarySqliteDatabase() => Path = System.IO.Path.Combine(
                 System.IO.Path.GetTempPath(),
                 $"meshsmo-gateway-{Guid.NewGuid():N}.db");
-        }
 
         public string Path { get; }
 
@@ -142,9 +139,7 @@ public sealed class LocalTelemetryStoreTests
         private static void DeleteIfExists(string path)
         {
             if (File.Exists(path))
-            {
                 File.Delete(path);
-            }
         }
     }
 }

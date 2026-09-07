@@ -35,7 +35,7 @@ public sealed class MeshCoreTelHttpClient(
 
         return SendAuthorizedAsync(
             () => CreateTextRequest(HttpMethod.Post, "api/command", command),
-            static async (response, token) => await response.Content.ReadAsStringAsync(token),
+            static async (response, token) => await response.Content.ReadAsStringAsync(token).ConfigureAwait(false),
             cancellationToken);
     }
 
@@ -46,9 +46,9 @@ public sealed class MeshCoreTelHttpClient(
             : $"api/stats?series={Uri.EscapeDataString(series)}";
 
         return SendAuthorizedAsync(
-            () => new HttpRequestMessage(HttpMethod.Get, path),
+            () => new(HttpMethod.Get, path),
             static async (response, token) =>
-                await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(token), cancellationToken: token),
+                await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(token), cancellationToken: token).ConfigureAwait(false),
             cancellationToken);
     }
 
@@ -87,7 +87,7 @@ public sealed class MeshCoreTelHttpClient(
 
     private Task<JsonDocument> SendAcquisitionAsync(string path, object body, CancellationToken cancellationToken) =>
         SendAuthorizedAsync(
-            () => new HttpRequestMessage(HttpMethod.Post, path)
+            () => new(HttpMethod.Post, path)
             {
                 Content = new StringContent(
                     JsonSerializer.Serialize(body),
@@ -97,23 +97,20 @@ public sealed class MeshCoreTelHttpClient(
             static async (response, token) =>
                 await JsonDocument.ParseAsync(
                     await response.Content.ReadAsStreamAsync(token),
-                    cancellationToken: token),
+                    cancellationToken: token).ConfigureAwait(false),
             cancellationToken);
 
-    public void Dispose()
-    {
-        _requestLock.Dispose();
-    }
+    public void Dispose() => _requestLock.Dispose();
 
     private async Task<T> SendAuthorizedAsync<T>(
         Func<HttpRequestMessage> requestFactory,
         Func<HttpResponseMessage, CancellationToken, Task<T>> readResponse,
         CancellationToken cancellationToken)
     {
-        await _requestLock.WaitAsync(cancellationToken);
+        await _requestLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var token = await session.GetTokenAsync(AuthenticateAsync, cancellationToken);
+            var token = await session.GetTokenAsync(AuthenticateAsync, cancellationToken).ConfigureAwait(false);
             for (var attempt = 0; attempt < 2; attempt++)
             {
                 using var request = requestFactory();
@@ -121,16 +118,16 @@ public sealed class MeshCoreTelHttpClient(
                 using var response = await httpClient.SendAsync(
                     request,
                     HttpCompletionOption.ResponseHeadersRead,
-                    cancellationToken);
+                    cancellationToken).ConfigureAwait(false);
 
                 if (response.StatusCode == HttpStatusCode.Unauthorized && attempt == 0)
                 {
-                    token = await session.RefreshTokenAsync(token, AuthenticateAsync, cancellationToken);
+                    token = await session.RefreshTokenAsync(token, AuthenticateAsync, cancellationToken).ConfigureAwait(false);
                     continue;
                 }
 
-                await EnsureSuccessAsync(response, cancellationToken);
-                return await readResponse(response, cancellationToken);
+                await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+                return await readResponse(response, cancellationToken).ConfigureAwait(false);
             }
 
             throw new InvalidOperationException("The MeshCoreTel authorization retry loop exited unexpectedly.");
@@ -149,23 +146,23 @@ public sealed class MeshCoreTelHttpClient(
         using var response = await httpClient.SendAsync(
             request,
             HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+            cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
 
-        var token = (await response.Content.ReadAsStringAsync(cancellationToken)).Trim();
+        var token = (await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false)).Trim();
         if (string.IsNullOrEmpty(token))
-        {
             throw new InvalidOperationException("MeshCoreTel API returned an empty authentication token.");
-        }
 
         return token;
     }
 
     private static HttpRequestMessage CreateTextRequest(HttpMethod method, string path, string body)
     {
-        var request = new HttpRequestMessage(method, path);
-        request.Content = new StringContent(body, Encoding.UTF8);
-        request.Content.Headers.ContentType = new MediaTypeHeaderValue("text/plain")
+        var request = new HttpRequestMessage(method, path)
+        {
+            Content = new StringContent(body, Encoding.UTF8)
+        };
+        request.Content.Headers.ContentType = new("text/plain")
         {
             CharSet = "utf-8",
         };
@@ -177,15 +174,11 @@ public sealed class MeshCoreTelHttpClient(
         CancellationToken cancellationToken)
     {
         if (response.IsSuccessStatusCode)
-        {
             return;
-        }
 
-        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         if (responseBody.Length > MaximumErrorBodyLength)
-        {
             responseBody = responseBody[..MaximumErrorBodyLength];
-        }
 
         throw new MeshCoreTelApiException(response.StatusCode, responseBody);
     }

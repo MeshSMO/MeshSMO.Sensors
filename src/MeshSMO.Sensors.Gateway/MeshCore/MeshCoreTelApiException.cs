@@ -11,7 +11,19 @@ public sealed class MeshCoreTelApiException : Exception
         ResponseBody = responseBody;
     }
 
+    public MeshCoreTelApiException() : base()
+    {
+    }
+
+    public MeshCoreTelApiException(string? message) : base(message)
+    {
+    }
+
+    public MeshCoreTelApiException(string? message, Exception? innerException) : base(message, innerException)
+    {
+    }
+
     public HttpStatusCode StatusCode { get; }
 
-    public string ResponseBody { get; }
+    public string? ResponseBody { get; }
 }

@@ -14,6 +14,6 @@ public sealed class SensorsDbContextFactory : IDesignTimeDbContextFactory<Sensor
             .UseNpgsql(connectionString)
             .Options;
 
-        return new SensorsDbContext(options);
+        return new(options);
     }
 }

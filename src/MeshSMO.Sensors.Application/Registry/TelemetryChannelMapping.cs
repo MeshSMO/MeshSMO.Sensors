@@ -13,12 +13,7 @@ namespace MeshSMO.Sensors.Application.Registry;
 ///       unit: "В"
 /// </code>
 /// </summary>
-public sealed record TelemetryChannelMapping(
-    int Channel,
-    string? Type,
-    string Metric,
-    string? DisplayName,
-    string? Unit);
+public sealed record TelemetryChannelMapping(int Channel, string? Type, string Metric, string? DisplayName, string? Unit);
 
 public static class TelemetryTypes
 {

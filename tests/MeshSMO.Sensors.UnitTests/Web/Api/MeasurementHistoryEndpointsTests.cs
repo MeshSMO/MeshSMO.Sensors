@@ -33,15 +33,15 @@ public sealed class MeasurementHistoryEndpointsTests : IDisposable
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
-        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             ["ConnectionStrings:Sensors"] = "Host=localhost;Database=unused",
             ["Registry:Directory"] = Path.Combine(Path.GetTempPath(), $"registry-{Guid.NewGuid():N}"),
         });
         builder.Logging.ClearProviders();
         builder.Services.AddSensorsInfrastructure(builder.Configuration);
-        builder.Services.RemoveAll(typeof(DbContextOptions<SensorsDbContext>));
-        builder.Services.RemoveAll(typeof(IDbContextOptionsConfiguration<SensorsDbContext>));
+        builder.Services.RemoveAll<DbContextOptions<SensorsDbContext>>();
+        builder.Services.RemoveAll<IDbContextOptionsConfiguration<SensorsDbContext>>();
         builder.Services.AddDbContext<SensorsDbContext>(options =>
             options.UseSqlite($"Data Source={_databasePath}"));
         builder.Services.AddHealthChecks();
@@ -203,8 +203,8 @@ public sealed class MeasurementHistoryEndpointsTests : IDisposable
 
     private static Sensor CreateSensor(
         string slug, string displayName, bool enabled, bool visible, string publicKey) => new(
-        new SensorId(Guid.NewGuid()),
-        new SensorSlug(slug),
+        new(Guid.NewGuid()),
+        new(slug),
         displayName,
         null,
         publicKey,
@@ -239,7 +239,7 @@ public sealed class MeasurementHistoryEndpointsTests : IDisposable
         $"&from={Uri.EscapeDataString($"{from:O}")}&to={Uri.EscapeDataString($"{to:O}")}&resolution={resolution}";
 
     private static void AssertTimestamp(DateTimeOffset expected, string actual) =>
-        Assert.Equal(expected, DateTimeOffset.Parse(actual));
+        Assert.Equal(expected, DateTimeOffset.Parse(actual, System.Globalization.CultureInfo.InvariantCulture));
 
     private static void AssertPoint(JsonElement point, DateTimeOffset expectedTimestamp, double expectedValue)
     {

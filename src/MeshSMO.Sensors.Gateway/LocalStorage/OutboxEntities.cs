@@ -21,7 +21,7 @@ public sealed class OutboxSnapshot
     /// <summary>When the row was appended to the outbox (UTC).</summary>
     public DateTimeOffset CreatedAt { get; set; }
 
-    public List<OutboxReading> Readings { get; set; } = [];
+    public ICollection<OutboxReading> Readings { get; set; } = new List<OutboxReading>();
 }
 
 /// <summary>Flattened scalar from <see cref="OutboxSnapshot.PayloadJson"/> (key path like "sensors.temperature").</summary>

@@ -19,9 +19,7 @@ public sealed class RepeaterSerialClient(IOptions<MeshCoreOptions> options) : IR
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (_port?.IsOpen == true)
-        {
             return Task.CompletedTask;
-        }
 
         DisposePort();
         var port = new SerialPort(_options.PortName, _options.BaudRate)
@@ -34,14 +32,14 @@ public sealed class RepeaterSerialClient(IOptions<MeshCoreOptions> options) : IR
         port.Open();
         port.DiscardInBuffer();
         _port = port;
-        _reader = new StreamReader(port.BaseStream, Encoding.UTF8, false, leaveOpen: true);
+        _reader = new(port.BaseStream, Encoding.UTF8, false, leaveOpen: true);
         return Task.CompletedTask;
     }
 
     public async Task DisconnectAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        await _commandLock.WaitAsync(cancellationToken);
+        await _commandLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             DisposePort();
@@ -54,16 +52,16 @@ public sealed class RepeaterSerialClient(IOptions<MeshCoreOptions> options) : IR
 
     public async Task<string> ExecuteCommandAsync(string command, CancellationToken cancellationToken)
     {
-        var lines = await ExecuteCommandLinesAsync(command, cancellationToken);
+        var lines = await ExecuteCommandLinesAsync(command, cancellationToken).ConfigureAwait(false);
         return string.Join('\n', lines);
     }
 
     public async Task<JsonDocument> GetTelemetryAsync(CancellationToken cancellationToken)
     {
-        var core = await ExecuteCommandAsync("stats-core", cancellationToken);
-        var radio = await ExecuteCommandAsync("stats-radio", cancellationToken);
-        var packets = await ExecuteCommandAsync("stats-packets", cancellationToken);
-        var sensors = await ReadSensorSettingsAsync(cancellationToken);
+        var core = await ExecuteCommandAsync("stats-core", cancellationToken).ConfigureAwait(false);
+        var radio = await ExecuteCommandAsync("stats-radio", cancellationToken).ConfigureAwait(false);
+        var packets = await ExecuteCommandAsync("stats-packets", cancellationToken).ConfigureAwait(false);
+        var sensors = await ReadSensorSettingsAsync(cancellationToken).ConfigureAwait(false);
 
         return JsonSerializer.SerializeToDocument(new
         {
@@ -92,7 +90,7 @@ public sealed class RepeaterSerialClient(IOptions<MeshCoreOptions> options) : IR
                 nameof(command));
         }
 
-        await _commandLock.WaitAsync(cancellationToken);
+        await _commandLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var port = _port is { IsOpen: true }
@@ -101,8 +99,8 @@ public sealed class RepeaterSerialClient(IOptions<MeshCoreOptions> options) : IR
             var reader = _reader ?? throw new InvalidOperationException("The repeater serial reader is unavailable.");
 
             var bytes = Encoding.UTF8.GetBytes($"{command}\r");
-            await port.BaseStream.WriteAsync(bytes, cancellationToken);
-            await port.BaseStream.FlushAsync(cancellationToken);
+            await port.BaseStream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+            await port.BaseStream.FlushAsync(cancellationToken).ConfigureAwait(false);
 
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(_options.CommandTimeoutSeconds));
@@ -110,7 +108,7 @@ public sealed class RepeaterSerialClient(IOptions<MeshCoreOptions> options) : IR
             string? reply = null;
             while (!timeout.IsCancellationRequested)
             {
-                var line = await ReadLineAsync(reader, command, cancellationToken, timeout.Token);
+                var line = await ReadLineAsync(reader, command, cancellationToken, timeout.Token).ConfigureAwait(false);
 
                 if (RepeaterSerialResponseParser.TryExtractReply(line, out var extractedReply))
                 {
@@ -120,9 +118,7 @@ public sealed class RepeaterSerialClient(IOptions<MeshCoreOptions> options) : IR
             }
 
             if (reply is null)
-            {
                 throw new TimeoutException($"The repeater did not answer the '{command}' command.");
-            }
 
             var result = new List<string> { reply };
             if (command.StartsWith("sensor list", StringComparison.Ordinal) &&
@@ -132,19 +128,15 @@ public sealed class RepeaterSerialClient(IOptions<MeshCoreOptions> options) : IR
                 var expectedValueLines = Math.Max(0, count - requestedStart);
                 while (result.Count - 1 < expectedValueLines)
                 {
-                    var line = await ReadLineAsync(reader, command, cancellationToken, timeout.Token);
+                    var line = await ReadLineAsync(reader, command, cancellationToken, timeout.Token).ConfigureAwait(false);
 
                     line = line.Trim();
                     if (line.Length == 0)
-                    {
                         continue;
-                    }
 
                     result.Add(line);
                     if (line.StartsWith("... next:", StringComparison.Ordinal))
-                    {
                         break;
-                    }
                 }
             }
 
@@ -164,7 +156,7 @@ public sealed class RepeaterSerialClient(IOptions<MeshCoreOptions> options) : IR
     {
         try
         {
-            return await reader.ReadLineAsync(timeoutToken) ??
+            return await reader.ReadLineAsync(timeoutToken).ConfigureAwait(false) ??
                 throw new IOException("The repeater closed the serial connection.");
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -181,17 +173,13 @@ public sealed class RepeaterSerialClient(IOptions<MeshCoreOptions> options) : IR
 
         while (true)
         {
-            var lines = await ExecuteCommandLinesAsync($"sensor list {start}", cancellationToken);
+            var lines = await ExecuteCommandLinesAsync($"sensor list {start}", cancellationToken).ConfigureAwait(false);
             var page = RepeaterSerialResponseParser.ParseSensorPage(lines);
             foreach (var pair in page.Values)
-            {
                 result[pair.Key] = pair.Value;
-            }
 
             if (page.NextIndex is null || page.NextIndex <= start)
-            {
                 return result;
-            }
 
             start = page.NextIndex.Value;
         }
@@ -209,6 +197,6 @@ public sealed class RepeaterSerialClient(IOptions<MeshCoreOptions> options) : IR
     {
         const string prefix = "sensor list";
         var value = command.AsSpan(prefix.Length).Trim();
-        return int.TryParse(value, out var start) && start > 0 ? start : 0;
+        return int.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var start) && start > 0 ? start : 0;
     }
 }

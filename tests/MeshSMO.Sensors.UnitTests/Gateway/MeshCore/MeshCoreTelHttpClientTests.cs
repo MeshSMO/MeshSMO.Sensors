@@ -93,7 +93,7 @@ public sealed class MeshCoreTelHttpClientTests
         using var client = CreateClient(handler);
 
         await Assert.ThrowsAsync<ArgumentException>(
-            () => client.ExecuteCommandAsync(new string('я', 96), CancellationToken.None));
+            () => client.ExecuteCommandAsync(new('я', 96), CancellationToken.None));
 
         Assert.Empty(handler.Requests);
     }
@@ -164,36 +164,30 @@ public sealed class MeshCoreTelHttpClientTests
     {
         var httpClient = new HttpClient(handler)
         {
-            BaseAddress = new Uri("https://repeater.local/"),
+            BaseAddress = new("https://repeater.local/"),
         };
         var options = Options.Create(new MeshCoreOptions
         {
             Mode = MeshCoreConnectionMode.Http,
-            Http = new MeshCoreHttpOptions
+            Http = new()
             {
                 BaseAddress = httpClient.BaseAddress,
                 AdminPassword = "secret",
             },
         });
 
-        return new MeshCoreTelHttpClient(httpClient, session ?? new MeshCoreTelSession(), options);
+        return new(httpClient, session ?? new MeshCoreTelSession(), options);
     }
 
-    private static HttpResponseMessage TextResponse(HttpStatusCode statusCode, string content)
+    private static HttpResponseMessage TextResponse(HttpStatusCode statusCode, string content) => new HttpResponseMessage(statusCode)
     {
-        return new HttpResponseMessage(statusCode)
-        {
-            Content = new StringContent(content, Encoding.UTF8, "text/plain"),
-        };
-    }
+        Content = new StringContent(content, Encoding.UTF8, "text/plain"),
+    };
 
-    private static HttpResponseMessage JsonResponse(HttpStatusCode statusCode, string content)
+    private static HttpResponseMessage JsonResponse(HttpStatusCode statusCode, string content) => new HttpResponseMessage(statusCode)
     {
-        return new HttpResponseMessage(statusCode)
-        {
-            Content = new StringContent(content, Encoding.UTF8, "application/json"),
-        };
-    }
+        Content = new StringContent(content, Encoding.UTF8, "application/json"),
+    };
 
     private sealed class RecordingHandler(params HttpResponseMessage[] responses) : HttpMessageHandler
     {
@@ -207,9 +201,9 @@ public sealed class MeshCoreTelHttpClientTests
         {
             var body = request.Content is null
                 ? null
-                : await request.Content.ReadAsStringAsync(cancellationToken);
+                : await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             request.Headers.TryGetValues("X-Auth-Token", out var tokenValues);
-            Requests.Add(new RequestSnapshot(
+            Requests.Add(new(
                 request.Method,
                 request.RequestUri!,
                 body,

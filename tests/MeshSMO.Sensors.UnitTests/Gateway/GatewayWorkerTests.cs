@@ -17,6 +17,7 @@ public sealed class GatewayWorkerTests
         var options = Options.Create(new MeshCoreOptions
         {
             Mode = MeshCoreConnectionMode.Http,
+            TelemetryCollectionEnabled = true,
             TelemetryCollectionIntervalSeconds = 60,
         });
         using var worker = new Worker(repeater, store, options, NullLogger<Worker>.Instance);
@@ -31,6 +32,22 @@ public sealed class GatewayWorkerTests
         Assert.Equal("http", appended.Transport);
         using var payload = JsonDocument.Parse(appended.PayloadJson);
         Assert.Equal(22.25, payload.RootElement.GetProperty("sensors").GetProperty("temperature").GetDouble());
+    }
+
+    [Fact]
+    public async Task TelemetryCollectionDisabledByDefaultDoesNotTouchRepeaterOrOutbox()
+    {
+        var repeater = new FakeRepeaterClient();
+        var store = new RecordingTelemetryStore();
+        var options = Options.Create(new MeshCoreOptions { Mode = MeshCoreConnectionMode.Http });
+        using var worker = new Worker(repeater, store, options, NullLogger<Worker>.Instance);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        await worker.StartAsync(cancellation.Token);
+        await worker.StopAsync(CancellationToken.None);
+
+        Assert.False(repeater.WasConnected);
+        Assert.False(store.Appended.Task.IsCompleted);
     }
 
     private sealed class FakeRepeaterClient : IRepeaterClient
@@ -72,7 +89,7 @@ public sealed class GatewayWorkerTests
             string payloadJson,
             CancellationToken cancellationToken)
         {
-            Appended.TrySetResult(new AppendedSnapshot(transport, payloadJson));
+            Appended.TrySetResult(new(transport, payloadJson));
             return Task.FromResult(1L);
         }
 
