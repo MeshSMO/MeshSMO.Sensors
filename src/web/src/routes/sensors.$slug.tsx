@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import type { DateRange } from "react-day-picker";
@@ -368,32 +368,56 @@ function History({
     });
 
   // Восстановление сохранённых настроек: только после гидрации и только
-  // если в адресе нет явных параметров.
+  // если в адресе нет явных параметров. Пока restore не отработал (включая
+  // навигацию с сохранёнными параметрами), запись в storage заблокирована:
+  // эффект сохранения на чистом URL записал бы дефолтный выбор поверх ещё
+  // не прочитанных настроек, а роутер может смонтировать компонент повторно —
+  // и тогда повторный restore прочитает уже затёртый дефолт.
+  const [prefsReady, setPrefsReady] = useState(false);
+
   useEffect(() => {
-    if (hasExplicitParams) return;
-
-    const saved = readHistoryPrefs(slug);
-    if (!saved) return;
-
-    const next: { [K in keyof Search]?: Search[K] | undefined } = {};
-    if (saved.metrics) next.metrics = saved.metrics;
-    if (saved.range) next.range = saved.range;
-    if (saved.from) next.from = saved.from;
-    if (saved.to) next.to = saved.to;
-    if (saved.mode) next.mode = saved.mode;
-    if (Object.keys(next).length > 0) update(next);
+    let cancelled = false;
+    const restore = async () => {
+      if (!hasExplicitParams) {
+        const saved = readHistoryPrefs(slug);
+        if (saved) {
+          const next: { [K in keyof Search]?: Search[K] | undefined } = {};
+          if (saved.metrics) next.metrics = saved.metrics;
+          if (saved.range) next.range = saved.range;
+          if (saved.from) next.from = saved.from;
+          if (saved.to) next.to = saved.to;
+          if (saved.mode) next.mode = saved.mode;
+          if (Object.keys(next).length > 0) await update(next);
+        }
+      }
+      if (!cancelled) setPrefsReady(true);
+    };
+    void restore();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
 
   // Сохранение текущего выбора для этого датчика.
+  const lastSavedRef = useRef<{ slug: string; json: string } | null>(null);
   useEffect(() => {
+    if (!prefsReady) return;
+
     const prefs: HistoryPrefs = { metrics: selected.join(","), range };
     if (from) prefs.from = from;
     if (to) prefs.to = to;
     if (mode === "combined") prefs.mode = "combined";
 
+    // selected — новый массив на каждый рендер; пишем только при реальном
+    // изменении значений, иначе effect срабатывает после каждого рендера.
+    const json = JSON.stringify(prefs);
+    const last = lastSavedRef.current;
+    if (last && last.slug === slug && last.json === json) return;
+    lastSavedRef.current = { slug, json };
+
     writeHistoryPrefs(slug, prefs);
-  }, [slug, selected, range, from, to, mode]);
+  }, [prefsReady, slug, selected, range, from, to, mode]);
 
   const custom = { from, to };
   const results = useMeasurementsMany(slug, selected, range, custom);
