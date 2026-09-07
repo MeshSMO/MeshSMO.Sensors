@@ -14,8 +14,10 @@ using Microsoft.Extensions.Options;
 namespace MeshSMO.Sensors.Gateway.Polling;
 
 /// <summary>
-/// Sequentially polls pull-only MeshCore sensor nodes through the repeater
-/// acquisition API and appends every response to the local telemetry outbox.
+/// Sequentially polls pull-only MeshCore sensor nodes through the configured
+/// channel (the MeshCoreTel repeater acquisition API, or a stock companion
+/// radio in Companion mode — both via <see cref="IMeshNodeClient"/>) and
+/// appends every response to the local telemetry outbox.
 /// Request payload: timestamp(4 LE) + 0x03 (GET_TELEMETRY_DATA) + inverse
 /// permission mask 0x00; the reply body after the reflected timestamp is
 /// Cayenne LPP.
@@ -27,7 +29,7 @@ namespace MeshSMO.Sensors.Gateway.Polling;
 /// API can persist poll_attempts.
 /// </summary>
 public sealed class SensorTelemetryPoller(
-    IMeshCoreTelClient client,
+    IMeshNodeClient client,
     IServiceScopeFactory scopeFactory,
     ILocalTelemetryStore store,
     IOptions<MeshCoreOptions> meshOptions,
@@ -45,6 +47,14 @@ public sealed class SensorTelemetryPoller(
         {
             logger.LogInformation("Sensor polling is disabled");
             return;
+        }
+
+        if (meshOptions.Value.Mode == MeshCoreConnectionMode.Companion)
+        {
+            logger.LogInformation(
+                "Sensor polling runs through the companion radio at {Host}:{Port}",
+                meshOptions.Value.Companion.Host,
+                meshOptions.Value.Companion.Port);
         }
 
         // ISensorRegistry is scoped; hosted services are singletons, so the

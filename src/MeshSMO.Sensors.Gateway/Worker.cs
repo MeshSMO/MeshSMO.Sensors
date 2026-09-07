@@ -20,6 +20,16 @@ public sealed class Worker(
             return;
         }
 
+        // A companion radio has no repeater panel: nothing to collect here,
+        // sensor polling happens in SensorTelemetryPoller over the companion
+        // frame protocol.
+        if (options.Value.Mode == MeshCoreConnectionMode.Companion)
+        {
+            logger.LogInformation("Companion radio mode: repeater panel telemetry collection is unavailable");
+            await Task.Delay(Timeout.InfiniteTimeSpan, stoppingToken).ConfigureAwait(false);
+            return;
+        }
+
         // Panel telemetry is opt-in: it duplicates repeater internals into the
         // outbox and the main API does not consume it. Sensor polling is
         // unaffected — the HTTP client logs its panel session in lazily.

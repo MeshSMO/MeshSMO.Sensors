@@ -51,7 +51,7 @@
 1. Загружает включённые датчики из GitOps-registry (`ISensorRegistry`).
 2. Последовательно (concurrency = 1, deterministic jitter по slug) для каждого датчика по его `polling.interval`:
    - строит REQ: `timestamp(4 LE) + 0x03 + 0x00` (MeshCore `GET_TELEMETRY_DATA`);
-   - отправляет через `POST /api/request` репитера (см. `docs/repeater-firmware-acquisition-spec.md`);
+   - отправляет через настроенный канал `IMeshNodeClient`: по умолчанию `POST /api/request` репитера (см. `docs/repeater-firmware-acquisition-spec.md`); альтернатива — стоковый компаньон (`MeshCore:Mode=Companion`, companion frame protocol по TCP:5000, `CMD_SEND_BINARY_REQ` — тот же LoRa-wire; без RSSI/SNR, wire-timestamp генерирует прошивка компаньона);
    - при первом таймауте ноды — однократный ANON-логин bootstrap (`POST /api/login`; пароль: `mesh.loginPassword` датчика из registry — поддерживает `${VAR}`-подстановку из env, пустая строка = у ноды нет пароля, иначе общий `SensorPolling:LoginPassword`);
    - ответ: `timestamp(4) + Cayenne LPP` → `CayenneLppDecoder` → маппинг каналов из registry (`TelemetryChannelMapping`: `(channel, type|*) → metric, displayName, unit`) → значения;
    - payload `{type:"sensor_poll", sensor, requestId, rssi, snr, responseHex, readings:[{metric,value,unit}]}` → в outbox.
