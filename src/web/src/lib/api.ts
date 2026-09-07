@@ -11,6 +11,8 @@ export type SensorSummary = {
   latitude: number | null;
   longitude: number | null;
   metrics: string[];
+  /** Последнее напряжение батареи (LPP 116), если датчик его передаёт. */
+  batteryVoltage: number | null;
   state: SensorState;
 };
 

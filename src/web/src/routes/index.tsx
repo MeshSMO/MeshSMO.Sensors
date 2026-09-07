@@ -2,9 +2,9 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { PageShell, SkeletonLine } from "@/components/site/Shell";
 import { StatusBadge } from "@/components/site/StatusBadge";
 import { useDashboard } from "@/lib/api";
+import { chargeLevel, hasBatteryMetric, liIonChargePercent, type ChargeLevel } from "@/lib/battery";
 import { sensorRegistry } from "@/lib/registry";
-import { formatValue, normalizeState } from "@/lib/format";
-import { getMetric } from "@/lib/metrics";
+import { normalizeState } from "@/lib/format";
 
 const title = "MeshSMO Sensors — телеметрия LoRa-датчиков Смоленской области";
 const description =
@@ -110,12 +110,14 @@ function LiveDashboard() {
               slug: s.slug,
               displayName: s.displayName,
               metrics: s.metrics,
+              batteryVoltage: s.batteryVoltage,
               state: normalizeState(s.state),
             }))
           : sensorRegistry.map((s) => ({
               slug: s.slug,
               displayName: s.displayName,
               metrics: s.metrics,
+              batteryVoltage: null,
               state: null,
             }))
         ).map((sensor) => (
@@ -127,10 +129,9 @@ function LiveDashboard() {
             >
               <span className="font-medium">{sensor.displayName}</span>
               <span className="flex items-center gap-4 text-sm text-muted-foreground">
-                <span className="num">
-                  {sensor.metrics[0] ? getMetric(sensor.metrics[0]).label : "—"}:{" "}
-                  {formatValue(sensor.metrics[0] ?? "", null)}
-                </span>
+                {hasBatteryMetric(sensor.metrics) ? (
+                  <BatteryReadout volts={sensor.batteryVoltage} />
+                ) : null}
                 <StatusBadge state={sensor.state} />
               </span>
             </Link>
@@ -144,5 +145,30 @@ function LiveDashboard() {
         </p>
       )}
     </section>
+  );
+}
+
+const chargeLevelStyles: Record<ChargeLevel, string> = {
+  high: "text-online",
+  medium: "text-degraded",
+  low: "text-offline",
+};
+
+function BatteryReadout({ volts }: { volts: number | null }) {
+  const percent = liIonChargePercent(volts);
+  if (percent === null) {
+    return (
+      <span className="num" title="Нет корректных данных о заряде батареи">
+        Батарея: —
+      </span>
+    );
+  }
+  return (
+    <span
+      className={`num ${chargeLevelStyles[chargeLevel(percent)]}`}
+      title={`Li-ion, напряжение ${volts?.toFixed(2)} В`}
+    >
+      Батарея: {percent}%
+    </span>
   );
 }

@@ -7,6 +7,9 @@ namespace MeshSMO.Sensors.Web.Api;
 
 public static class SensorApiEndpoints
 {
+    private const string BatteryVoltageMetricKey = "battery_voltage";
+    private const string BatteryMetricKey = "battery";
+
     public static IEndpointRouteBuilder MapSensorApi(this IEndpointRouteBuilder app)
     {
         var sensors = app.MapGroup("/api/v1/sensors").RequireRateLimiting("public-api");
@@ -17,8 +20,15 @@ public static class SensorApiEndpoints
             var statuses = await dbContext.SensorStatuses
                 .AsNoTracking()
                 .ToDictionaryAsync(snapshot => snapshot.SensorId, snapshot => snapshot.State, cancellationToken).ConfigureAwait(false);
+            var batteryVoltages = await LoadBatteryVoltages(dbContext, cancellationToken).ConfigureAwait(false);
             return Results.Json(
-                new { sensors = list.Select(sensor => ToSummary(sensor, statuses.GetValueOrDefault(sensor.Id))) },
+                new
+                {
+                    sensors = list.Select(sensor => ToSummary(
+                        sensor,
+                        statuses.GetValueOrDefault(sensor.Id),
+                        batteryVoltages.GetValueOrDefault(sensor.Id))),
+                },
                 statusCode: 200);
         });
 
@@ -155,6 +165,7 @@ StringComparer.Ordinal, cancellationToken).ConfigureAwait(false);
             var statuses = await dbContext.SensorStatuses
                 .AsNoTracking()
                 .ToDictionaryAsync(snapshot => snapshot.SensorId, snapshot => snapshot.State, cancellationToken).ConfigureAwait(false);
+            var batteryVoltages = await LoadBatteryVoltages(dbContext, cancellationToken).ConfigureAwait(false);
             var summary = DashboardSummary.Build(sensors.Select(sensor => statuses.GetValueOrDefault(sensor.Id, SensorState.Unknown)));
             return Results.Json(new
             {
@@ -166,7 +177,10 @@ StringComparer.Ordinal, cancellationToken).ConfigureAwait(false);
                     offline = summary.Offline,
                     unknown = summary.Unknown,
                 },
-                sensors = sensors.Select(sensor => ToSummary(sensor, statuses.GetValueOrDefault(sensor.Id, SensorState.Unknown))),
+                sensors = sensors.Select(sensor => ToSummary(
+                    sensor,
+                    statuses.GetValueOrDefault(sensor.Id, SensorState.Unknown),
+                    batteryVoltages.GetValueOrDefault(sensor.Id))),
             });
         }).RequireRateLimiting("public-api");
 
@@ -181,7 +195,36 @@ StringComparer.Ordinal, cancellationToken).ConfigureAwait(false);
             .OrderBy(sensor => sensor.Slug)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
-    private static object ToSummary(Sensor sensor, SensorState? state = null) => new
+    /// <summary>
+    /// Последнее значение заряда батареи по каждому публичному датчику.
+    /// Ключи — по договорённости с gateway (канал LPP 116); battery_voltage имеет приоритет.
+    /// Значения скрытых датчиков в ответ не попадают: словарь читается только по id публичных.
+    /// </summary>
+    private static async Task<Dictionary<SensorId, double?>> LoadBatteryVoltages(
+        SensorsDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var batteryMetricKeys = new[] { BatteryVoltageMetricKey, BatteryMetricKey };
+        var rows = await dbContext.MeasurementValues
+            .AsNoTracking()
+            .Where(value => batteryMetricKeys.Contains(value.MetricKey)
+                && value.Timestamp == dbContext.MeasurementValues
+                    .Where(latest => latest.SensorId == value.SensorId && latest.MetricKey == value.MetricKey)
+                    .Max(latest => latest.Timestamp))
+            .Select(value => new { value.SensorId, value.MetricKey, value.NumericValue })
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        var voltages = new Dictionary<SensorId, double?>();
+        foreach (var row in rows.OrderByDescending(row => string.Equals(row.MetricKey, BatteryVoltageMetricKey, StringComparison.Ordinal)))
+        {
+            if (row.NumericValue is { } voltage)
+                voltages.TryAdd(row.SensorId, voltage);
+        }
+
+        return voltages;
+    }
+
+    private static object ToSummary(Sensor sensor, SensorState? state = null, double? batteryVoltage = null) => new
     {
         slug = sensor.Slug.Value,
         displayName = sensor.DisplayName,
@@ -189,6 +232,7 @@ StringComparer.Ordinal, cancellationToken).ConfigureAwait(false);
         latitude = sensor.Latitude,
         longitude = sensor.Longitude,
         metrics = sensor.Metrics.Select(metric => metric.MetricKey).OrderBy(key => key, StringComparer.Ordinal).ToArray(),
+        batteryVoltage,
         state = (state ?? SensorState.Unknown).ToString(),
     };
 

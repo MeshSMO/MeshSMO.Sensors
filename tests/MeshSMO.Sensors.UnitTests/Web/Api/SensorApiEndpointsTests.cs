@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using MeshSMO.Sensors.Domain.Measurements;
 using MeshSMO.Sensors.Domain.Sensors;
 using MeshSMO.Sensors.Infrastructure;
 using MeshSMO.Sensors.Infrastructure.Persistence;
@@ -63,7 +64,7 @@ public sealed class SensorApiEndpointsTests : IDisposable
             55.0000,
             33.0000,
             "approximate",
-            ["temperature", "humidity"],
+            ["battery_voltage", "temperature", "humidity"],
             now);
         var hiddenSensor = new Sensor(
             new(Guid.NewGuid()),
@@ -85,6 +86,12 @@ public sealed class SensorApiEndpointsTests : IDisposable
             now);
         dbContext.Sensors.AddRange(publicSensor, hiddenSensor);
         dbContext.SensorStatuses.Add(new(publicSensor.Id, now) { State = SensorState.Online });
+        var freshSample = new MeasurementSample(Guid.NewGuid(), publicSensor.Id, 42, now, "meshsmo-weather-v1");
+        var staleSample = new MeasurementSample(Guid.NewGuid(), publicSensor.Id, 41, now.AddHours(-1), "meshsmo-weather-v1");
+        dbContext.MeasurementSamples.AddRange(freshSample, staleSample);
+        dbContext.MeasurementValues.AddRange(
+            new MeasurementValue(freshSample.Id, publicSensor.Id, "battery_voltage", now) { NumericValue = 3.96 },
+            new MeasurementValue(staleSample.Id, publicSensor.Id, "battery_voltage", now.AddHours(-1)) { NumericValue = 3.80 });
         dbContext.SaveChanges();
         _client = (_app.Services.GetRequiredService<IServer>() as TestServer)!.CreateClient();
     }
@@ -104,8 +111,19 @@ public sealed class SensorApiEndpointsTests : IDisposable
         var sensor = body.GetProperty("sensors").EnumerateArray().Single();
         Assert.Equal("Online", sensor.GetProperty("state").GetString());
         Assert.Equal(
-            ["humidity", "temperature"],
+            ["battery_voltage", "humidity", "temperature"],
             sensor.GetProperty("metrics").EnumerateArray().Select(m => m.GetString()!).ToArray());
+    }
+
+    [Fact]
+    public async Task SensorsList_IncludesLatestBatteryVoltage()
+    {
+        var response = await _client.GetAsync("/api/v1/sensors");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var sensor = (await response.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("sensors").EnumerateArray().Single();
+        Assert.Equal(3.96, sensor.GetProperty("batteryVoltage").GetDouble());
     }
 
     [Fact]
@@ -132,7 +150,7 @@ public sealed class SensorApiEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Dashboard_ReturnsAggregatedSummary()
+    public async Task Dashboard_ReturnsAggregatedSummary_AndLatestBatteryVoltage()
     {
         var response = await _client.GetAsync("/api/v1/dashboard");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -142,7 +160,10 @@ public sealed class SensorApiEndpointsTests : IDisposable
         Assert.Equal(1, summary.GetProperty("total").GetInt32());
         Assert.Equal(1, summary.GetProperty("online").GetInt32());
         Assert.Equal(0, summary.GetProperty("offline").GetInt32());
+
+        var sensor = body.GetProperty("sensors").EnumerateArray().Single();
         Assert.Single(body.GetProperty("sensors").EnumerateArray());
+        Assert.Equal(3.96, sensor.GetProperty("batteryVoltage").GetDouble());
     }
 
     public void Dispose()
