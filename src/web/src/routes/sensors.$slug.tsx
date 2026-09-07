@@ -25,7 +25,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
-import { CalendarDays, ChevronDown, Clock, Sparkles } from "lucide-react";
+import { CalendarDays, ChevronDown, Clock, Sparkles, Star } from "lucide-react";
+import { useFavoriteMetrics } from "@/lib/favorite-metrics";
 import { getRegistrySensor } from "@/lib/registry";
 import {
   formatCoordinate,
@@ -275,13 +276,15 @@ function SensorHeader({ slug }: { slug: string }) {
 
 function Readings({ slug, metrics, poll }: { slug: string; metrics: string[]; poll: number }) {
   const { data, isPending, isError } = useLatest(slug, poll);
+  const { favorites, toggleFavorite } = useFavoriteMetrics();
+  const sensorFavorites = favorites.get(slug) ?? new Set<string>();
   const values = new Map((data?.values ?? []).map((v) => [v.metric, v]));
   // Ключи: реестр + всё, что реально прислал BFF (маппнутые ключи вроде
   // battery_voltage / solar_panel_voltage могут отсутствовать в YAML).
   const keys = [
     ...metrics,
     ...(data?.values ?? []).map((v) => v.metric).filter((m) => !metrics.includes(m)),
-  ];
+  ].sort((left, right) => Number(sensorFavorites.has(right)) - Number(sensorFavorites.has(left)));
 
   return (
     <section className="mt-10">
@@ -291,9 +294,27 @@ function Readings({ slug, metrics, poll }: { slug: string; metrics: string[]; po
           const meta = getMetric(key);
           const value = values.get(key);
           const showUnit = meta.kind === "numeric";
+          const isFavorite = sensorFavorites.has(key);
           return (
-            <div key={key} className="panel px-4 py-4">
+            <div key={key} className="panel relative px-4 py-4 pr-12">
               <p className="text-xs text-muted-foreground">{value?.displayName ?? meta.label}</p>
+              <button
+                type="button"
+                aria-label={
+                  isFavorite
+                    ? `Убрать показатель «${value?.displayName ?? meta.label}» из избранного`
+                    : `Добавить показатель «${value?.displayName ?? meta.label}» в избранное`
+                }
+                aria-pressed={isFavorite}
+                title={isFavorite ? "Убрать из избранного" : "Добавить в избранное"}
+                className="absolute top-2.5 right-2.5 inline-flex size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => toggleFavorite(slug, key)}
+              >
+                <Star
+                  aria-hidden="true"
+                  className={isFavorite ? "fill-amber-400 text-amber-400" : undefined}
+                />
+              </button>
               <p className="num mt-2 break-words text-3xl">
                 {isPending && !isError ? (
                   <SkeletonLine className="h-8 w-20" />
