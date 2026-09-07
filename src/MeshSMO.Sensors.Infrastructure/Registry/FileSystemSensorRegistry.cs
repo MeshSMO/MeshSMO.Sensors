@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using MeshSMO.Sensors.Application.Registry;
 using MeshSMO.Sensors.Domain.Sensors;
@@ -110,6 +111,8 @@ public sealed partial class FileSystemSensorRegistry(
         if (maxAttempts is < 1 or > 10)
             errors.Add($"{source}: polling.maxAttempts must be between 1 and 10.");
 
+        var schedule = ParsePollingSchedule(yaml.Polling?.Schedule, timeout, source, errors);
+
         var latitude = yaml.Location?.Latitude;
         var longitude = yaml.Location?.Longitude;
         if (latitude is < -90 or > 90)
@@ -159,7 +162,7 @@ public sealed partial class FileSystemSensorRegistry(
             new SensorId(id), slug, yaml.DisplayName!.Trim(), yaml.Description,
             yaml.Mesh!.PublicKey!.Trim(), yaml.Mesh.Protocol!.Trim(), interval, timeout,
             maxAttempts, yaml.Polling!.Enabled, visible, indexable, latitude, longitude,
-            yaml.Location?.Precision, metrics, source, channels, loginPassword);
+            yaml.Location?.Precision, metrics, source, channels, loginPassword, schedule);
     }
 
     /// <summary>
@@ -275,6 +278,131 @@ public sealed partial class FileSystemSensorRegistry(
         return duration;
     }
 
+    private const int MinutesPerDay = 24 * 60;
+
+    /// <summary>
+    /// Parses the optional <c>polling.schedule</c> section: the IANA time zone
+    /// the window times are interpreted in and non-overlapping half-open
+    /// windows whose interval replaces the base poll interval inside the
+    /// window. Errors leave placeholder values behind — the accumulated errors
+    /// make <see cref="LoadAsync"/> reject the file anyway.
+    /// </summary>
+    private static PollingSchedule? ParsePollingSchedule(
+        ScheduleYaml? yaml,
+        TimeSpan timeout,
+        string source,
+        ICollection<string> errors)
+    {
+        if (yaml is null)
+            return null;
+
+        var timeZone = ParseTimeZone(yaml.TimeZone, source, errors);
+        var windows = new List<PollingScheduleWindow>();
+
+        if (yaml.Windows is not { Count: > 0 })
+        {
+            errors.Add($"{source}: polling.schedule.windows must contain at least one window.");
+        }
+        else
+        {
+            foreach (var windowYaml in yaml.Windows)
+            {
+                var from = ParseTimeOfDay(windowYaml.From, source, "polling.schedule.windows[].from", errors);
+                var to = ParseTimeOfDay(windowYaml.To, source, "polling.schedule.windows[].to", errors);
+                var interval = ParseDuration(windowYaml.Interval, source, "polling.schedule.windows[].interval", errors);
+
+                if (from is null || to is null || interval == TimeSpan.Zero)
+                    continue;
+
+                if (from.Value == to.Value)
+                {
+                    errors.Add($"{source}: polling.schedule window must not be zero-length (from and to are equal).");
+                    continue;
+                }
+
+                if (timeout > interval)
+                    errors.Add($"{source}: polling.timeout cannot exceed a polling.schedule window interval.");
+
+                windows.Add(new PollingScheduleWindow(from.Value, to.Value, interval));
+            }
+        }
+
+        ReportScheduleOverlaps(windows, source, errors);
+        return new PollingSchedule(timeZone, windows);
+    }
+
+    private static TimeZoneInfo ParseTimeZone(string? timeZoneId, string source, ICollection<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(timeZoneId))
+        {
+            errors.Add($"{source}: polling.schedule.timeZone is required (IANA id such as 'Europe/Moscow').");
+            return TimeZoneInfo.Utc;
+        }
+
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById(timeZoneId.Trim());
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            errors.Add($"{source}: polling.schedule.timeZone '{timeZoneId}' was not found on this machine.");
+            return TimeZoneInfo.Utc;
+        }
+        catch (InvalidTimeZoneException)
+        {
+            errors.Add($"{source}: polling.schedule.timezone '{timeZoneId}' is invalid.");
+            return TimeZoneInfo.Utc;
+        }
+    }
+
+    private static TimeOnly? ParseTimeOfDay(string? value, string source, string field, ICollection<string> errors)
+    {
+        if (TimeOnly.TryParseExact(value, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var time))
+            return time;
+
+        errors.Add($"{source}: {field} must be a local time in 'HH:mm' format, for example '08:30'.");
+        return null;
+    }
+
+    /// <summary>
+    /// Windows must not overlap (half-open windows may touch: 08:00–12:00 and
+    /// 12:00–18:00 are fine). Windows wrapping past midnight are split at
+    /// midnight into two ranges before comparison; two windows starting at the
+    /// same minute always overlap since both contain that instant.
+    /// </summary>
+    private static void ReportScheduleOverlaps(IReadOnlyList<PollingScheduleWindow> windows, string source, ICollection<string> errors)
+    {
+        var ranges = new List<(int Start, int End, PollingScheduleWindow Window)>(windows.Count * 2);
+        foreach (var window in windows)
+        {
+            var start = window.Start.Hour * 60 + window.Start.Minute;
+            var end = window.End.Hour * 60 + window.End.Minute;
+            if (window.End > window.Start)
+            {
+                ranges.Add((start, end, window));
+                continue;
+            }
+
+            ranges.Add((start, MinutesPerDay, window));
+            if (end > 0)
+                ranges.Add((0, end, window));
+        }
+
+        ranges.Sort((left, right) => left.Start.CompareTo(right.Start));
+        for (var index = 1; index < ranges.Count; index++)
+        {
+            if (ranges[index].Start < ranges[index - 1].End || ranges[index].Start == ranges[index - 1].Start)
+            {
+                errors.Add(
+                    $"{source}: polling.schedule windows overlap: {DescribeWindow(ranges[index - 1].Window)} " +
+                    $"and {DescribeWindow(ranges[index].Window)}.");
+            }
+        }
+    }
+
+    private static string DescribeWindow(PollingScheduleWindow window) =>
+        $"{window.Start.ToString("HH:mm", CultureInfo.InvariantCulture)}-{window.End.ToString("HH:mm", CultureInfo.InvariantCulture)}";
+
     private static void Require(string? value, string source, string field, ICollection<string> errors)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -350,6 +478,20 @@ public sealed partial class FileSystemSensorRegistry(
         public string? Timeout { get; set; }
         public int MaxAttempts { get; set; }
         public bool Enabled { get; set; }
+        public ScheduleYaml? Schedule { get; set; }
+    }
+
+    private sealed class ScheduleYaml
+    {
+        public string? TimeZone { get; set; }
+        public List<ScheduleWindowYaml>? Windows { get; set; }
+    }
+
+    private sealed class ScheduleWindowYaml
+    {
+        public string? From { get; set; }
+        public string? To { get; set; }
+        public string? Interval { get; set; }
     }
 
     private sealed class PublicYaml

@@ -1,7 +1,9 @@
 using System.IO.Ports;
 using System.Text;
 using System.Text.Json;
+using MeshSMO.Sensors.Gateway.Resilience;
 using Microsoft.Extensions.Options;
+using Polly;
 
 namespace MeshSMO.Sensors.Gateway.MeshCore;
 
@@ -9,6 +11,8 @@ public sealed class RepeaterSerialClient(IOptions<MeshCoreOptions> options) : IR
 {
     private const int MaximumCommandBytes = 159;
     private readonly MeshCoreSerialOptions _options = options.Value.Serial;
+    private readonly ResiliencePipeline _commandTimeoutPipeline = GatewayResiliencePipelines.CreateTimeoutPipeline(
+        TimeSpan.FromSeconds(options.Value.Serial.CommandTimeoutSeconds));
     private readonly SemaphoreSlim _commandLock = new(1, 1);
     private SerialPort? _port;
     private StreamReader? _reader;
@@ -93,54 +97,9 @@ public sealed class RepeaterSerialClient(IOptions<MeshCoreOptions> options) : IR
         await _commandLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var port = _port is { IsOpen: true }
-                ? _port
-                : throw new InvalidOperationException("The repeater serial port is not connected.");
-            var reader = _reader ?? throw new InvalidOperationException("The repeater serial reader is unavailable.");
-
-            var bytes = Encoding.UTF8.GetBytes($"{command}\r");
-            await port.BaseStream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
-            await port.BaseStream.FlushAsync(cancellationToken).ConfigureAwait(false);
-
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(TimeSpan.FromSeconds(_options.CommandTimeoutSeconds));
-
-            string? reply = null;
-            while (!timeout.IsCancellationRequested)
-            {
-                var line = await ReadLineAsync(reader, command, cancellationToken, timeout.Token).ConfigureAwait(false);
-
-                if (RepeaterSerialResponseParser.TryExtractReply(line, out var extractedReply))
-                {
-                    reply = extractedReply;
-                    break;
-                }
-            }
-
-            if (reply is null)
-                throw new TimeoutException($"The repeater did not answer the '{command}' command.");
-
-            var result = new List<string> { reply };
-            if (command.StartsWith("sensor list", StringComparison.Ordinal) &&
-                RepeaterSerialResponseParser.TryParseSensorCount(reply, out var count))
-            {
-                var requestedStart = TryGetSensorListStart(command);
-                var expectedValueLines = Math.Max(0, count - requestedStart);
-                while (result.Count - 1 < expectedValueLines)
-                {
-                    var line = await ReadLineAsync(reader, command, cancellationToken, timeout.Token).ConfigureAwait(false);
-
-                    line = line.Trim();
-                    if (line.Length == 0)
-                        continue;
-
-                    result.Add(line);
-                    if (line.StartsWith("... next:", StringComparison.Ordinal))
-                        break;
-                }
-            }
-
-            return result;
+            return await _commandTimeoutPipeline.ExecuteAsync(
+                async token => await ExecuteCommandCoreAsync(command, token).ConfigureAwait(false),
+                cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -148,22 +107,59 @@ public sealed class RepeaterSerialClient(IOptions<MeshCoreOptions> options) : IR
         }
     }
 
-    private static async Task<string> ReadLineAsync(
-        StreamReader reader,
+    private async ValueTask<IReadOnlyList<string>> ExecuteCommandCoreAsync(
         string command,
-        CancellationToken cancellationToken,
-        CancellationToken timeoutToken)
+        CancellationToken cancellationToken)
     {
-        try
+        var port = _port is { IsOpen: true }
+            ? _port
+            : throw new InvalidOperationException("The repeater serial port is not connected.");
+        var reader = _reader ?? throw new InvalidOperationException("The repeater serial reader is unavailable.");
+
+        var bytes = Encoding.UTF8.GetBytes($"{command}\r");
+        await port.BaseStream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+        await port.BaseStream.FlushAsync(cancellationToken).ConfigureAwait(false);
+
+        string? reply = null;
+        while (!cancellationToken.IsCancellationRequested)
         {
-            return await reader.ReadLineAsync(timeoutToken).ConfigureAwait(false) ??
-                throw new IOException("The repeater closed the serial connection.");
+            var line = await ReadLineAsync(reader, cancellationToken).ConfigureAwait(false);
+
+            if (RepeaterSerialResponseParser.TryExtractReply(line, out var extractedReply))
+            {
+                reply = extractedReply;
+                break;
+            }
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var replyValue = reply ?? throw new InvalidOperationException("The serial command completed without a reply.");
+        var result = new List<string> { replyValue };
+        if (command.StartsWith("sensor list", StringComparison.Ordinal) &&
+            RepeaterSerialResponseParser.TryParseSensorCount(replyValue, out var count))
         {
-            throw new TimeoutException($"The repeater did not answer the '{command}' command.");
+            var requestedStart = TryGetSensorListStart(command);
+            var expectedValueLines = Math.Max(0, count - requestedStart);
+            while (result.Count - 1 < expectedValueLines)
+            {
+                var line = await ReadLineAsync(reader, cancellationToken).ConfigureAwait(false);
+
+                line = line.Trim();
+                if (line.Length == 0)
+                    continue;
+
+                result.Add(line);
+                if (line.StartsWith("... next:", StringComparison.Ordinal))
+                    break;
+            }
         }
+
+        return result;
     }
+
+    private static async Task<string> ReadLineAsync(StreamReader reader, CancellationToken cancellationToken) =>
+        await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) ??
+            throw new IOException("The repeater closed the serial connection.");
 
     private async Task<IReadOnlyDictionary<string, string>> ReadSensorSettingsAsync(
         CancellationToken cancellationToken)

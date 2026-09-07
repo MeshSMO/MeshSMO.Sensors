@@ -66,6 +66,22 @@ namespace MeshSMO.Sensors.Gateway.Migrations
 
                     b.ToTable("telemetry_snapshots", (string)null);
                 });
+
+            modelBuilder.Entity("MeshSMO.Sensors.Gateway.LocalStorage.SensorPollState", b =>
+                {
+                    b.Property<string>("SensorSlug")
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("sensor_slug");
+
+                    b.Property<DateTimeOffset>("LastPollStartedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_poll_started_at");
+
+                    b.HasKey("SensorSlug");
+
+                    b.ToTable("sensor_poll_states", (string)null);
+                });
 #pragma warning restore 612, 618
         }
     }

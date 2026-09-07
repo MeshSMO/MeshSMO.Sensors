@@ -135,6 +135,10 @@ req <destination-hex> <payload-hex> [timeout-seconds]
 
 - Gateway держит **не более одного** параллельного запроса (совпадает с §4.2);
 - Gateway повторяет запрос после `timeout` согласно собственной retry-политике (maxAttempts=2, из registry датчика);
+- HTTP-таймаут acquisition-вызовов (`req`/`login`) gateway выводит из окна: `2.5 × timeoutMs` + 5 с на
+  TLS-handshake и авторизацию панели — один вызов прошивки может занять до ~2× окна (direct-попытка
+  с таймаутом + flood-retry в том же вызове, §8.6). Панельные вызовы (`login`, `api/stats`, `api/command`)
+  ограничены `MeshCore:Http:TimeoutSeconds` (по умолчанию 15 с) и от окна не зависят;
 - `responseHex` прогоняется через парсер binary-протокола датчиков (spec §7.3); `rssi`/`snr` пишутся в `measurement_samples`;
 - CLI-вариант будет использоваться Serial-транспортом Gateway: ответ `-> OK resp=...` парсится существующим `RepeaterSerialResponseParser` (требование §4.4 — одна строка — критично).
 
@@ -264,3 +268,10 @@ login <destination-hex> <password>
 - Room-server вариант (`sync_since + password`) не реализован — у репитера нет контактов и он не знает тип
   ноды; для MeshSMO-целей (сенсоры/репитеры) не требуется.
 - Повторный логин допустим (§8.4.5): каждый вызов шлёт свежий `now_unique`, replay-чек ноды проходит.
+- **Маршрутизация (уточнение, v0.3)**: flood используется только пока маршрут к ноде неизвестен. Маршрут
+  учится из PATH-ответа ноды (первый flood-обмен) в runtime-кэш (4 слота, pubkey → out_path; вариант из ACL
+  тоже сидируется в кэш). Последующие запросы/логины — `sendDirect` (пустой path = zero-hop соседу). При
+  таймауте direct-попытки маршрут сбрасывается и в том же вызове идёт один flood-retry → `elapsedMs`/`elapsed`
+  может достигать ~2× окна (таймаут HTTP-клиента Gateway ≥ 2.5× `timeoutMs`). После успешного PATH-обмена
+  репитёр отвечает reciprocal-PATH (return true из `onPeerPathRecv` для псевдопира), поэтому нода узнаёт
+  обратный маршрут и её ответы тоже идут direct, а не flood.

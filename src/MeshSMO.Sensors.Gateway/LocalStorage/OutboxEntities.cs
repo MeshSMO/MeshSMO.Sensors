@@ -30,3 +30,13 @@ public sealed class OutboxHealthProbe
 
     public DateTimeOffset CheckedAt { get; set; }
 }
+
+/// <summary>Persistent scheduler state used to preserve polling intervals across gateway restarts.</summary>
+public sealed class SensorPollState
+{
+    /// <summary>Stable sensor slug from the registry.</summary>
+    public string SensorSlug { get; set; } = string.Empty;
+
+    /// <summary>When the most recent poll cycle started (UTC).</summary>
+    public DateTimeOffset LastPollStartedAt { get; set; }
+}

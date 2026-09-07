@@ -358,6 +358,86 @@ public sealed class SensorTelemetryPollerTests : IDisposable
         Assert.Equal(0, await store.CountPendingAsync(CancellationToken.None));
     }
 
+    [Fact]
+    public async Task Poller_WithRecentPersistedPoll_DoesNotPollImmediatelyAfterRestart()
+    {
+        var node = new SensorDefinition(
+            SensorId.New(), new("restart-node"), "Restart", null,
+            new('2', 64), "meshcore-req-lpp", TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(8), 1,
+            Enabled: true, PublicVisible: true, PublicIndexable: false, null, null, null,
+            ["temperature"], "restart.yaml", []);
+        var client = new FakeMeshCoreTelClient(requestStatuses: ["ok"]);
+        var store = await CreateStoreAsync();
+        await store.RecordPollStartedAsync("restart-node", DateTimeOffset.UtcNow, CancellationToken.None);
+        var poller = new SensorTelemetryPoller(
+            client,
+            ScopeFactory(new FakeRegistry([node])),
+            store,
+            Options.Create(new MeshCoreOptions { Mode = MeshCoreConnectionMode.Http }),
+            Options.Create(new SensorPollingOptions { Enabled = true }),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<SensorTelemetryPoller>.Instance);
+
+        using var source = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await poller.StartAsync(source.Token);
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(1));
+        }
+        finally
+        {
+            await poller.StopAsync(CancellationToken.None);
+        }
+
+        Assert.Empty(client.Requests);
+        Assert.Equal(0, await store.CountPendingAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public void EffectivePollInterval_uses_schedule_window_and_falls_back_to_base_interval()
+    {
+        var schedule = new PollingSchedule(
+            TimeZoneInfo.FindSystemTimeZoneById("Europe/Moscow"),
+            [new PollingScheduleWindow(new TimeOnly(8, 0), new TimeOnly(12, 0), TimeSpan.FromMinutes(15))]);
+        var sensor = new SensorDefinition(
+            SensorId.New(), new("scheduled-node"), "Scheduled", null,
+            new('5', 64), "meshcore-req-lpp", TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(8), 2,
+            Enabled: true, PublicVisible: true, PublicIndexable: false, null, null, null,
+            ["temperature"], "scheduled.yaml", [], PollingSchedule: schedule);
+
+        // 05:30 UTC = 08:30 in Moscow: inside the window; 09:30 UTC = 12:30: outside.
+        var morning = new DateTimeOffset(2026, 6, 15, 5, 30, 0, TimeSpan.Zero);
+        var afternoon = new DateTimeOffset(2026, 6, 15, 9, 30, 0, TimeSpan.Zero);
+
+        Assert.Equal(
+            TimeSpan.FromMinutes(15),
+            SensorTelemetryPoller.EffectivePollInterval(sensor, new SensorPollingOptions(), morning));
+        Assert.Equal(
+            TimeSpan.FromMinutes(5),
+            SensorTelemetryPoller.EffectivePollInterval(sensor, new SensorPollingOptions(), afternoon));
+    }
+
+    [Fact]
+    public void EffectivePollInterval_interval_override_still_shortens_scheduled_interval()
+    {
+        var schedule = new PollingSchedule(
+            TimeZoneInfo.FindSystemTimeZoneById("Europe/Moscow"),
+            [new PollingScheduleWindow(new TimeOnly(8, 0), new TimeOnly(12, 0), TimeSpan.FromMinutes(15))]);
+        var sensor = new SensorDefinition(
+            SensorId.New(), new("overridden-node"), "Overridden", null,
+            new('6', 64), "meshcore-req-lpp", TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(8), 2,
+            Enabled: true, PublicVisible: true, PublicIndexable: false, null, null, null,
+            ["temperature"], "overridden.yaml", [], PollingSchedule: schedule);
+        var options = new SensorPollingOptions { IntervalOverrideSeconds = 300 };
+
+        // Inside the window the override shortens 15m to 5m; outside it never
+        // lengthens the base 5m interval.
+        var morning = new DateTimeOffset(2026, 6, 15, 5, 30, 0, TimeSpan.Zero);
+        var afternoon = new DateTimeOffset(2026, 6, 15, 9, 30, 0, TimeSpan.Zero);
+
+        Assert.Equal(TimeSpan.FromMinutes(5), SensorTelemetryPoller.EffectivePollInterval(sensor, options, morning));
+        Assert.Equal(TimeSpan.FromMinutes(5), SensorTelemetryPoller.EffectivePollInterval(sensor, options, afternoon));
+    }
+
     private async Task<ILocalTelemetryStore> CreateStoreAsync()
     {
         var provider = new ServiceCollection()
@@ -421,4 +501,3 @@ public sealed class SensorTelemetryPollerTests : IDisposable
             throw new NotSupportedException();
     }
 }
-

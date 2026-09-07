@@ -21,6 +21,14 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
+      - name: Install ML.NET native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libomp5
+          omp_path="$(find /usr/lib -name libomp.so.5 -print -quit)"
+          test -n "$omp_path"
+          test -e "$(dirname "$omp_path")/libiomp5.so" || \
+            sudo ln -s "$(basename "$omp_path")" "$(dirname "$omp_path")/libiomp5.so"
       - uses: actions/setup-node@v5
         with:
           node-version: 24

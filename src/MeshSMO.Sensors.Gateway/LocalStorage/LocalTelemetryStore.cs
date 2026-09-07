@@ -78,4 +78,46 @@ public sealed class LocalTelemetryStore(IDbContextFactory<LocalOutboxDbContext> 
         await using (db.ConfigureAwait(false))
             return await db.Snapshots.LongCountAsync(cancellationToken);
     }
+
+    public async Task<DateTimeOffset?> ReadLastPollStartedAtAsync(
+        string sensorSlug,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sensorSlug);
+
+        var db = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+            return await db.SensorPollStates
+                .Where(state => state.SensorSlug == sensorSlug)
+                .Select(state => (DateTimeOffset?)state.LastPollStartedAt)
+                .SingleOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task RecordPollStartedAsync(
+        string sensorSlug,
+        DateTimeOffset startedAt,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sensorSlug);
+
+        var db = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+        {
+            var state = await db.SensorPollStates.FindAsync([sensorSlug], cancellationToken).ConfigureAwait(false);
+            if (state is null)
+            {
+                db.SensorPollStates.Add(new SensorPollState
+                {
+                    SensorSlug = sensorSlug,
+                    LastPollStartedAt = startedAt.ToUniversalTime(),
+                });
+            }
+            else
+            {
+                state.LastPollStartedAt = startedAt.ToUniversalTime();
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+        }
+    }
 }

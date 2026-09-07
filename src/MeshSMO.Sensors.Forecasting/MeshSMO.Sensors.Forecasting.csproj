@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\MeshSMO.Sensors.Application\MeshSMO.Sensors.Application.csproj" />
+    <ProjectReference Include="..\MeshSMO.Sensors.Domain\MeshSMO.Sensors.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.ML" />
+    <PackageReference Include="Microsoft.ML.TimeSeries" />
+    <PackageReference Include="Meziantou.Analyzer" />
+    <PackageReference Include="Roslynator.Analyzers" />
+  </ItemGroup>
+
+</Project>

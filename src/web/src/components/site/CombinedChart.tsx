@@ -18,6 +18,29 @@ export type ChartSeries = {
   points: MeasurementPoint[];
 };
 
+type AxisDomain = [number | "auto", number | "auto"];
+
+function chartDomainForUnit(
+  series: ChartSeries[],
+  unit: string | undefined,
+): AxisDomain | undefined {
+  if (unit === undefined) return undefined;
+  const definitions = series
+    .filter((item) => (item.unit ?? getMetric(item.metricKey).unit) === unit)
+    .map((item) => getMetric(item.metricKey));
+  if (definitions.length === 0) return undefined;
+
+  const minimums = definitions.map((definition) => definition.chart?.minimum);
+  const maximums = definitions.map((definition) => definition.chart?.maximum);
+  const minimum = minimums.every((value) => value !== undefined)
+    ? Math.min(...(minimums as number[]))
+    : "auto";
+  const maximum = maximums.every((value) => value !== undefined)
+    ? Math.max(...(maximums as number[]))
+    : "auto";
+  return minimum === "auto" && maximum === "auto" ? undefined : [minimum, maximum];
+}
+
 /** Несколько метрик на одном полотне. Ось Y — до двух групп по единицам измерения. */
 export default function CombinedChart({ series }: { series: ChartSeries[] }) {
   const units: string[] = [];
@@ -26,6 +49,8 @@ export default function CombinedChart({ series }: { series: ChartSeries[] }) {
     if (!units.includes(unit)) units.push(unit);
   }
   const rightUnit = units[1];
+  const leftDomain = chartDomainForUnit(series, units[0]);
+  const rightDomain = chartDomainForUnit(series, rightUnit);
 
   type Row = { t: number } & Record<string, number | null>;
   const byTime = new Map<number, Row>();
@@ -60,10 +85,19 @@ export default function CombinedChart({ series }: { series: ChartSeries[] }) {
             stroke="var(--muted-foreground)"
             fontSize={11}
           />
-          <YAxis yAxisId="left" stroke="var(--muted-foreground)" fontSize={11} width={52} />
+          <YAxis
+            yAxisId="left"
+            {...(leftDomain ? { domain: leftDomain } : {})}
+            allowDataOverflow={leftDomain !== undefined}
+            stroke="var(--muted-foreground)"
+            fontSize={11}
+            width={52}
+          />
           {rightUnit !== undefined ? (
             <YAxis
               yAxisId="right"
+              {...(rightDomain ? { domain: rightDomain } : {})}
+              allowDataOverflow={rightDomain !== undefined}
               orientation="right"
               stroke="var(--muted-foreground)"
               fontSize={11}

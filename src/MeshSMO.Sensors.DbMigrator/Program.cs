@@ -1,7 +1,9 @@
+using System.Reflection;
 using MeshSMO.Sensors.Application.Registry;
 using MeshSMO.Sensors.Infrastructure;
 using MeshSMO.Sensors.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -9,6 +11,7 @@ using Microsoft.Extensions.Logging;
 var validateRegistryOnly = args.Contains("--validate-registry", StringComparer.Ordinal);
 var hostArgs = args.Where(argument => !string.Equals(argument, "--validate-registry", StringComparison.Ordinal)).ToArray();
 var builder = Host.CreateApplicationBuilder(hostArgs);
+builder.Configuration.AddUserSecrets(Assembly.GetExecutingAssembly());
 builder.Logging.ClearProviders();
 builder.Logging.AddSimpleConsole(options =>
 {

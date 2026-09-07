@@ -1,6 +1,10 @@
 using MeshSMO.Sensors.Gateway.LocalStorage;
 using MeshSMO.Sensors.Gateway.MeshCore;
+using MeshSMO.Sensors.Gateway.Resilience;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Polly;
+using Polly.Timeout;
 
 namespace MeshSMO.Sensors.Gateway;
 
@@ -8,8 +12,12 @@ public sealed class Worker(
     IRepeaterClient repeaterClient,
     ILocalTelemetryStore localTelemetryStore,
     IOptions<MeshCoreOptions> options,
-    ILogger<Worker> logger) : BackgroundService
+    ILogger<Worker> logger,
+    [FromKeyedServices(GatewayResiliencePipelines.RepeaterSessionKey)] ResiliencePipeline? reconnectPipeline = null) : BackgroundService
 {
+    private readonly ResiliencePipeline _reconnectPipeline = reconnectPipeline ??
+        GatewayResiliencePipelines.CreateRepeaterSessionPipeline(options.Value);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // The outbox schema is migrated in Program.cs before hosted services start.
@@ -44,38 +52,39 @@ public sealed class Worker(
         var collectionInterval = TimeSpan.FromSeconds(options.Value.TelemetryCollectionIntervalSeconds);
         try
         {
-            while (!stoppingToken.IsCancellationRequested)
+            await _reconnectPipeline.ExecuteAsync(async token =>
             {
                 try
                 {
-                    await repeaterClient.ConnectAsync(stoppingToken).ConfigureAwait(false);
-                    var version = await repeaterClient.ExecuteCommandAsync("ver", stoppingToken).ConfigureAwait(false);
+                    await repeaterClient.ConnectAsync(token).ConfigureAwait(false);
+                    var version = await repeaterClient.ExecuteCommandAsync("ver", token).ConfigureAwait(false);
                     logger.LogInformation(
                         "Connected to MeshCoreTel repeater over {Transport}; firmware: {FirmwareVersion}",
                         repeaterClient.TransportName,
                         version);
 
-                    while (!stoppingToken.IsCancellationRequested)
+                    while (!token.IsCancellationRequested)
                     {
-                        using var telemetry = await repeaterClient.GetTelemetryAsync(stoppingToken).ConfigureAwait(false);
+                        using var telemetry = await repeaterClient.GetTelemetryAsync(token).ConfigureAwait(false);
                         var snapshotId = await localTelemetryStore.AppendAsync(
                             DateTimeOffset.UtcNow,
                             repeaterClient.TransportName,
                             telemetry.RootElement.GetRawText(),
-                            stoppingToken).ConfigureAwait(false);
+                            token).ConfigureAwait(false);
                         logger.LogDebug(
                             "Stored repeater telemetry snapshot {SnapshotId} in the local outbox",
                             snapshotId);
-                        await Task.Delay(collectionInterval, stoppingToken).ConfigureAwait(false);
+                        await Task.Delay(collectionInterval, token).ConfigureAwait(false);
                     }
                 }
-                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
                 {
-                    break;
+                    throw;
                 }
                 catch (Exception exception) when (
                     exception is HttpRequestException or TaskCanceledException or MeshCoreTelApiException or
-                        IOException or UnauthorizedAccessException or TimeoutException or InvalidOperationException)
+                        IOException or UnauthorizedAccessException or TimeoutException or TimeoutRejectedException or
+                        InvalidOperationException)
                 {
                     logger.LogWarning(
                         exception,
@@ -83,9 +92,9 @@ public sealed class Worker(
                         repeaterClient.TransportName,
                         retryDelay);
                     await repeaterClient.DisconnectAsync(CancellationToken.None).ConfigureAwait(false);
-                    await Task.Delay(retryDelay, stoppingToken).ConfigureAwait(false);
+                    throw;
                 }
-            }
+            }, stoppingToken).ConfigureAwait(false);
         }
         finally
         {

@@ -102,6 +102,15 @@ public sealed class GatewayWorkerTests
             Task.CompletedTask;
 
         public Task<long> CountPendingAsync(CancellationToken cancellationToken) => Task.FromResult(0L);
+
+        public Task<DateTimeOffset?> ReadLastPollStartedAtAsync(
+            string sensorSlug,
+            CancellationToken cancellationToken) => Task.FromResult<DateTimeOffset?>(null);
+
+        public Task RecordPollStartedAsync(
+            string sensorSlug,
+            DateTimeOffset startedAt,
+            CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed record AppendedSnapshot(string Transport, string PayloadJson);

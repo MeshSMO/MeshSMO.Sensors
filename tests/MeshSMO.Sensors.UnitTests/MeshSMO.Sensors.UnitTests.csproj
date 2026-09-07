@@ -24,6 +24,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\MeshSMO.Sensors.Domain\MeshSMO.Sensors.Domain.csproj" />
     <ProjectReference Include="..\..\src\MeshSMO.Sensors.Application\MeshSMO.Sensors.Application.csproj" />
+    <ProjectReference Include="..\..\src\MeshSMO.Sensors.Forecasting\MeshSMO.Sensors.Forecasting.csproj" />
     <ProjectReference Include="..\..\src\MeshSMO.Sensors.Gateway\MeshSMO.Sensors.Gateway.csproj" />
     <ProjectReference Include="..\..\src\MeshSMO.Sensors.Web\MeshSMO.Sensors.Web.csproj" />
     <ProjectReference Include="..\..\src\MeshSMO.Sensors.Infrastructure\MeshSMO.Sensors.Infrastructure.csproj" />

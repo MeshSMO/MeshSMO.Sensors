@@ -8,8 +8,10 @@ using MeshSMO.Sensors.Application.Registry;
 using MeshSMO.Sensors.Domain.Polling;
 using MeshSMO.Sensors.Gateway.LocalStorage;
 using MeshSMO.Sensors.Gateway.MeshCore;
+using MeshSMO.Sensors.Gateway.Resilience;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Polly;
 
 namespace MeshSMO.Sensors.Gateway.Polling;
 
@@ -25,6 +27,10 @@ namespace MeshSMO.Sensors.Gateway.Polling;
 /// priority queue with MaxConcurrentPolls = 1, and a bounded retry policy —
 /// a failed poll cycle retries up to the registry's pollMaxAttempts with a
 /// small randomized backoff; LoRa airtime is never hammered (spec §8.4).
+/// When a sensor defines polling.schedule, the between-cycles interval is
+/// taken from the schedule window covering the sensor's local time, falling
+/// back to the base interval outside the windows; the regime switch lands on
+/// the next poll queued after a completed cycle.
 /// Every attempt (success or failure) is appended to the outbox so the main
 /// API can persist poll_attempts.
 /// </summary>
@@ -34,11 +40,14 @@ public sealed class SensorTelemetryPoller(
     ILocalTelemetryStore store,
     IOptions<MeshCoreOptions> meshOptions,
     IOptions<SensorPollingOptions> pollingOptions,
-    ILogger<SensorTelemetryPoller> logger) : BackgroundService
+    ILogger<SensorTelemetryPoller> logger,
+    [FromKeyedServices(GatewayResiliencePipelines.SensorPollingKey)] ResiliencePipeline? retryPipeline = null) : BackgroundService
 {
     /// <summary>Airtime guard: registry allows up to 10, we never fire more than 3 requests per cycle.</summary>
     private const int MaxAttemptsPerCycle = 3;
 
+    private readonly ResiliencePipeline _retryPipeline = retryPipeline ??
+        GatewayResiliencePipelines.CreateSensorPollingPipeline(pollingOptions.Value);
     private long _requestIdSeed = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -83,7 +92,12 @@ public sealed class SensorTelemetryPoller(
         var now = DateTimeOffset.UtcNow;
         foreach (var sensor in sensors)
         {
-            var due = now + NextStartDelay(sensor);
+            var lastPollStartedAt = await store.ReadLastPollStartedAtAsync(
+                sensor.Slug.Value,
+                stoppingToken).ConfigureAwait(false);
+            var due = lastPollStartedAt is null
+                ? now + NextStartDelay(sensor)
+                : lastPollStartedAt.Value + EffectivePollInterval(sensor, pollingOptions.Value, now);
             queue.Enqueue((sensor, due), due);
         }
         var loginAttempted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -99,8 +113,15 @@ public sealed class SensorTelemetryPoller(
             }
 
             var (sensor, _) = queue.Dequeue();
+            var pollStartedAt = DateTimeOffset.UtcNow;
             try
             {
+                // Persist before touching the radio. If the process stops during
+                // the cycle, a restart still observes the interval guard.
+                await store.RecordPollStartedAsync(
+                    sensor.Slug.Value,
+                    pollStartedAt,
+                    stoppingToken).ConfigureAwait(false);
                 await PollCycleAsync(sensor, loginAttempted, stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -115,7 +136,8 @@ public sealed class SensorTelemetryPoller(
                     sensor.Slug.Value);
             }
 
-            var nextDue = DateTimeOffset.UtcNow + PollInterval(sensor);
+            var queuedAt = DateTimeOffset.UtcNow;
+            var nextDue = pollStartedAt + EffectivePollInterval(sensor, pollingOptions.Value, queuedAt);
             queue.Enqueue((sensor, nextDue), nextDue);
         }
     }
@@ -125,17 +147,19 @@ public sealed class SensorTelemetryPoller(
         var options = pollingOptions.Value;
         var timeoutMs = ResolveRequestTimeoutMs(sensor, options);
         var maxAttempts = Math.Clamp(sensor.PollMaxAttempts, 1, MaxAttemptsPerCycle);
+        var attempt = 0;
 
-        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        await _retryPipeline.ExecuteAsync(async token =>
         {
+            attempt++;
             var requestId = Interlocked.Increment(ref _requestIdSeed);
             var startedAt = DateTimeOffset.UtcNow;
             PollAttemptOutcome outcome;
             try
             {
-                outcome = await PollOnceAsync(sensor, requestId, startedAt, timeoutMs, cancellationToken).ConfigureAwait(false);
+                outcome = await PollOnceAsync(sensor, requestId, startedAt, timeoutMs, token).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
                 throw;
             }
@@ -155,30 +179,29 @@ public sealed class SensorTelemetryPoller(
                     (int)(DateTimeOffset.UtcNow - startedAt).TotalMilliseconds);
             }
 
-            await RecordAttemptAsync(sensor, requestId, attempt, startedAt, outcome, cancellationToken).ConfigureAwait(false);
+            await RecordAttemptAsync(sensor, requestId, attempt, startedAt, outcome, token).ConfigureAwait(false);
 
             if (outcome.Telemetry is not null)
-                break;
+                return;
 
             if (attempt >= maxAttempts)
-                break;
+                return;
 
             // An empty or undecodable body is a deterministic answer; retrying
             // would only burn LoRa airtime. Timeouts and transport errors are
             // transient and are retried.
             if (outcome.ErrorCode is "empty_response" or "undecodable_response")
-                break;
+                return;
 
             if (outcome.Status == PollAttemptStatus.TimedOut)
             {
                 // The node most likely has not added this repeater to its ACL
                 // yet; bootstrap the ANON login once before the retry.
-                await TryLoginOnceAsync(sensor, loginAttempted, cancellationToken).ConfigureAwait(false);
+                await TryLoginOnceAsync(sensor, loginAttempted, token).ConfigureAwait(false);
             }
 
-            var backoffMs = Random.Shared.Next(options.RetryBackoffMinMs, options.RetryBackoffMaxMs + 1);
-            await Task.Delay(TimeSpan.FromMilliseconds(backoffMs), cancellationToken).ConfigureAwait(false);
-        }
+            throw new SensorPollingRetryException();
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<PollAttemptOutcome> PollOnceAsync(
@@ -395,13 +418,20 @@ public sealed class SensorTelemetryPoller(
             .ToArray();
     }
 
-    private TimeSpan PollInterval(SensorDefinition sensor)
+    /// <summary>
+    /// Between-cycles interval: the <c>polling.schedule</c> window covering the
+    /// sensor's local time when a schedule is configured, otherwise the base
+    /// registry interval. The global <c>SensorPolling:IntervalOverrideSeconds</c>
+    /// still shortens either of them.
+    /// </summary>
+    internal static TimeSpan EffectivePollInterval(SensorDefinition sensor, SensorPollingOptions options, DateTimeOffset now)
     {
-        var overrideSeconds = pollingOptions.Value.IntervalOverrideSeconds;
-        if (overrideSeconds >= 30 && overrideSeconds < sensor.PollInterval.TotalSeconds)
+        var interval = sensor.PollingSchedule?.ResolveInterval(now) ?? sensor.PollInterval;
+        var overrideSeconds = options.IntervalOverrideSeconds;
+        if (overrideSeconds >= 30 && overrideSeconds < interval.TotalSeconds)
             return TimeSpan.FromSeconds(overrideSeconds);
 
-        return sensor.PollInterval;
+        return interval;
     }
 
     private static TimeSpan NextStartDelay(SensorDefinition sensor)

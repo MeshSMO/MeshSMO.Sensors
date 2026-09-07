@@ -133,6 +133,36 @@
   background-size: 44px 44px;
 }
 
+.history-chart-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.history-chart-card {
+  flex: 0 0 100%;
+  min-width: 0;
+}
+
+.history-chart-card[style] .history-metric-chart {
+  height: auto;
+  min-height: 18rem;
+  flex: 1 1 0%;
+}
+
+@media (min-width: 40rem) {
+  .history-chart-card {
+    flex-basis: var(--history-card-width, 100%);
+  }
+}
+
+@media (min-width: 80rem) {
+  .history-chart-card {
+    flex-basis: var(--history-card-width, calc(50% - 0.5rem));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

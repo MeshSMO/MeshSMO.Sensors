@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\MeshSMO.Sensors.Application\MeshSMO.Sensors.Application.csproj" />
+    <ProjectReference Include="..\MeshSMO.Sensors.Forecasting\MeshSMO.Sensors.Forecasting.csproj" />
     <ProjectReference Include="..\MeshSMO.Sensors.Infrastructure\MeshSMO.Sensors.Infrastructure.csproj" />
     <!-- The frontend is built by the node stage of deploy/Dockerfile.web and
          copied into wwwroot; the esproj is skipped in that environment. -->
@@ -23,6 +24,8 @@
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" PrivateAssets="Analyzers;Build" />
     <PackageReference Include="Microsoft.AspNetCore.SpaProxy" />
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+    <PackageReference Include="Microsoft.Extensions.Resilience" />
     <PackageReference Include="Meziantou.Analyzer" />
     <PackageReference Include="Roslynator.Analyzers" />
   </ItemGroup>
