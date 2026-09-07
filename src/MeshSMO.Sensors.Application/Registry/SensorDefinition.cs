@@ -26,7 +26,13 @@ public sealed record SensorDefinition(
     /// "not configured — fall back to the global SensorPolling:LoginPassword";
     /// an empty string means "this node has no password".
     /// </summary>
-    string? LoginPassword = null)
+    string? LoginPassword = null,
+    /// <summary>
+    /// Time-of-day polling schedule (interpreted by the gateway poller);
+    /// <c>null</c> means the base <see cref="PollInterval"/> applies around
+    /// the clock.
+    /// </summary>
+    PollingSchedule? PollingSchedule = null)
 {
     public SensorDefinition(
         SensorId id,

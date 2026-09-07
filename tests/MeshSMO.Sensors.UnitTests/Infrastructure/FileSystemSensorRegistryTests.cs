@@ -206,6 +206,204 @@ public sealed class FileSystemSensorRegistryTests
         }
     }
 
+    [Fact]
+    public async Task LoadAsync_reads_polling_schedule()
+    {
+        var directory = CreateTemporaryDirectory();
+        try
+        {
+            await File.WriteAllTextAsync(
+                Path.Combine(directory, "sensor.yaml"),
+                WithPollingSchedule("""
+                    schedule:
+                      timeZone: "Europe/Moscow"
+                      windows:
+                        - from: "08:00"
+                          to: "12:00"
+                          interval: "15m"
+                        - from: "12:00"
+                          to: "22:00"
+                          interval: "30m"
+                        - from: "22:00"
+                          to: "06:00"
+                          interval: "1h"
+                  """));
+            var registry = CreateRegistry(directory);
+
+            var definitions = await registry.LoadAsync(CancellationToken.None);
+
+            var sensor = Assert.Single(definitions);
+            var schedule = sensor.PollingSchedule;
+            Assert.NotNull(schedule);
+            Assert.Equal("Europe/Moscow", schedule.TimeZone.Id);
+            Assert.Equal(
+                TimeSpan.FromMinutes(15),
+                schedule.ResolveInterval(new DateTimeOffset(2026, 6, 15, 5, 30, 0, TimeSpan.Zero)));
+            // Touching windows are not overlapping: 12:00 local belongs to the second window.
+            Assert.Equal(
+                TimeSpan.FromMinutes(30),
+                schedule.ResolveInterval(new DateTimeOffset(2026, 6, 15, 9, 0, 0, TimeSpan.Zero)));
+            // 23:30 local inside the wrap window; 07:00 local in the gap → null (base interval).
+            Assert.Equal(
+                TimeSpan.FromHours(1),
+                schedule.ResolveInterval(new DateTimeOffset(2026, 6, 15, 20, 30, 0, TimeSpan.Zero)));
+            Assert.Null(schedule.ResolveInterval(new DateTimeOffset(2026, 6, 15, 4, 0, 0, TimeSpan.Zero)));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task LoadAsync_reports_overlapping_schedule_windows()
+    {
+        await LoadScheduleExpectingError(
+            """
+                schedule:
+                  timeZone: "Europe/Moscow"
+                  windows:
+                    - from: "08:00"
+                      to: "12:00"
+                      interval: "15m"
+                    - from: "11:00"
+                      to: "18:00"
+                      interval: "30m"
+              """,
+            "polling.schedule windows overlap");
+    }
+
+    [Fact]
+    public async Task LoadAsync_reports_duplicate_schedule_windows()
+    {
+        await LoadScheduleExpectingError(
+            """
+                schedule:
+                  timeZone: "Europe/Moscow"
+                  windows:
+                    - from: "08:00"
+                      to: "12:00"
+                      interval: "15m"
+                    - from: "08:00"
+                      to: "12:00"
+                      interval: "30m"
+              """,
+            "polling.schedule windows overlap");
+    }
+
+    [Fact]
+    public async Task LoadAsync_reports_zero_length_schedule_window()
+    {
+        await LoadScheduleExpectingError(
+            """
+                schedule:
+                  timeZone: "Europe/Moscow"
+                  windows:
+                    - from: "08:00"
+                      to: "08:00"
+                      interval: "15m"
+              """,
+            "must not be zero-length");
+    }
+
+    [Fact]
+    public async Task LoadAsync_reports_missing_schedule_timezone()
+    {
+        await LoadScheduleExpectingError(
+            """
+                schedule:
+                  windows:
+                    - from: "08:00"
+                      to: "12:00"
+                      interval: "15m"
+              """,
+            "polling.schedule.timeZone is required");
+    }
+
+    [Fact]
+    public async Task LoadAsync_reports_unknown_schedule_timezone()
+    {
+        await LoadScheduleExpectingError(
+            """
+                schedule:
+                  timeZone: "Europe/NonExisting"
+                  windows:
+                    - from: "08:00"
+                      to: "12:00"
+                      interval: "15m"
+              """,
+            "was not found on this machine");
+    }
+
+    [Fact]
+    public async Task LoadAsync_reports_invalid_schedule_window_time()
+    {
+        await LoadScheduleExpectingError(
+            """
+                schedule:
+                  timeZone: "Europe/Moscow"
+                  windows:
+                    - from: "8:5"
+                      to: "12:00"
+                      interval: "15m"
+              """,
+            "must be a local time in 'HH:mm' format");
+    }
+
+    [Fact]
+    public async Task LoadAsync_reports_schedule_window_interval_shorter_than_timeout()
+    {
+        await LoadScheduleExpectingError(
+            """
+                schedule:
+                  timeZone: "Europe/Moscow"
+                  windows:
+                    - from: "08:00"
+                      to: "12:00"
+                      interval: "10s"
+              """,
+            "polling.timeout cannot exceed a polling.schedule window interval");
+    }
+
+    [Fact]
+    public async Task LoadAsync_reports_empty_schedule_windows()
+    {
+        await LoadScheduleExpectingError(
+            """
+                schedule:
+                  timeZone: "Europe/Moscow"
+                  windows: []
+              """,
+            "must contain at least one window");
+    }
+
+    private static async Task LoadScheduleExpectingError(string scheduleBlock, string expectedErrorFragment)
+    {
+        var directory = CreateTemporaryDirectory();
+        try
+        {
+            await File.WriteAllTextAsync(
+                Path.Combine(directory, "sensor.yaml"),
+                WithPollingSchedule(scheduleBlock));
+            var registry = CreateRegistry(directory);
+
+            var exception = await Assert.ThrowsAsync<SensorRegistryValidationException>(
+                () => registry.LoadAsync(CancellationToken.None));
+
+            Assert.Contains(exception.Errors, error => error.Contains(expectedErrorFragment, StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static string WithPollingSchedule(string scheduleBlock) =>
+        ValidYaml().Replace(
+            "  enabled: true",
+            $"  enabled: true\n{scheduleBlock}",
+            StringComparison.Ordinal);
+
     private static FileSystemSensorRegistry CreateRegistry(string directory, Dictionary<string, string?>? environment = null) =>
         new(
             Options.Create(new SensorRegistryOptions { Directory = directory }),

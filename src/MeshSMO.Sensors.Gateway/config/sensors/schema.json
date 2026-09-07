@@ -32,7 +32,35 @@
         "interval": { "$ref": "#/$defs/duration" },
         "timeout": { "$ref": "#/$defs/duration" },
         "maxAttempts": { "type": "integer", "minimum": 1, "maximum": 10 },
-        "enabled": { "type": "boolean" }
+        "enabled": { "type": "boolean" },
+        "schedule": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["timeZone", "windows"],
+          "description": "Optional gateway-only time-of-day polling schedule; outside the windows the base interval applies.",
+          "properties": {
+            "timeZone": {
+              "type": "string",
+              "minLength": 1,
+              "description": "IANA time zone id (e.g. 'Europe/Moscow') used to interpret the window times."
+            },
+            "windows": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["from", "to", "interval"],
+                "description": "Half-open [from, to) local-time window; 'to' <= 'from' wraps past midnight.",
+                "properties": {
+                  "from": { "$ref": "#/$defs/timeOfDay" },
+                  "to": { "$ref": "#/$defs/timeOfDay" },
+                  "interval": { "$ref": "#/$defs/duration" }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "public": {
@@ -89,6 +117,10 @@
     "duration": {
       "type": "string",
       "pattern": "^[0-9]+(?:ms|s|m|h|d)$"
+    },
+    "timeOfDay": {
+      "type": "string",
+      "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"
     }
   }
 }

@@ -25,6 +25,10 @@ namespace MeshSMO.Sensors.Gateway.Polling;
 /// priority queue with MaxConcurrentPolls = 1, and a bounded retry policy —
 /// a failed poll cycle retries up to the registry's pollMaxAttempts with a
 /// small randomized backoff; LoRa airtime is never hammered (spec §8.4).
+/// When a sensor defines polling.schedule, the between-cycles interval is
+/// taken from the schedule window covering the sensor's local time, falling
+/// back to the base interval outside the windows; the regime switch lands on
+/// the next poll queued after a completed cycle.
 /// Every attempt (success or failure) is appended to the outbox so the main
 /// API can persist poll_attempts.
 /// </summary>
@@ -83,7 +87,7 @@ public sealed class SensorTelemetryPoller(
                 stoppingToken).ConfigureAwait(false);
             var due = lastPollStartedAt is null
                 ? now + NextStartDelay(sensor)
-                : lastPollStartedAt.Value + PollInterval(sensor);
+                : lastPollStartedAt.Value + EffectivePollInterval(sensor, pollingOptions.Value, now);
             queue.Enqueue((sensor, due), due);
         }
         var loginAttempted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -122,7 +126,8 @@ public sealed class SensorTelemetryPoller(
                     sensor.Slug.Value);
             }
 
-            var nextDue = pollStartedAt + PollInterval(sensor);
+            var queuedAt = DateTimeOffset.UtcNow;
+            var nextDue = pollStartedAt + EffectivePollInterval(sensor, pollingOptions.Value, queuedAt);
             queue.Enqueue((sensor, nextDue), nextDue);
         }
     }
@@ -403,13 +408,20 @@ public sealed class SensorTelemetryPoller(
             .ToArray();
     }
 
-    private TimeSpan PollInterval(SensorDefinition sensor)
+    /// <summary>
+    /// Between-cycles interval: the <c>polling.schedule</c> window covering the
+    /// sensor's local time when a schedule is configured, otherwise the base
+    /// registry interval. The global <c>SensorPolling:IntervalOverrideSeconds</c>
+    /// still shortens either of them.
+    /// </summary>
+    internal static TimeSpan EffectivePollInterval(SensorDefinition sensor, SensorPollingOptions options, DateTimeOffset now)
     {
-        var overrideSeconds = pollingOptions.Value.IntervalOverrideSeconds;
-        if (overrideSeconds >= 30 && overrideSeconds < sensor.PollInterval.TotalSeconds)
+        var interval = sensor.PollingSchedule?.ResolveInterval(now) ?? sensor.PollInterval;
+        var overrideSeconds = options.IntervalOverrideSeconds;
+        if (overrideSeconds >= 30 && overrideSeconds < interval.TotalSeconds)
             return TimeSpan.FromSeconds(overrideSeconds);
 
-        return sensor.PollInterval;
+        return interval;
     }
 
     private static TimeSpan NextStartDelay(SensorDefinition sensor)
