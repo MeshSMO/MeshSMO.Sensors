@@ -40,6 +40,16 @@ public static class MeshCoreGatewayServiceCollectionExtensions
                     !string.IsNullOrWhiteSpace(options.Serial.PortName),
                 "MeshCore:Serial:PortName is required in Serial mode.")
             .Validate(
+                static options => options.Mode != MeshCoreConnectionMode.Companion ||
+                    !string.IsNullOrWhiteSpace(options.Companion.Host),
+                "MeshCore:Companion:Host is required in Companion mode.")
+            .Validate(
+                static options => options.Companion.Port is >= 1 and <= 65535,
+                "MeshCore:Companion:Port must be between 1 and 65535.")
+            .Validate(
+                static options => options.Companion.ConnectTimeoutSeconds > 0,
+                "MeshCore:Companion:ConnectTimeoutSeconds must be greater than zero.")
+            .Validate(
                 static options => options.Serial.BaudRate > 0,
                 "MeshCore:Serial:BaudRate must be greater than zero.")
             .Validate(
@@ -119,6 +129,18 @@ public static class MeshCoreGatewayServiceCollectionExtensions
                 MeshCoreConnectionMode.Serial => serviceProvider.GetRequiredService<RepeaterSerialClient>(),
                 _ => serviceProvider.GetRequiredService<DisabledRepeaterClient>(),
             };
+        });
+
+        // The poller is channel-agnostic: in Companion mode sensor requests go
+        // through the stock companion frame protocol, otherwise through the
+        // repeater acquisition API (MeshCoreTelHttpClient, as before).
+        services.AddSingleton<CompanionRadioClient>();
+        services.AddSingleton<IMeshNodeClient>(serviceProvider =>
+        {
+            var mode = serviceProvider.GetRequiredService<IOptions<MeshCoreOptions>>().Value.Mode;
+            return mode == MeshCoreConnectionMode.Companion
+                ? serviceProvider.GetRequiredService<CompanionRadioClient>()
+                : serviceProvider.GetRequiredService<IMeshCoreTelClient>();
         });
 
         return services;
