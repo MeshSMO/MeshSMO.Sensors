@@ -1,8 +1,12 @@
 using Microsoft.ML;
-using Microsoft.ML.Data;
 using Microsoft.ML.Transforms.TimeSeries;
+using MeshSMO.Sensors.Forecasting.Abstractions;
+using MeshSMO.Sensors.Forecasting.Configuration;
+using MeshSMO.Sensors.Forecasting.Evaluation;
+using MeshSMO.Sensors.Forecasting.Models;
+using MeshSMO.Sensors.Forecasting.Preparation;
 
-namespace MeshSMO.Sensors.Forecasting;
+namespace MeshSMO.Sensors.Forecasting.MlNet;
 
 public sealed class MlNetForecastService : IForecastService
 {
@@ -75,7 +79,7 @@ public sealed class MlNetForecastService : IForecastService
                 step);
         }
 
-        var evaluations = new List<CandidateEvaluation>(windowSizes.Length);
+        var evaluations = new List<SsaCandidateEvaluation>(windowSizes.Length);
         foreach (var windowSize in windowSizes)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -161,7 +165,7 @@ public sealed class MlNetForecastService : IForecastService
             points);
     }
 
-    private CandidateEvaluation EvaluateCandidate(
+    private SsaCandidateEvaluation EvaluateCandidate(
         IReadOnlyList<float> values,
         int horizon,
         int seasonLength,
@@ -197,28 +201,28 @@ public sealed class MlNetForecastService : IForecastService
         return new(windowSize, metrics, ForecastMetrics.RelativeMae(metrics.Mae, baselineMae));
     }
 
-    private ModelOutput ForecastBySsa(IReadOnlyList<float> values, int horizon, int windowSize)
+    private SsaModelOutput ForecastBySsa(IReadOnlyList<float> values, int horizon, int windowSize)
     {
         var mlContext = new MLContext(seed: 1);
-        var data = mlContext.Data.LoadFromEnumerable(values.Select(static value => new ModelInput { Value = value }));
+        var data = mlContext.Data.LoadFromEnumerable(values.Select(static value => new SsaModelInput { Value = value }));
         var seriesLength = Math.Min(values.Count, Math.Max(windowSize * 4, windowSize + 1));
         var estimator = mlContext.Forecasting.ForecastBySsa(
-            nameof(ModelOutput.Forecast),
-            nameof(ModelInput.Value),
+            nameof(SsaModelOutput.Forecast),
+            nameof(SsaModelInput.Value),
             windowSize,
             seriesLength,
             values.Count,
             horizon,
-            confidenceLowerBoundColumn: nameof(ModelOutput.Lower),
-            confidenceUpperBoundColumn: nameof(ModelOutput.Upper),
+            confidenceLowerBoundColumn: nameof(SsaModelOutput.Lower),
+            confidenceUpperBoundColumn: nameof(SsaModelOutput.Upper),
             confidenceLevel: _options.ConfidenceLevel,
             shouldStabilize: true);
         var transformer = estimator.Fit(data);
-        var engine = transformer.CreateTimeSeriesEngine<ModelInput, ModelOutput>(mlContext);
+        var engine = transformer.CreateTimeSeriesEngine<SsaModelInput, SsaModelOutput>(mlContext);
         return engine.Predict();
     }
 
-    private string? QualityReason(CandidateEvaluation evaluation, ForecastSeries series)
+    private string? QualityReason(SsaCandidateEvaluation evaluation, ForecastSeries series)
     {
         if (!double.IsFinite(evaluation.Mase) || evaluation.Mase > _options.MaximumMase)
             return "The SSA forecast did not improve sufficiently on the naive baseline.";
@@ -243,7 +247,7 @@ public sealed class MlNetForecastService : IForecastService
         return result;
     }
 
-    private static bool HasValidOutput(ModelOutput output, int horizon) =>
+    private static bool HasValidOutput(SsaModelOutput output, int horizon) =>
         output.Forecast.Length == horizon &&
         output.Lower.Length == horizon &&
         output.Upper.Length == horizon &&
@@ -285,27 +289,5 @@ public sealed class MlNetForecastService : IForecastService
             !double.IsFinite(options.MinimumIntervalCoverage) ||
             options.MinimumIntervalCoverage is < 0 or > 1)
             throw new ArgumentOutOfRangeException(nameof(options), "Quality thresholds are invalid.");
-    }
-
-    private sealed record CandidateEvaluation(
-        int WindowSize,
-        ForecastMetricValues Metrics,
-        double Mase);
-
-    private sealed class ModelInput
-    {
-        public float Value { get; init; }
-    }
-
-    private sealed class ModelOutput
-    {
-        [VectorType]
-        public float[] Forecast { get; init; } = [];
-
-        [VectorType]
-        public float[] Lower { get; init; } = [];
-
-        [VectorType]
-        public float[] Upper { get; init; } = [];
     }
 }

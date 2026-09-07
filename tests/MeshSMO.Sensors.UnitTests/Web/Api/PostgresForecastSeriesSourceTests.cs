@@ -1,6 +1,6 @@
 using MeshSMO.Sensors.Domain.Measurements;
 using MeshSMO.Sensors.Domain.Sensors;
-using MeshSMO.Sensors.Forecasting;
+using MeshSMO.Sensors.Forecasting.Models;
 using MeshSMO.Sensors.Infrastructure.Persistence;
 using MeshSMO.Sensors.Web.Api.Forecasting;
 using Microsoft.Data.Sqlite;

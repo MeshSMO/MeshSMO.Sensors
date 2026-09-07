@@ -1,6 +1,7 @@
 using MeshSMO.Sensors.Application.Abstractions;
 using MeshSMO.Sensors.Domain.Sensors;
-using MeshSMO.Sensors.Forecasting;
+using MeshSMO.Sensors.Forecasting.Configuration;
+using MeshSMO.Sensors.Forecasting.Models;
 using MeshSMO.Sensors.Infrastructure.Persistence;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;

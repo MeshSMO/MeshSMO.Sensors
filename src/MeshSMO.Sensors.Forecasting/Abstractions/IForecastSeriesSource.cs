@@ -1,4 +1,6 @@
-namespace MeshSMO.Sensors.Forecasting;
+using MeshSMO.Sensors.Forecasting.Models;
+
+namespace MeshSMO.Sensors.Forecasting.Abstractions;
 
 public interface IForecastSeriesSource
 {

@@ -1,6 +1,7 @@
 using System.Data.Common;
 using System.Globalization;
-using MeshSMO.Sensors.Forecasting;
+using MeshSMO.Sensors.Forecasting.Abstractions;
+using MeshSMO.Sensors.Forecasting.Models;
 using MeshSMO.Sensors.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 

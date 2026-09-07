@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using MeshSMO.Sensors.Application.Abstractions;
-using MeshSMO.Sensors.Forecasting;
+using MeshSMO.Sensors.Forecasting.Abstractions;
+using MeshSMO.Sensors.Forecasting.Configuration;
+using MeshSMO.Sensors.Forecasting.Models;
 using MeshSMO.Sensors.Web.Resilience;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;

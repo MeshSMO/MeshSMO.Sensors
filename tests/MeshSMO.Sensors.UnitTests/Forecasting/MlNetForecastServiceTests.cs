@@ -1,4 +1,6 @@
-using MeshSMO.Sensors.Forecasting;
+using MeshSMO.Sensors.Forecasting.Configuration;
+using MeshSMO.Sensors.Forecasting.MlNet;
+using MeshSMO.Sensors.Forecasting.Models;
 
 namespace MeshSMO.Sensors.UnitTests.Forecasting;
 

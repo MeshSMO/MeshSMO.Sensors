@@ -1,4 +1,4 @@
-namespace MeshSMO.Sensors.Forecasting;
+namespace MeshSMO.Sensors.Forecasting.Evaluation;
 
 public static class NaiveForecasters
 {

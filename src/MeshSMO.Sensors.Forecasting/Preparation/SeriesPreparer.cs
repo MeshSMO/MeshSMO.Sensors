@@ -1,4 +1,7 @@
-namespace MeshSMO.Sensors.Forecasting;
+using MeshSMO.Sensors.Forecasting.Configuration;
+using MeshSMO.Sensors.Forecasting.Models;
+
+namespace MeshSMO.Sensors.Forecasting.Preparation;
 
 public sealed class SeriesPreparer(ForecastingOptions options)
 {

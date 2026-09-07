@@ -1,4 +1,4 @@
-using MeshSMO.Sensors.Forecasting;
+using MeshSMO.Sensors.Forecasting.Configuration;
 using Microsoft.Extensions.Options;
 using Polly;
 

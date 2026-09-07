@@ -1,10 +1,4 @@
-namespace MeshSMO.Sensors.Forecasting;
-
-public sealed record ForecastMetricValues(
-    double Mae,
-    double Rmse,
-    double IntervalCoverage,
-    int Count);
+namespace MeshSMO.Sensors.Forecasting.Evaluation;
 
 public static class ForecastMetrics
 {

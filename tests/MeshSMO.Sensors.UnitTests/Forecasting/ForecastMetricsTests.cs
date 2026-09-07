@@ -1,4 +1,4 @@
-using MeshSMO.Sensors.Forecasting;
+using MeshSMO.Sensors.Forecasting.Evaluation;
 
 namespace MeshSMO.Sensors.UnitTests.Forecasting;
 

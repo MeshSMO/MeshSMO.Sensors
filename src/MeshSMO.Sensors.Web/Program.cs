@@ -1,5 +1,7 @@
 using System.Threading.RateLimiting;
-using MeshSMO.Sensors.Forecasting;
+using MeshSMO.Sensors.Forecasting.Abstractions;
+using MeshSMO.Sensors.Forecasting.Configuration;
+using MeshSMO.Sensors.Forecasting.MlNet;
 using MeshSMO.Sensors.Infrastructure;
 using MeshSMO.Sensors.Infrastructure.Persistence;
 using MeshSMO.Sensors.Web.Api;

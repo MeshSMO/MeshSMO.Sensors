@@ -1,4 +1,4 @@
-namespace MeshSMO.Sensors.Forecasting;
+namespace MeshSMO.Sensors.Forecasting.Models;
 
 public sealed record ForecastResult(
     ForecastAvailability Availability,
