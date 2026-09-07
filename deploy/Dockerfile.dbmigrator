@@ -6,7 +6,12 @@ COPY src/MeshSMO.Sensors.Application/*.csproj src/MeshSMO.Sensors.Application/
 COPY src/MeshSMO.Sensors.Infrastructure/*.csproj src/MeshSMO.Sensors.Infrastructure/
 COPY src/MeshSMO.Sensors.DbMigrator/*.csproj src/MeshSMO.Sensors.DbMigrator/
 RUN dotnet restore src/MeshSMO.Sensors.DbMigrator/MeshSMO.Sensors.DbMigrator.csproj
-COPY src/ src/
+# Keep unrelated services out of this layer so their source changes do not
+# invalidate the restore/publish cache for dbmigrator.
+COPY src/MeshSMO.Sensors.Domain/ src/MeshSMO.Sensors.Domain/
+COPY src/MeshSMO.Sensors.Application/ src/MeshSMO.Sensors.Application/
+COPY src/MeshSMO.Sensors.Infrastructure/ src/MeshSMO.Sensors.Infrastructure/
+COPY src/MeshSMO.Sensors.DbMigrator/ src/MeshSMO.Sensors.DbMigrator/
 RUN dotnet publish src/MeshSMO.Sensors.DbMigrator/MeshSMO.Sensors.DbMigrator.csproj \
     --configuration Release --output /app/publish --no-restore
 

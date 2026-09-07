@@ -85,28 +85,41 @@ jobs:
       - run: npm run build
         working-directory: src/web
 
-  # Проверка сборки образов на PR и push; результат кэшируется в scope image-*
-  # и переиспользуется джобами публикации.
+  # PR проверяет сборку образов, читая cache основной ветки, но ничего не
+  # экспортирует в refs/pull/*: после merge такой cache больше не используется.
+  # На push образы один раз собирает и публикует publish-rolling ниже.
   docker:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        image: [web, gateway, dbmigrator]
+        include:
+          # ML.NET TimeSeries currently ships libMklImports only for linux-x64.
+          - image: web
+            platforms: linux/amd64
+          - image: gateway
+            platforms: linux/amd64,linux/arm64
+          - image: dbmigrator
+            platforms: linux/amd64,linux/arm64
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+        if: contains(matrix.platforms, 'linux/arm64')
+        with:
+          platforms: arm64
       - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: deploy/Dockerfile.${{ matrix.image }}
-          platforms: linux/amd64
+          platforms: ${{ matrix.platforms }}
           push: false
           cache-from: type=gha,scope=image-${{ matrix.image }}
-          cache-to: type=gha,mode=max,scope=image-${{ matrix.image }}
 
   # Rolling-публикация: каждый push в основную ветку обновляет
   # ghcr.io/meshsmo/meshsmo-sensors-<image>:<branch> и :sha-<hash>.
+  # Это единственный writer BuildKit cache: один scope на runtime-образ.
   publish-rolling:
     if: >-
       github.event_name == 'push' &&
@@ -119,9 +132,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [web, gateway, dbmigrator]
+        include:
+          # Keep this in sync with the PR build matrix above.
+          - image: web
+            platforms: linux/amd64
+          - image: gateway
+            platforms: linux/amd64,linux/arm64
+          - image: dbmigrator
+            platforms: linux/amd64,linux/arm64
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+        if: contains(matrix.platforms, 'linux/arm64')
+        with:
+          platforms: arm64
       - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
       - uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         id: meta
@@ -139,7 +163,7 @@ jobs:
         with:
           context: .
           file: deploy/Dockerfile.${{ matrix.image }}
-          platforms: linux/amd64
+          platforms: ${{ matrix.platforms }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
