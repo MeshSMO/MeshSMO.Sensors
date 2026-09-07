@@ -42,7 +42,7 @@
 
 ### 2.1. Телеметрия самого репитера
 
-`Worker` (BackgroundService), **opt-in и по умолчанию выключен** (`MeshCore:TelemetryCollectionEnabled`, compose-переменная `MESHCORE_TELEMETRY_COLLECTION_ENABLED`; сбор не влияет на опрос датчиков — панельная сессия логинится лениво): connect → `ver` handshake → раз в `MeshCore:TelemetryCollectionIntervalSeconds` → `GetTelemetryAsync` (HTTP `GET /api/stats` либо serial CLI `stats-core/radio/packets` + `sensor list`) → `ILocalTelemetryStore.AppendAsync` (snapshot + плоские readings в SQLite) → ack-цикл web'а выгружает. Выключено осознанно: сырой статус панели репитера (core.*, archive.*, конфиги, events) никто в web не потребляет, а он раздувает landing-таблицы.
+`Worker` (BackgroundService), **opt-in и по умолчанию выключен** (`MeshCore:TelemetryCollectionEnabled`, compose-переменная `MESHCORE_TELEMETRY_COLLECTION_ENABLED`; сбор не влияет на опрос датчиков — панельная сессия логинится лениво): connect → `ver` handshake → раз в `MeshCore:TelemetryCollectionIntervalSeconds` → `GetTelemetryAsync` (HTTP `GET /api/stats` либо serial CLI `stats-core/radio/packets` + `sensor list`) → `ILocalTelemetryStore.AppendAsync` (только payload JSON; плоские readings из SQLite и HTTP-контракта убраны 2026-09-06 — они никем не читались и дублировали payload) → ack-цикл web'а выгружает. Выключено осознанно: сырой статус панели репитера (core.*, archive.*, конфиги, events) никто в web не потребляет, а он раздувает landing-таблицы.
 
 ### 2.2. Опрос датчиков (основной продуктовый путь)
 
@@ -67,7 +67,7 @@ Wire-детали: [docs/protocol.md](./docs/protocol.md).
 
 Атомарно в одном SaveChanges:
 
-- `gateway_telemetry_snapshots`/`_readings` (raw архив, идемпотентно по unique `gateway_snapshot_id`);
+- `gateway_telemetry_snapshots` (raw архив payload_json, идемпотентно по unique `gateway_snapshot_id`);
 - для `sensor_poll`-payload: `measurement_samples` + `measurement_values` (идемпотентно по unique `(sensor_id, request_id)`), `unit` из payload;
 - upsert `sensor_status` → `Online` + RSSI/SNR.
 
@@ -87,7 +87,7 @@ Ack — только после коммита транзакции (pull: `POST
 | `measurement_values` | значения по метрикам | PK (sample_id, metric_key); unit; индекс под графики |
 | `poll_attempts` | диагастика попыток (схема есть, не заполняется) | — |
 | `sensor_status` | материализованный статус для дашборда | 1:1 к sensor |
-| `gateway_telemetry_snapshots`/`_readings` | raw-архив outbox gateway | unique `gateway_snapshot_id` |
+| `gateway_telemetry_snapshots` | raw-архив outbox gateway (payload_json; таблица плоских readings дропнута 2026-09-06) | unique `gateway_snapshot_id` |
 
 Миграции — только через `DbMigrator` (`deploy/compose.yaml` запускает его до web/gateway). Никакого `Database.Migrate()` в runtime-сервисах.
 

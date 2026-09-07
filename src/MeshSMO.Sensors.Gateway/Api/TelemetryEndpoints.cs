@@ -50,13 +50,7 @@ public static class TelemetryEndpoints
                     snapshot.Id,
                     snapshot.CapturedAt,
                     snapshot.Transport,
-                    snapshot.PayloadJson,
-                    snapshot.Readings
-                        .Select(reading => new TelemetryReadingDto(
-                            reading.MetricKey,
-                            reading.NumericValue,
-                            reading.TextValue))
-                        .ToArray()))
+                    snapshot.PayloadJson))
                 .ToList();
 
             return Results.Ok(new TelemetryBatchDto(pendingCount, items));
@@ -78,14 +72,11 @@ public static class TelemetryEndpoints
     }
 }
 
-public sealed record TelemetryReadingDto(string MetricKey, double? NumericValue, string? TextValue);
-
 public sealed record TelemetrySnapshotDto(
     long Id,
     DateTimeOffset CapturedAt,
     string Transport,
-    string PayloadJson,
-    TelemetryReadingDto[] Readings);
+    string PayloadJson);
 
 public sealed record TelemetryBatchDto(long PendingCount, IReadOnlyList<TelemetrySnapshotDto> Snapshots);
 

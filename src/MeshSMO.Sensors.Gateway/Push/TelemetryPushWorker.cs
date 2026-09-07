@@ -70,13 +70,7 @@ public sealed class TelemetryPushWorker(
                 snapshot.Id,
                 snapshot.CapturedAt,
                 snapshot.Transport,
-                snapshot.PayloadJson,
-                snapshot.Readings
-                    .Select(reading => new TelemetryReadingDto(
-                        reading.MetricKey,
-                        reading.NumericValue,
-                        reading.TextValue))
-                    .ToArray()))
+                snapshot.PayloadJson))
             .ToList();
 
         var pendingCount = await store.CountPendingAsync(cancellationToken).ConfigureAwait(false);

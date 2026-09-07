@@ -18,7 +18,7 @@ public sealed class GatewayTelemetryClientTests
             apiKey = request.Headers.TryGetValues("X-Api-Key", out var values) ? values.SingleOrDefault() : null;
             return (
                 HttpStatusCode.OK,
-                """{"pendingCount":2,"snapshots":[{"id":7,"capturedAt":"2026-09-05T10:00:00Z","transport":"Http","payloadJson":"{\"core\":{}}","readings":[{"metricKey":"core.battery_mv","numericValue":4100,"textValue":null}]}]}""");
+                """{"pendingCount":2,"snapshots":[{"id":7,"capturedAt":"2026-09-05T10:00:00Z","transport":"Http","payloadJson":"{\"core\":{}}"}]}""");
         });
         var client = CreateClient(handler, "secret-key");
 
@@ -31,9 +31,7 @@ public sealed class GatewayTelemetryClientTests
         var snapshot = Assert.Single(batch.Snapshots);
         Assert.Equal(7, snapshot.Id);
         Assert.Equal("Http", snapshot.Transport);
-        var reading = Assert.Single(snapshot.Readings);
-        Assert.Equal("core.battery_mv", reading.MetricKey);
-        Assert.Equal(4100, reading.NumericValue);
+        Assert.Equal("{\"core\":{}}", snapshot.PayloadJson);
     }
 
     [Fact]

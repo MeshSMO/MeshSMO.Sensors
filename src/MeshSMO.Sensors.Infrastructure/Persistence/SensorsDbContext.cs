@@ -14,7 +14,6 @@ public sealed class SensorsDbContext(DbContextOptions<SensorsDbContext> options)
     public DbSet<PollAttempt> PollAttempts => Set<PollAttempt>();
     public DbSet<SensorStatusSnapshot> SensorStatuses => Set<SensorStatusSnapshot>();
     public DbSet<GatewayTelemetrySnapshot> GatewayTelemetrySnapshots => Set<GatewayTelemetrySnapshot>();
-    public DbSet<GatewayTelemetryReading> GatewayTelemetryReadings => Set<GatewayTelemetryReading>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -161,18 +160,5 @@ public sealed class SensorsDbContext(DbContextOptions<SensorsDbContext> options)
         snapshot.Property(entity => entity.PayloadJson).HasColumnName("payload_json").HasColumnType("jsonb");
         snapshot.HasIndex(entity => entity.GatewaySnapshotId).IsUnique().HasDatabaseName("ux_gateway_telemetry_gateway_snapshot_id");
         snapshot.HasIndex(entity => entity.CapturedAt).HasDatabaseName("ix_gateway_telemetry_snapshots_captured_at");
-
-        var reading = modelBuilder.Entity<GatewayTelemetryReading>();
-        reading.ToTable("gateway_telemetry_readings");
-        reading.HasKey(entity => new { entity.SnapshotId, entity.MetricKey });
-        reading.Property(entity => entity.SnapshotId).HasColumnName("snapshot_id");
-        reading.Property(entity => entity.MetricKey).HasColumnName("metric_key").HasMaxLength(128);
-        reading.Property(entity => entity.NumericValue).HasColumnName("numeric_value");
-        reading.Property(entity => entity.TextValue).HasColumnName("text_value");
-        reading.HasIndex(entity => entity.MetricKey).HasDatabaseName("ix_gateway_telemetry_readings_metric_key");
-        snapshot.HasMany(entity => entity.Readings)
-            .WithOne()
-            .HasForeignKey(entity => entity.SnapshotId)
-            .OnDelete(DeleteBehavior.Cascade);
     }
 }
