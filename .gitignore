@@ -28,3 +28,7 @@ data/
 # (mesh.loginPassword references). Only schema.json is tracked.
 config/sensors/*.yaml
 src/MeshSMO.Sensors.Gateway/config/sensors/*.yaml
+src/MeshSMO.Sensors.Gateway/appsettings.Development.json
+
+# Build-time public projection of the deployment-local sensor registry.
+src/web/src/generated/sensorRegistry.json

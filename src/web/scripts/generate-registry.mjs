@@ -1,7 +1,7 @@
 // Build-time script: flattens the GitOps sensor registry (config/sensors/*.yaml)
 // into src/generated/sensorRegistry.json so that prerendered routes can render
-// sensor content without a server loader. Bundled into the client build and
-// committed, so typecheck and prerender work before the first build too.
+// sensor content without a server loader. The generated projection is ignored
+// by Git and contains only sensors explicitly marked as publicly visible.
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -32,9 +32,9 @@ const yamlFiles = existsSync(directory)
   ? readdirSync(directory).filter((name) => name.endsWith(".yaml"))
   : [];
 if (yamlFiles.length === 0) {
-  // Sensor YAMLs are deployment-local (gitignored). On a checkout without
-  // them (CI), keep the committed snapshot so prerender routes survive.
-  console.log("No local sensor YAML files; keeping the committed sensorRegistry.json");
+  mkdirSync(path.dirname(outFile), { recursive: true });
+  writeFileSync(outFile, "[]\n");
+  console.log("No local sensor YAML files; wrote an empty public sensor registry");
   process.exit(0);
 }
 {
@@ -50,6 +50,10 @@ if (yamlFiles.length === 0) {
     slugs.add(raw.slug);
 
     const publicSection = raw.public ?? {};
+    if (!Boolean(publicSection.visible)) {
+      continue;
+    }
+
     const polling = raw.polling ?? {};
     const location = raw.location ?? {};
     const declaredMetrics = Array.isArray(raw.metrics)

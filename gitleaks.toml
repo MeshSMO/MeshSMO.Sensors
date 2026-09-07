@@ -1,0 +1,45 @@
+title = "MeshSMO secret scanning configuration"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "meshsmo-credential-assignment"
+description = "Hard-coded credential in a MeshSMO configuration assignment"
+regex = '''(?im)^[ \t]*(?:MESHCORE_HTTP_ADMIN_PASSWORD|SENSOR_LOGIN_PASSWORD|POSTGRES_PASSWORD|GATEWAY(?:_INGEST|_PUSH)?_API_KEY|loginPassword)[ \t]*(?:=|:)[ \t]*["']?([^$"' \t\r\n#][^"' \t\r\n#]*)'''
+secretGroup = 1
+path = '''(?i)(?:^|/)(?:deploy/(?:\.env(?:\..*)?|env\.example|compose\.ya?ml)|config/sensors/.*\.ya?ml|appsettings(?:\.[^/]+)?\.json)$'''
+keywords = [
+  "MESHCORE_HTTP_ADMIN_PASSWORD",
+  "SENSOR_LOGIN_PASSWORD",
+  "POSTGRES_PASSWORD",
+  "GATEWAY_API_KEY",
+  "GATEWAY_INGEST_API_KEY",
+  "GATEWAY_PUSH_API_KEY",
+  "loginPassword",
+]
+
+[[rules.allowlists]]
+description = "Allow empty values, documented placeholders, and environment-only references"
+regexTarget = "secret"
+regexes = [
+  '''^change-?me$''',
+  '''^<[^>]+>$''',
+  '''^\$\{[A-Z_][A-Z0-9_]*\}$''',
+]
+
+[[rules]]
+id = "meshsmo-password-example"
+description = "Password-like literal embedded in documentation"
+regex = '''(?i)(?:\bpassword\b|парол(?:ь|я))(?:[ \t]+|[ \t]*:[ \t]*)`([^`\s]{8,})`'''
+secretGroup = 1
+keywords = ["password", "парол"]
+
+[[rules.allowlists]]
+description = "Allow identifiers and placeholders in documentation"
+regexTarget = "secret"
+regexes = [
+  '''^[A-Za-z][A-Za-z0-9_.:-]+$''',
+  '''^<[^>]+>$''',
+  '''^\$\{[A-Z_][A-Z0-9_]*\}$''',
+]

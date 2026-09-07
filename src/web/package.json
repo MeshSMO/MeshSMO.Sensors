@@ -13,6 +13,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "pretypecheck": "node scripts/generate-registry.mjs",
     "typecheck": "tsc --noEmit"
   },
   "overrides": {

@@ -1,7 +1,7 @@
 /**
  * Статический реестр датчиков — источник SEO-контента.
- * Генерируется на prebuild из config/sensors/*.yaml (scripts/generate-registry.mjs)
- * и коммитится, чтобы prerender и typecheck работали без предварительной сборки.
+ * Генерируется на prebuild из config/sensors/*.yaml (scripts/generate-registry.mjs),
+ * содержит только публичные датчики и не хранится в Git.
  * Живые данные приходят из API.
  */
 import registryJson from "../generated/sensorRegistry.json";
