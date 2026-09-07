@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
+import { Route as MapRouteImport } from './routes/map'
 import { Route as SensorsIndexRouteImport } from './routes/sensors.index'
 import { Route as SensorsSlugRouteImport } from './routes/sensors.$slug'
 
@@ -22,6 +23,11 @@ const IndexRoute = IndexRouteImport.update({
 const AboutRoute = AboutRouteImport.update({
   id: '/about',
   path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MapRoute = MapRouteImport.update({
+  id: '/map',
+  path: '/map',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SensorsIndexRoute = SensorsIndexRouteImport.update({
@@ -38,12 +44,14 @@ const SensorsSlugRoute = SensorsSlugRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/map': typeof MapRoute
   '/sensors/$slug': typeof SensorsSlugRoute
   '/sensors/': typeof SensorsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/map': typeof MapRoute
   '/sensors/$slug': typeof SensorsSlugRoute
   '/sensors': typeof SensorsIndexRoute
 }
@@ -51,20 +59,22 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/map': typeof MapRoute
   '/sensors/$slug': typeof SensorsSlugRoute
   '/sensors/': typeof SensorsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/about' | '/sensors/$slug' | '/sensors/'
+  fullPaths: '/' | '/about' | '/map' | '/sensors/$slug' | '/sensors/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/about' | '/sensors/$slug' | '/sensors'
-  id: '__root__' | '/' | '/about' | '/sensors/$slug' | '/sensors/'
+  to: '/' | '/about' | '/map' | '/sensors/$slug' | '/sensors'
+  id: '__root__' | '/' | '/about' | '/map' | '/sensors/$slug' | '/sensors/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
+  MapRoute: typeof MapRoute
   SensorsSlugRoute: typeof SensorsSlugRoute
   SensorsIndexRoute: typeof SensorsIndexRoute
 }
@@ -83,6 +93,13 @@ declare module '@tanstack/react-router' {
       path: '/about'
       fullPath: '/about'
       preLoaderRoute: typeof AboutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/map': {
+      id: '/map'
+      path: '/map'
+      fullPath: '/map'
+      preLoaderRoute: typeof MapRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sensors/': {
@@ -105,6 +122,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
+  MapRoute: MapRoute,
   SensorsSlugRoute: SensorsSlugRoute,
   SensorsIndexRoute: SensorsIndexRoute,
 }

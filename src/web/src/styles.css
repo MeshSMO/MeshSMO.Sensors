@@ -172,3 +172,27 @@
     transition-duration: 0.001ms !important;
   }
 }
+
+/* Карта: тёмная подложка OSM и порядок слоёв ниже модальных панелей. */
+.leaflet-container {
+  background: var(--surface);
+  font-family: inherit;
+}
+.leaflet-pane,
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 1 !important;
+}
+.map-dark-tiles {
+  filter: grayscale(1) invert(1) brightness(0.78) contrast(1.05) sepia(0.25) hue-rotate(100deg)
+    saturate(1.4);
+}
+.leaflet-control-zoom a,
+.leaflet-control-attribution {
+  background: var(--surface-raised) !important;
+  color: var(--muted-foreground) !important;
+  border-color: var(--border) !important;
+}
+.leaflet-control-attribution a {
+  color: var(--muted-foreground) !important;
+}

@@ -16,6 +16,7 @@ const backendUrl =
 const prerenderPaths = [
   "/",
   "/sensors",
+  "/map",
   "/about",
   ...listIndexableSensors().map((sensor) => `/sensors/${sensor.slug}`),
 ];
