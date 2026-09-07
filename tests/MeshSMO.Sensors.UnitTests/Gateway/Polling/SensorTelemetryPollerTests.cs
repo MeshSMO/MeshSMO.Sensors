@@ -358,6 +358,40 @@ public sealed class SensorTelemetryPollerTests : IDisposable
         Assert.Equal(0, await store.CountPendingAsync(CancellationToken.None));
     }
 
+    [Fact]
+    public async Task Poller_WithRecentPersistedPoll_DoesNotPollImmediatelyAfterRestart()
+    {
+        var node = new SensorDefinition(
+            SensorId.New(), new("restart-node"), "Restart", null,
+            new('2', 64), "meshcore-req-lpp", TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(8), 1,
+            Enabled: true, PublicVisible: true, PublicIndexable: false, null, null, null,
+            ["temperature"], "restart.yaml", []);
+        var client = new FakeMeshCoreTelClient(requestStatuses: ["ok"]);
+        var store = await CreateStoreAsync();
+        await store.RecordPollStartedAsync("restart-node", DateTimeOffset.UtcNow, CancellationToken.None);
+        var poller = new SensorTelemetryPoller(
+            client,
+            ScopeFactory(new FakeRegistry([node])),
+            store,
+            Options.Create(new MeshCoreOptions { Mode = MeshCoreConnectionMode.Http }),
+            Options.Create(new SensorPollingOptions { Enabled = true }),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<SensorTelemetryPoller>.Instance);
+
+        using var source = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await poller.StartAsync(source.Token);
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(1));
+        }
+        finally
+        {
+            await poller.StopAsync(CancellationToken.None);
+        }
+
+        Assert.Empty(client.Requests);
+        Assert.Equal(0, await store.CountPendingAsync(CancellationToken.None));
+    }
+
     private async Task<ILocalTelemetryStore> CreateStoreAsync()
     {
         var provider = new ServiceCollection()
@@ -421,4 +455,3 @@ public sealed class SensorTelemetryPollerTests : IDisposable
             throw new NotSupportedException();
     }
 }
-

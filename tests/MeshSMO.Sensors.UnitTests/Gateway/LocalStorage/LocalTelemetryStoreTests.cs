@@ -73,6 +73,35 @@ public sealed class LocalTelemetryStoreTests
         Assert.Equal(0, await store.CountPendingAsync(CancellationToken.None));
     }
 
+    [Fact]
+    public async Task PollStartSurvivesStoreRecreationAndCanBeUpdated()
+    {
+        using var database = new TemporarySqliteDatabase();
+        var firstServices = CreateServices(database.Path);
+        await using var _ = firstServices;
+        var firstStore = CreateStore(firstServices);
+        await MigrateAsync(firstServices, database.Path);
+        var firstStartedAt = new DateTimeOffset(2026, 9, 7, 10, 30, 0, TimeSpan.Zero);
+
+        Assert.Null(await firstStore.ReadLastPollStartedAtAsync("alpha-node", CancellationToken.None));
+        await firstStore.RecordPollStartedAsync("alpha-node", firstStartedAt, CancellationToken.None);
+
+        var reopenedServices = CreateServices(database.Path);
+        await using var __ = reopenedServices;
+        var reopenedStore = CreateStore(reopenedServices);
+        await MigrateAsync(reopenedServices, database.Path);
+        Assert.Equal(
+            firstStartedAt,
+            await reopenedStore.ReadLastPollStartedAtAsync("alpha-node", CancellationToken.None));
+
+        var secondStartedAt = firstStartedAt.AddMinutes(5);
+        await reopenedStore.RecordPollStartedAsync("alpha-node", secondStartedAt, CancellationToken.None);
+
+        Assert.Equal(
+            secondStartedAt,
+            await reopenedStore.ReadLastPollStartedAtAsync("alpha-node", CancellationToken.None));
+    }
+
     private static ServiceProvider CreateServices(string path) =>
         new ServiceCollection()
             .AddDbContextFactory<LocalOutboxDbContext>(options => options.UseSqlite($"Data Source={path}"))

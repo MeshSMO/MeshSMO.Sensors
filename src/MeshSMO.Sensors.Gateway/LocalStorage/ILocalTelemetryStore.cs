@@ -27,4 +27,13 @@ public interface ILocalTelemetryStore
     Task AcknowledgeAsync(IReadOnlyCollection<long> ids, CancellationToken cancellationToken);
 
     Task<long> CountPendingAsync(CancellationToken cancellationToken);
+
+    Task<DateTimeOffset?> ReadLastPollStartedAtAsync(
+        string sensorSlug,
+        CancellationToken cancellationToken);
+
+    Task RecordPollStartedAsync(
+        string sensorSlug,
+        DateTimeOffset startedAt,
+        CancellationToken cancellationToken);
 }

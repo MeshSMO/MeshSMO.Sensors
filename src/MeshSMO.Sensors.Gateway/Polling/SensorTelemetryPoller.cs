@@ -73,7 +73,12 @@ public sealed class SensorTelemetryPoller(
         var now = DateTimeOffset.UtcNow;
         foreach (var sensor in sensors)
         {
-            var due = now + NextStartDelay(sensor);
+            var lastPollStartedAt = await store.ReadLastPollStartedAtAsync(
+                sensor.Slug.Value,
+                stoppingToken).ConfigureAwait(false);
+            var due = lastPollStartedAt is null
+                ? now + NextStartDelay(sensor)
+                : lastPollStartedAt.Value + PollInterval(sensor);
             queue.Enqueue((sensor, due), due);
         }
         var loginAttempted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -89,8 +94,15 @@ public sealed class SensorTelemetryPoller(
             }
 
             var (sensor, _) = queue.Dequeue();
+            var pollStartedAt = DateTimeOffset.UtcNow;
             try
             {
+                // Persist before touching the radio. If the process stops during
+                // the cycle, a restart still observes the interval guard.
+                await store.RecordPollStartedAsync(
+                    sensor.Slug.Value,
+                    pollStartedAt,
+                    stoppingToken).ConfigureAwait(false);
                 await PollCycleAsync(sensor, loginAttempted, stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -105,7 +117,7 @@ public sealed class SensorTelemetryPoller(
                     sensor.Slug.Value);
             }
 
-            var nextDue = DateTimeOffset.UtcNow + PollInterval(sensor);
+            var nextDue = pollStartedAt + PollInterval(sensor);
             queue.Enqueue((sensor, nextDue), nextDue);
         }
     }

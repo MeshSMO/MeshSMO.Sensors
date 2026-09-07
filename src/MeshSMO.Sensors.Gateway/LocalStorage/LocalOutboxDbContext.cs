@@ -12,6 +12,7 @@ public sealed class LocalOutboxDbContext(DbContextOptions<LocalOutboxDbContext> 
 {
     public DbSet<OutboxSnapshot> Snapshots => Set<OutboxSnapshot>();
     public DbSet<OutboxHealthProbe> HealthProbes => Set<OutboxHealthProbe>();
+    public DbSet<SensorPollState> SensorPollStates => Set<SensorPollState>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -31,5 +32,11 @@ public sealed class LocalOutboxDbContext(DbContextOptions<LocalOutboxDbContext> 
         probe.HasKey(entity => entity.Id);
         probe.Property(entity => entity.Id).HasColumnName("id");
         probe.Property(entity => entity.CheckedAt).HasColumnName("checked_at");
+
+        var pollState = modelBuilder.Entity<SensorPollState>();
+        pollState.ToTable("sensor_poll_states");
+        pollState.HasKey(entity => entity.SensorSlug);
+        pollState.Property(entity => entity.SensorSlug).HasColumnName("sensor_slug").HasMaxLength(128);
+        pollState.Property(entity => entity.LastPollStartedAt).HasColumnName("last_poll_started_at");
     }
 }
