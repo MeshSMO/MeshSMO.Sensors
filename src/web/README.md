@@ -78,8 +78,8 @@ SEO/prerender-конвейер**, который уже работает и пр
       "slug": "smolensk-center",
       "displayName": "Смоленск — центр",
       "description": "Тестовая конфигурация метеодатчика MeshSMO...",
-      "latitude": 55.0000,
-      "longitude": 33.0000,
+      "latitude": 55.0,
+      "longitude": 33.0,
       "metrics": ["battery", "humidity", "pressure", "temperature"],
       "state": "Unknown"
     }
@@ -96,7 +96,7 @@ SEO/prerender-конвейер**, который уже работает и пр
   "slug": "smolensk-center",
   "displayName": "Смоленск — центр",
   "description": "...",
-  "location": { "latitude": 55.0000, "longitude": 33.0000, "precision": "approximate" },
+  "location": { "latitude": 55.0, "longitude": 33.0, "precision": "approximate" },
   "metrics": ["battery", "humidity", "pressure", "temperature"],
   "protocol": "meshcoretel-repeater",
   "pollIntervalSeconds": 300,
