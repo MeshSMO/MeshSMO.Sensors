@@ -78,7 +78,11 @@ public static class MeshCoreGatewayServiceCollectionExtensions
             {
                 var options = serviceProvider.GetRequiredService<IOptions<MeshCoreOptions>>().Value.Http;
                 client.BaseAddress = NormalizeBaseAddress(options.BaseAddress ?? new Uri("https://127.0.0.1/"));
-                client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+                // HttpClient.Timeout is a per-request cap that individual calls
+                // cannot widen; MeshCoreTelHttpClient bounds every call itself
+                // (panel: Http:TimeoutSeconds, acquisition: 2.5× radio window,
+                // see docs/repeater-firmware-acquisition-spec.md §8.6).
+                client.Timeout = Timeout.InfiniteTimeSpan;
             })
             .ConfigurePrimaryHttpMessageHandler(serviceProvider =>
             {

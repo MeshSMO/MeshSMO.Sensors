@@ -160,7 +160,36 @@ public sealed class MeshCoreTelHttpClientTests
         Assert.Equal("second-token", handler.Requests[5].AuthToken);
     }
 
-    private static MeshCoreTelHttpClient CreateClient(RecordingHandler handler, MeshCoreTelSession? session = null)
+    [Fact]
+    // Spec §8.6: the firmware can spend up to two windows on one call
+    // (direct attempt + flood retry); the HTTP bound must stay above 2.5×.
+    public void AcquisitionHttpTimeoutScalesWithRadioWindow() =>
+        Assert.Equal(
+            TimeSpan.FromMilliseconds((2.5 * 8_000) + 5_000),
+            MeshCoreTelHttpClient.AcquisitionHttpTimeout(8_000));
+
+    [Fact]
+    public async Task AcquisitionCallIsNotCappedByPanelTimeout()
+    {
+        var handler = new DelayingHandler(TimeSpan.FromSeconds(3), "{\"status\":\"ok\"}");
+        using var client = CreateClient(handler, timeoutSeconds: 1);
+
+        using var response = await client.SendAcquisitionRequestAsync("aabb", "0011", 5_000, CancellationToken.None);
+
+        Assert.Equal("ok", response.RootElement.GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public async Task PanelCallIsBoundedByConfiguredTimeout()
+    {
+        var handler = new DelayingHandler(TimeSpan.FromSeconds(3), "OK");
+        using var client = CreateClient(handler, timeoutSeconds: 1);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => client.ExecuteCommandAsync("ver", CancellationToken.None));
+    }
+
+    private static MeshCoreTelHttpClient CreateClient(HttpMessageHandler handler, MeshCoreTelSession? session = null, int timeoutSeconds = 15)
     {
         var httpClient = new HttpClient(handler)
         {
@@ -173,6 +202,7 @@ public sealed class MeshCoreTelHttpClientTests
             {
                 BaseAddress = httpClient.BaseAddress,
                 AdminPassword = "secret",
+                TimeoutSeconds = timeoutSeconds,
             },
         });
 
@@ -210,6 +240,20 @@ public sealed class MeshCoreTelHttpClientTests
                 tokenValues?.SingleOrDefault()));
 
             return _responses.Dequeue();
+        }
+    }
+
+    private sealed class DelayingHandler(TimeSpan delay, string responseBody) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/login", StringComparison.Ordinal))
+                return TextResponse(HttpStatusCode.OK, "session-token\n");
+
+            await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+            return JsonResponse(HttpStatusCode.OK, responseBody);
         }
     }
 
