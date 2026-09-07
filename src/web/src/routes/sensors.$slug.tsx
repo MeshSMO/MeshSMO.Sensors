@@ -37,6 +37,7 @@ import {
   normalizeState,
 } from "@/lib/format";
 import { getMetric, metricLabel } from "@/lib/metrics";
+import HistoryChartGrid from "@/components/site/HistoryChartGrid";
 
 const MetricChart = lazy(() => import("@/components/site/MetricChart"));
 const CombinedChart = lazy(() => import("@/components/site/CombinedChart"));
@@ -626,16 +627,16 @@ function History({
           )}
         </div>
       ) : (
-        <div className="mt-4 grid gap-4 xl:grid-cols-2">
-          {series.map((s) => (
-            <div key={s.metricKey} className="panel px-4 py-4">
-              <p className="text-sm font-medium">
-                {metricLabel(s.metricKey)}
-                <span className="ml-2 text-xs text-muted-foreground">{s.unit}</span>
-              </p>
-              {s.points.length > 0 ? (
+        <HistoryChartGrid
+          slug={slug}
+          items={series.map((s) => ({
+            id: s.metricKey,
+            title: metricLabel(s.metricKey),
+            unit: s.unit,
+            content:
+              s.points.length > 0 ? (
                 <>
-                  <Suspense fallback={<SkeletonLine className="h-72 w-full" />}>
+                  <Suspense fallback={<SkeletonLine className="h-72 min-h-72 w-full flex-1" />}>
                     <MetricChart
                       points={s.points}
                       metricKey={s.metricKey}
@@ -647,10 +648,9 @@ function History({
                 </>
               ) : (
                 <ChartPlaceholder pending={s.isPending} />
-              )}
-            </div>
-          ))}
-        </div>
+              ),
+          }))}
+        />
       )}
 
       {mode === "combined" && withData.length > 0 ? (
