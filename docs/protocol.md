@@ -25,6 +25,21 @@ Sensor node ──ответ── Cayenne LPP телеметрия             
 | `POST /api/request` | acquisition: `{destination: <64 hex>, payload: <hex ≤160 Б>, timeoutMs 1..30000}` → `{status: ok\|timeout, responseHex, rssi, snr, elapsedMs}`; синхронный, один in-flight на репитер |
 | `POST /api/login` | ANON-логин bootstrap: `{destination, password (0..15 Б), timeoutMs ≤10000}`; тот же ответ |
 
+### 2.1. Альтернативный канал опроса: компаньон (`MeshCore:Mode=Companion`)
+
+Опрос нод можно вести через **стоковую** MeshCore-ноду-компаньон, без доработок прошивки (инвестигейт: `MeshCoreTel-firmware/docs/companion-node-polling-investigation.md`). Выбор канала — enum `MeshCoreConnectionMode`: `Disabled` / `Http` / `Serial` (репитер, как выше) / `Companion`. Реализация — `CompanionRadioClient`; оба канала реализуют общий контракт `IMeshNodeClient`, форма ответов повторяет репитерную `{status, responseHex, rssi?, snr?, elapsedMs}`.
+
+Транспорт: TCP (`SerialWifiInterface` компаньона, Wi-Fi-сборки слушают порт 5000, один клиент). Кадры в обе стороны: флаг направления (`0x3C` host→device, `0x3E` device→host) + `len` uint16 LE + кадр (`CompanionFrameCodec`; `MAX_FRAME_SIZE` = 176). Кадр = `[код(1)][данные]`, многобайтные числа LE.
+
+| Кадр | Содержимое |
+|---|---|
+| `CMD_SEND_LOGIN (26)` | `[pubkey_prefix(6)][password(≤15 Б)]` → ack `RESP_CODE_SENT (0x06) [flooded(1), tag(4), est_timeout(4)]`, затем push `LOGIN_SUCCESS (0x85)` / `LOGIN_FAIL (0x86)` `[0, pubkey_prefix(6), …]` (матч по первым 4 байтам ключа) |
+| `CMD_SEND_BINARY_REQ (50)` | `[pubkey_prefix(6)][blob]` — **тот же ECDH-REQ**, что шлёт репитер из `/api/request`. Gateway отрезает 4-байтовый префикс timestamp из payload: его генерирует прошивка компаньона из RTC |
+| `CMD_SEND_ANON_REQ (57)` | fallback логина: если контакта нет (`RESP_CODE_ERR (0x01)[err]`, `ERR_CODE_NOT_FOUND=2`), gateway шлёт `[pubkey_prefix(6)][password]` — прошивка v13+ сама создаёт контакт и кладёт в эфир `unique(4)+password`, тот же bootstrap, что `/api/login` |
+| `PUSH_CODE_BINARY_RESPONSE (0x8C)` | `[0, tag(4), тело]` — ответ ноды; матч по `tag` из ack |
+
+Ответ ноды на опрос приходит как `0x8C`, где `tag` = отражённый нодой timestamp, а тело — Cayenne LPP. `CompanionRadioClient` восстанавливает `responseHex = tag(4 LE) + тело`, поэтому всё ниже по конвейеру (декодер LPP, outbox, importer) канало-агностично; `request_id` в outbox остаётся внутренним счётчиком gateway. Отличия канала от репитерного: **нет RSSI/SNR** (в `sensor_poll` пишутся null), один in-flight на компаньон (команды сериализуются локом), blob ≤ 168 Б, TCP-соединение монопольно и переподключается при разрыве. Контакт на стороне компаньона создаётся автоматически ANON-fallback'ом (путь zero-hop direct — компаньон должен слышать ноду напрямую).
+
 ## 3. Mesh-уровень: REQ / ANON_REQ
 
 MeshCore нода принимает запросы только от известных контактов. Bootstrap — анонимный логин:

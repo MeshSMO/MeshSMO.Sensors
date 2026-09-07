@@ -79,6 +79,8 @@ services:
       MeshCore__Http__AllowInvalidServerCertificate: ${MESHCORE_HTTP_ALLOW_INVALID_CERTIFICATE:-false}
       MeshCore__Serial__PortName: /dev/meshcore
       MeshCore__Serial__BaudRate: 115200
+      MeshCore__Companion__Host: ${MESHCORE_COMPANION_HOST:-}
+      MeshCore__Companion__Port: ${MESHCORE_COMPANION_PORT:-5000}
       LocalTelemetry__DatabasePath: /app/data/gateway-telemetry.db
       Registry__Directory: /app/config/sensors
       SensorPolling__LoginPassword: ${SENSOR_LOGIN_PASSWORD:-}
