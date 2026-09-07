@@ -52,6 +52,14 @@ if (yamlFiles.length === 0) {
     const publicSection = raw.public ?? {};
     const polling = raw.polling ?? {};
     const location = raw.location ?? {};
+    const declaredMetrics = Array.isArray(raw.metrics)
+      ? raw.metrics.filter((metric) => typeof metric === "string")
+      : [];
+    const channelMetrics = Array.isArray(raw.telemetry?.channels)
+      ? raw.telemetry.channels
+          .map((channel) => channel?.metric)
+          .filter((metric) => typeof metric === "string")
+      : [];
     sensors.push({
       slug: raw.slug,
       displayName: typeof raw.displayName === "string" ? raw.displayName : raw.slug,
@@ -65,7 +73,10 @@ if (yamlFiles.length === 0) {
                 typeof location.precision === "string" ? location.precision : "approximate",
             }
           : null,
-      metrics: Array.isArray(raw.metrics) ? raw.metrics.filter((m) => typeof m === "string") : [],
+      // Keep the prerendered registry in sync with SensorRegistrySynchronizer:
+      // mapped channel targets are public metrics too, even when they are not
+      // repeated in the top-level metrics list.
+      metrics: [...new Set([...declaredMetrics, ...channelMetrics])].sort(),
       protocol: typeof raw.mesh?.protocol === "string" ? raw.mesh.protocol : null,
       pollIntervalSeconds: parseIntervalSeconds(polling.interval),
       enabled: Boolean(polling.enabled),

@@ -85,6 +85,7 @@ const list: MetricDefinition[] = [
 
   // Электрика
   def("battery", "Батарея", "V", 2, GREY, 116, "numeric", BATTERY_CHART),
+  def("battery_voltage", "Напряжение батареи", "В", 2, GREY, 116, "numeric", BATTERY_CHART),
   def("voltage", "Напряжение", "V", 2, GREY, 116),
   def("current", "Ток", "A", 3, WARM, 117),
   def("power", "Мощность", "Вт", 1, RED, 128),
@@ -145,7 +146,6 @@ const aliases: Record<string, string> = {
   barometric_pressure: "pressure",
   baro: "pressure",
   batt: "battery",
-  battery_voltage: "battery",
   bus_voltage: "voltage",
   lux: "luminosity",
   light: "luminosity",
