@@ -539,15 +539,28 @@ function History({
           aria-pressed={forecastEnabled}
           disabled={mode === "combined" || selected.length !== 1}
           onClick={() => update({ forecast: forecastEnabled ? undefined : "24h" })}
-          className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+          className={`group relative inline-flex items-center gap-2 overflow-hidden rounded-md border px-3 py-1.5 text-xs font-medium transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
             forecastEnabled
-              ? "border-accent bg-accent/10 text-accent"
-              : "border-border text-muted-foreground hover:text-foreground"
+              ? "border-accent/70 bg-accent/15 text-foreground shadow-[0_0_18px_-6px_var(--accent)]"
+              : "border-border text-muted-foreground hover:border-accent/60 hover:text-foreground"
           }`}
-          title={selected.length !== 1 ? "Для прогноза выберите один показатель" : undefined}
+          title={
+            selected.length !== 1
+              ? "Для прогноза выберите один показатель"
+              : "Прогноз строится ML-моделями по истории измерений"
+          }
         >
-          <Sparkles className="h-3.5 w-3.5" aria-hidden />
-          AI-прогноз
+          <span
+            aria-hidden
+            className={`pointer-events-none absolute inset-0 bg-[linear-gradient(110deg,transparent,color-mix(in_oklab,var(--accent)_28%,transparent),transparent)] transition-opacity motion-safe:animate-pulse ${
+              forecastEnabled ? "opacity-100" : "opacity-0"
+            }`}
+          />
+          <Sparkles
+            className={`relative h-3.5 w-3.5 ${forecastEnabled ? "text-accent" : ""}`}
+            aria-hidden
+          />
+          <span className="relative">Прогноз</span>
         </button>
 
         {forecastEnabled ? (
@@ -690,7 +703,7 @@ function forecastAvailabilityMessage(availability: ForecastAvailability | undefi
     case "low_quality":
       return "Модель не прошла проверку качества на истории этого показателя.";
     case "disabled":
-      return "AI-прогноз пока отключён для этого показателя.";
+      return "Прогноз пока отключён для этого показателя.";
     default:
       return "Прогноз пока недоступен.";
   }
