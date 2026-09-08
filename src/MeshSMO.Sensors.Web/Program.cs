@@ -195,7 +195,20 @@ app.Map("/api/{**path}", () => Results.NotFound(new
 }));
 
 app.MapFallbackToFile("/", "index.html");
-app.MapFallbackToFile("__spa-fallback.html");
+
+// Unknown URLs get a real 404 (a catch-all 200 would flood the index with
+// soft-200 duplicates); the SPA shell is still the body so the client router
+// renders its not-found page.
+app.MapFallback(async Task<IResult> (
+    IWebHostEnvironment environment,
+    CancellationToken cancellationToken) =>
+{
+    var webRoot = environment.WebRootPath ?? Path.Combine(environment.ContentRootPath, "wwwroot");
+    var spaFallback = Path.Combine(webRoot, "__spa-fallback.html");
+    return File.Exists(spaFallback)
+        ? Results.Content(await File.ReadAllTextAsync(spaFallback, cancellationToken), "text/html", statusCode: 404)
+        : Results.NotFound();
+});
 
 app.Run();
 

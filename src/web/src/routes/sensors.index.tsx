@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { translate } from "@/i18n";
-import { createPageMeta } from "@/lib/seo";
+import { absoluteSiteUrl, createPageMeta } from "@/lib/seo";
 
 export const Route = createFileRoute("/sensors/")({
   head: () => ({
@@ -8,5 +8,6 @@ export const Route = createFileRoute("/sensors/")({
       title: translate("seo.sensors.title"),
       description: translate("seo.sensors.description"),
     }),
+    links: [{ rel: "canonical", href: absoluteSiteUrl("/sensors") }],
   }),
 });

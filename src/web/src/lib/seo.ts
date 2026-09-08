@@ -13,11 +13,15 @@ export function createPageMeta({ title, description, robots }: PageSeo) {
     { property: "og:title", content: title },
     { property: "og:description", content: description },
     { property: "og:type", content: "website" },
-    { name: "twitter:card", content: "summary_large_image" },
+    { name: "twitter:card", content: "summary" },
     ...(robots ? [{ name: "robots", content: robots }] : []),
   ];
 }
 
+// Canonical URLs use the trailing-slash form: UseDefaultFiles in the BFF 301s
+// "/x" to "/x/" before serving "x/index.html", so the slashed URL is the one
+// that serves 200 content.
 export function absoluteSiteUrl(path = "/"): string {
-  return new URL(path, siteUrl).toString();
+  const normalized = path.endsWith("/") ? path : `${path}/`;
+  return new URL(normalized, siteUrl).toString();
 }

@@ -24,11 +24,13 @@ public static class SeoEndpoints
 
             var builder = new StringBuilder();
             builder.Append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">");
+            // Trailing-slash URLs everywhere: UseDefaultFiles 301s the slash-less
+            // variants to these, and these are the URLs that serve 200 content.
             builder.Append($"\n  <url><loc>{baseUrl}/</loc></url>");
-            builder.Append($"\n  <url><loc>{baseUrl}/sensors</loc></url>");
-            builder.Append($"\n  <url><loc>{baseUrl}/about</loc></url>");
+            builder.Append($"\n  <url><loc>{baseUrl}/sensors/</loc></url>");
+            builder.Append($"\n  <url><loc>{baseUrl}/about/</loc></url>");
             foreach (var sensor in sensors)
-                builder.Append(System.Globalization.CultureInfo.InvariantCulture, $"\n  <url><loc>{baseUrl}/sensors/{sensor.Slug.Value}</loc><lastmod>{sensor.UpdatedAt:yyyy-MM-dd}</lastmod></url>");
+                builder.Append(System.Globalization.CultureInfo.InvariantCulture, $"\n  <url><loc>{baseUrl}/sensors/{sensor.Slug.Value}/</loc><lastmod>{sensor.UpdatedAt:yyyy-MM-dd}</lastmod></url>");
 
             builder.Append("\n</urlset>");
             return Results.Content(builder.ToString(), "application/xml; charset=utf-8");

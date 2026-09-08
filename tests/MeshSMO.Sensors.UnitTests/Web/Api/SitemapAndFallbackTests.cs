@@ -78,8 +78,8 @@ public sealed class SitemapAndFallbackTests : IDisposable
         var xml = XDocument.Parse(await response.Content.ReadAsStringAsync());
         var ns = xml.Root!.Name.Namespace;
         var locs = xml.Root.Descendants(ns + "loc").Select(element => element.Value).ToArray();
-        Assert.Contains("https://sensors.meshsmo.ru/sensors/smolensk-center", locs, StringComparer.Ordinal);
-        Assert.Contains("https://sensors.meshsmo.ru/sensors", locs, StringComparer.Ordinal);
+        Assert.Contains("https://sensors.meshsmo.ru/sensors/smolensk-center/", locs, StringComparer.Ordinal);
+        Assert.Contains("https://sensors.meshsmo.ru/sensors/", locs, StringComparer.Ordinal);
         Assert.Equal(4, locs.Length);
     }
 

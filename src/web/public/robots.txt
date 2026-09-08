@@ -3,5 +3,6 @@ Allow: /
 
 Disallow: /admin/
 Disallow: /api/
+Disallow: /*__spa-fallback
 
 Sitemap: https://sensors.meshsmo.ru/sitemap.xml

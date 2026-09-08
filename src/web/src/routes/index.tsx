@@ -9,6 +9,7 @@ export const Route = createFileRoute("/")({
       title: translate("seo.home.title"),
       description: translate("seo.home.description"),
     }),
+    links: [{ rel: "canonical", href: absoluteSiteUrl() }],
     scripts: [
       {
         type: "application/ld+json",

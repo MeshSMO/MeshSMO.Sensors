@@ -23,7 +23,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:description", content: translate("seo.root.socialDescription") },
       { property: "og:type", content: "website" },
       { property: "og:locale", content: openGraphLocale },
-      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:card", content: "summary" },
     ],
     links: [
       {
