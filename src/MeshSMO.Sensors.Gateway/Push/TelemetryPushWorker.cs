@@ -73,8 +73,9 @@ public sealed class TelemetryPushWorker(
                 snapshot.PayloadJson))
             .ToList();
 
+        var gatewayId = await store.GetGatewayIdAsync(cancellationToken).ConfigureAwait(false);
         var pendingCount = await store.CountPendingAsync(cancellationToken).ConfigureAwait(false);
-        await client.PushAsync(new(pendingCount, items), cancellationToken).ConfigureAwait(false);
+        await client.PushAsync(new(gatewayId, pendingCount, items), cancellationToken).ConfigureAwait(false);
 
         // The API confirmed the batch (idempotently), so the local outbox can drop it.
         await store.AcknowledgeAsync(snapshots.Select(snapshot => snapshot.Id).ToArray(), cancellationToken).ConfigureAwait(false);

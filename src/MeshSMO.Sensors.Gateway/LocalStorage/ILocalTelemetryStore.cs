@@ -14,6 +14,8 @@ public sealed record PendingTelemetrySnapshot(
 /// </summary>
 public interface ILocalTelemetryStore
 {
+    Task<Guid> GetGatewayIdAsync(CancellationToken cancellationToken);
+
     Task<long> AppendAsync(
         DateTimeOffset capturedAt,
         string transport,

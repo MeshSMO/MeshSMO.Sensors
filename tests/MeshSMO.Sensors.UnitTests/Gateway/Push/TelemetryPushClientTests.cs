@@ -22,7 +22,8 @@ public sealed class TelemetryPushClientTests
             return (HttpStatusCode.OK, """{"accepted":2}""");
         });
         var client = CreateClient(handler, "secret-key");
-        var batch = new TelemetryBatchDto(2,
+        var gatewayId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var batch = new TelemetryBatchDto(gatewayId, 2,
         [
             new(11, DateTimeOffset.UnixEpoch, "Serial", """{"a":1}"""),
             new(12, DateTimeOffset.UnixEpoch, "Serial", """{"a":2}"""),
@@ -34,6 +35,7 @@ public sealed class TelemetryPushClientTests
         Assert.Equal("secret-key", apiKey);
         Assert.Equal(2, accepted);
         var json = JsonDocument.Parse(body!);
+        Assert.Equal(gatewayId, json.RootElement.GetProperty("gatewayId").GetGuid());
         Assert.Equal(2, json.RootElement.GetProperty("pendingCount").GetInt64());
         var snapshots = json.RootElement.GetProperty("snapshots").EnumerateArray().ToArray();
         Assert.Equal(2, snapshots.Length);
@@ -49,7 +51,7 @@ public sealed class TelemetryPushClientTests
     {
         var handler = new StubHttpMessageHandler(_ => (HttpStatusCode.ServiceUnavailable, "{}"));
         var client = CreateClient(handler, "secret-key");
-        var batch = new TelemetryBatchDto(1, []);
+        var batch = new TelemetryBatchDto(Guid.NewGuid(), 1, []);
 
         await Assert.ThrowsAsync<HttpRequestException>(
             () => client.PushAsync(batch, CancellationToken.None));

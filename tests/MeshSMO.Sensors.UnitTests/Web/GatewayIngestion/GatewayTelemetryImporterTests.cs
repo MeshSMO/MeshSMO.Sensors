@@ -10,6 +10,7 @@ namespace MeshSMO.Sensors.UnitTests.Web.GatewayIngestion;
 
 public sealed class GatewayTelemetryImporterTests : IDisposable
 {
+    private static readonly Guid GatewayId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     private readonly SensorsDbContext _dbContext;
     private readonly GatewayTelemetryImporter _importer;
     private readonly Sensor _sensor;
@@ -50,10 +51,11 @@ public sealed class GatewayTelemetryImporterTests : IDisposable
     [Fact]
     public async Task ImportBatchAsync_CreatesSnapshotSampleValuesAndStatus()
     {
-        var imported = await _importer.ImportBatchAsync([Snapshot(1)], CancellationToken.None);
+        var imported = await _importer.ImportBatchAsync(GatewayId, [Snapshot(1)], CancellationToken.None);
 
         Assert.Equal(1, imported);
         var snapshot = Assert.Single(_dbContext.GatewayTelemetrySnapshots);
+        Assert.Equal(GatewayId, snapshot.GatewayId);
         Assert.Equal(1, snapshot.GatewaySnapshotId);
 
         var sample = Assert.Single(_dbContext.MeasurementSamples);
@@ -76,9 +78,9 @@ public sealed class GatewayTelemetryImporterTests : IDisposable
     [Fact]
     public async Task ImportBatchAsync_SkipsAlreadyStoredSnapshotIds()
     {
-        await _importer.ImportBatchAsync([Snapshot(1)], CancellationToken.None);
+        await _importer.ImportBatchAsync(GatewayId, [Snapshot(1)], CancellationToken.None);
 
-        var imported = await _importer.ImportBatchAsync([Snapshot(1)], CancellationToken.None);
+        var imported = await _importer.ImportBatchAsync(GatewayId, [Snapshot(1)], CancellationToken.None);
 
         Assert.Equal(0, imported);
         Assert.Single(_dbContext.GatewayTelemetrySnapshots);
@@ -86,11 +88,30 @@ public sealed class GatewayTelemetryImporterTests : IDisposable
     }
 
     [Fact]
+    public async Task ImportBatchAsync_AllowsSameSnapshotIdFromDifferentGateways()
+    {
+        var otherGatewayId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        await _importer.ImportBatchAsync(GatewayId, [Snapshot(1)], CancellationToken.None);
+
+        var imported = await _importer.ImportBatchAsync(
+            otherGatewayId,
+            [Snapshot(1, requestId: 2)],
+            CancellationToken.None);
+
+        Assert.Equal(1, imported);
+        Assert.Equal(2, _dbContext.GatewayTelemetrySnapshots.Count());
+        Assert.Equal(2, _dbContext.MeasurementSamples.Count());
+    }
+
+    [Fact]
     public async Task ImportBatchAsync_SkipsDuplicateSensorRequestIds()
     {
-        await _importer.ImportBatchAsync([Snapshot(1)], CancellationToken.None);
+        await _importer.ImportBatchAsync(GatewayId, [Snapshot(1)], CancellationToken.None);
 
-        var imported = await _importer.ImportBatchAsync([Snapshot(2, requestId: 1)], CancellationToken.None);
+        var imported = await _importer.ImportBatchAsync(
+            GatewayId,
+            [Snapshot(2, requestId: 1)],
+            CancellationToken.None);
 
         Assert.Equal(1, imported);
         Assert.Equal(2, _dbContext.GatewayTelemetrySnapshots.Count());
@@ -101,6 +122,7 @@ public sealed class GatewayTelemetryImporterTests : IDisposable
     public async Task ImportBatchAsync_UnknownSlugStoresSnapshotOnly()
     {
         var imported = await _importer.ImportBatchAsync(
+            GatewayId,
             [Snapshot(3, sensorSlug: "ghost-node", requestId: 5)],
             CancellationToken.None);
 
@@ -114,6 +136,7 @@ public sealed class GatewayTelemetryImporterTests : IDisposable
     public async Task ImportBatchAsync_MalformedPayloadStoresRawSnapshotOnly()
     {
         var imported = await _importer.ImportBatchAsync(
+            GatewayId,
             [Snapshot(4, payloadJson: "not-json")],
             CancellationToken.None);
 
@@ -130,7 +153,10 @@ public sealed class GatewayTelemetryImporterTests : IDisposable
         var payloadJson =
             $$"""{"type":"sensor_poll","sensor":"smolensk-center","requestId":11,"protocol":"meshcore-req-lpp","attemptNumber":2,"startedAt":"{{startedAt:O}}","rssi":-92.5,"snr":7.5,"elapsedMs":900,"responseHex":"00FF","readings":[{"metric":"temperature","value":21.5,"unit":"°C"}]}""";
 
-        await _importer.ImportBatchAsync([Snapshot(5, payloadJson: payloadJson)], CancellationToken.None);
+        await _importer.ImportBatchAsync(
+            GatewayId,
+            [Snapshot(5, payloadJson: payloadJson)],
+            CancellationToken.None);
 
         var attempt = Assert.Single(_dbContext.PollAttempts);
         Assert.Equal(_sensor.Id, attempt.SensorId);
@@ -148,6 +174,7 @@ public sealed class GatewayTelemetryImporterTests : IDisposable
     public async Task ImportBatchAsync_FailedAttempt_CreatesTimedOutAttemptAndDegradesSensor()
     {
         await _importer.ImportBatchAsync(
+            GatewayId,
             [AttemptSnapshot(6, requestId: 12, attemptNumber: 1, status: "TimedOut")],
             CancellationToken.None);
 
@@ -165,6 +192,7 @@ public sealed class GatewayTelemetryImporterTests : IDisposable
     public async Task ImportBatchAsync_RetrySucceedsInSameCycle_BatchEndsOnline()
     {
         await _importer.ImportBatchAsync(
+            GatewayId,
         [
             AttemptSnapshot(7, requestId: 13, attemptNumber: 1, status: "TimedOut"),
             Snapshot(8, requestId: 13, payloadJson:
@@ -185,7 +213,7 @@ public sealed class GatewayTelemetryImporterTests : IDisposable
             .Select(index => AttemptSnapshot(100 + index, requestId: 200 + index, attemptNumber: 1, status: "TimedOut"))
             .ToArray();
 
-        await _importer.ImportBatchAsync(snapshots, CancellationToken.None);
+        await _importer.ImportBatchAsync(GatewayId, snapshots, CancellationToken.None);
 
         var status = Assert.Single(_dbContext.SensorStatuses);
         Assert.Equal(SensorState.Offline, status.State);
@@ -197,9 +225,11 @@ public sealed class GatewayTelemetryImporterTests : IDisposable
     public async Task ImportBatchAsync_SkipsDuplicateAttemptsAcrossRedelivery()
     {
         await _importer.ImportBatchAsync(
+            GatewayId,
             [AttemptSnapshot(9, requestId: 14, attemptNumber: 1, status: "TimedOut")],
             CancellationToken.None);
         var imported = await _importer.ImportBatchAsync(
+            GatewayId,
             [AttemptSnapshot(10, requestId: 14, attemptNumber: 1, status: "TimedOut")],
             CancellationToken.None);
 
@@ -211,6 +241,7 @@ public sealed class GatewayTelemetryImporterTests : IDisposable
     public async Task ImportBatchAsync_UnknownSensorAttempt_StoresSnapshotOnly()
     {
         var imported = await _importer.ImportBatchAsync(
+            GatewayId,
             [AttemptSnapshot(15, sensorSlug: "ghost-node", requestId: 16, attemptNumber: 1, status: "Failed")],
             CancellationToken.None);
 

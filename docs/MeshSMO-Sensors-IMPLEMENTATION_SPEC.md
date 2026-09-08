@@ -472,7 +472,7 @@ Serial mode отправляет CLI-команду, завершённую `CR`
 Gateway не имеет доступа к PostgreSQL. Забирает данные из outbox основной backend (`sensor-web`) по внутреннему HTTP API gateway:
 
 ```text
-GET  /api/telemetry/pending?maxCount=N   -> { pendingCount, snapshots: [{ id, capturedAt, transport, payloadJson }] }
+GET  /api/telemetry/pending?maxCount=N   -> { gatewayId, pendingCount, snapshots: [{ id, capturedAt, transport, payloadJson }] }
 POST /api/telemetry/ack                  -> { ids: [...] } — удалить подтверждённые snapshot'ы из outbox
 GET  /health/live, /health/ready
 ```
@@ -483,20 +483,22 @@ GET  /health/live, /health/ready
 - опциональный общий секрет `Gateway:ApiKey` проверяется по заголовку `X-Api-Key`;
 - batch ограничен `Gateway:MaximumBatchSize`;
 - ack отправляется только после успешной записи батча в PostgreSQL;
-- идемпотентность обеспечивается уникальным `gateway_snapshot_id` в PostgreSQL: повторно доставленный snapshot пропускается, а не дублируется.
+- каждый файл outbox хранит стабильный случайный `gatewayId`; новая база и каждый отдельный gateway получают собственный UUID;
+- идемпотентность обеспечивается уникальным `(gateway_id, gateway_snapshot_id)` в PostgreSQL: повторная доставка одним gateway пропускается, а одинаковые локальные id разных gateway не конфликтуют.
 
 ### 7.1.6. Push-режим доставки (gateway → основной API)
 
 Альтернатива pull для раздельного деплоя: gateway и `sensor-web` на разных серверах, при этом gateway не должен быть доступен извне. Основной backend сам не опрашивает gateway — gateway самостоятельно доставляет батчи из локальной outbox на ingest-эндпоинт `sensor-web`. Наружу смотрит только `sensor-web` (он и так публичный), gateway входящих портов не имеет.
 
-Контракт повторяет pull 1-в-1: тот же JSON `pendingCount` + `snapshots[]` с `payloadJson`, тот же `X-Api-Key`, та же идемпотентность (`gateway_snapshot_id`, `(sensor_id, request_id)`).
+Контракт повторяет pull 1-в-1: тот же JSON `gatewayId` + `pendingCount` + `snapshots[]` с `payloadJson`, тот же `X-Api-Key`, та же идемпотентность (`(gateway_id, gateway_snapshot_id)`, `(sensor_id, request_id)`).
 
 ```text
 sensor-web (Push mode):
 POST /api/telemetry/ingest
-     body: { pendingCount, snapshots: [{ id, capturedAt, transport, payloadJson }] }
+     body: { gatewayId, pendingCount, snapshots: [{ id, capturedAt, transport, payloadJson }] }
      -> 200 { accepted: N }   (N — новых записанных снимков; 2xx = весь батч записан или уже был известен)
      -> 401 {"error":"Unauthorized"} — нет/неверен X-Api-Key
+     -> 400 {"error":"GatewayIdRequired"} — отсутствует или пустой gatewayId
      -> 400 {"error":"BatchTooLarge"} — батч больше Gateway:Ingest:MaximumBatchSize
 ```
 

@@ -7,6 +7,8 @@ namespace MeshSMO.Sensors.UnitTests.Gateway.Push;
 
 public sealed class TelemetryPushWorkerTests
 {
+    private static readonly Guid GatewayId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+
     [Fact]
     public async Task PendingSnapshotsArePushedAndAcknowledged()
     {
@@ -44,6 +46,7 @@ public sealed class TelemetryPushWorkerTests
         Assert.Equal([9L], acknowledged);
         Assert.Equal("secret", apiKey);
         using var json = System.Text.Json.JsonDocument.Parse(body!);
+        Assert.Equal(GatewayId, json.RootElement.GetProperty("gatewayId").GetGuid());
         Assert.Equal(1, json.RootElement.GetProperty("pendingCount").GetInt64());
         Assert.Equal(9, json.RootElement.GetProperty("snapshots").EnumerateArray().Single()
             .GetProperty("id").GetInt64());
@@ -141,6 +144,8 @@ public sealed class TelemetryPushWorkerTests
 
         public TaskCompletionSource<IReadOnlyList<long>> Acknowledged { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<Guid> GetGatewayIdAsync(CancellationToken cancellationToken) => Task.FromResult(GatewayId);
 
         public Task<long> AppendAsync(
             DateTimeOffset capturedAt,

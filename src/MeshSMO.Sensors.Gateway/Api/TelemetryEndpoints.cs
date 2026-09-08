@@ -44,6 +44,7 @@ public static class TelemetryEndpoints
 
             var snapshots = await store.ReadPendingAsync(limit, cancellationToken).ConfigureAwait(false);
             var pendingCount = await store.CountPendingAsync(cancellationToken).ConfigureAwait(false);
+            var gatewayId = await store.GetGatewayIdAsync(cancellationToken).ConfigureAwait(false);
 
             var items = snapshots
                 .Select(snapshot => new TelemetrySnapshotDto(
@@ -53,7 +54,7 @@ public static class TelemetryEndpoints
                     snapshot.PayloadJson))
                 .ToList();
 
-            return Results.Ok(new TelemetryBatchDto(pendingCount, items));
+            return Results.Ok(new TelemetryBatchDto(gatewayId, pendingCount, items));
         });
 
         app.MapPost("/api/telemetry/ack", async Task<IResult> (
@@ -78,7 +79,10 @@ public sealed record TelemetrySnapshotDto(
     string Transport,
     string PayloadJson);
 
-public sealed record TelemetryBatchDto(long PendingCount, IReadOnlyList<TelemetrySnapshotDto> Snapshots);
+public sealed record TelemetryBatchDto(
+    Guid GatewayId,
+    long PendingCount,
+    IReadOnlyList<TelemetrySnapshotDto> Snapshots);
 
 public sealed record AcknowledgeRequest(IReadOnlyList<long> Ids);
 

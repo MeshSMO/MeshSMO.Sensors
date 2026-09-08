@@ -11,6 +11,7 @@ public sealed record GatewayTelemetrySnapshotDto(
     [property: JsonPropertyName("payloadJson")] string PayloadJson);
 
 public sealed record GatewayTelemetryBatchDto(
+    [property: JsonPropertyName("gatewayId")] Guid GatewayId,
     [property: JsonPropertyName("pendingCount")] long PendingCount,
     [property: JsonPropertyName("snapshots")] IReadOnlyList<GatewayTelemetrySnapshotDto> Snapshots);
 

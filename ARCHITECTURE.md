@@ -68,7 +68,7 @@ Wire-детали: [docs/protocol.md](./docs/protocol.md).
 
 Атомарно в одном SaveChanges:
 
-- `gateway_telemetry_snapshots` (raw архив payload_json, идемпотентно по unique `gateway_snapshot_id`);
+- `gateway_telemetry_snapshots` (raw архив payload_json, идемпотентно по unique `(gateway_id, gateway_snapshot_id)`);
 - для `sensor_poll`-payload: `measurement_samples` + `measurement_values` (идемпотентно по unique `(sensor_id, request_id)`), `unit` из payload;
 - upsert `sensor_status` → `Online` + RSSI/SNR.
 
@@ -92,7 +92,7 @@ Ack — только после коммита транзакции (pull: `POST
 | `measurement_values` | значения по метрикам | PK (sample_id, metric_key); unit; индекс под графики |
 | `poll_attempts` | диагастика попыток (схема есть, не заполняется) | — |
 | `sensor_status` | материализованный статус для дашборда | 1:1 к sensor |
-| `gateway_telemetry_snapshots` | raw-архив outbox gateway (payload_json; таблица плоских readings дропнута 2026-09-06) | unique `gateway_snapshot_id` |
+| `gateway_telemetry_snapshots` | raw-архив outbox gateway (payload_json; таблица плоских readings дропнута 2026-09-06) | unique `(gateway_id, gateway_snapshot_id)` |
 
 Миграции — только через `DbMigrator` (`deploy/compose.yaml` запускает его до web/gateway). Никакого `Database.Migrate()` в runtime-сервисах.
 

@@ -21,6 +21,7 @@ namespace MeshSMO.Sensors.UnitTests.Web.GatewayIngestion;
 public sealed class GatewayIngestEndpointsTests : IDisposable
 {
     private const string ApiKey = "test-key";
+    private static readonly Guid GatewayId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     private readonly string _databaseName = $"ingest-{Guid.NewGuid():N}";
     private readonly WebApplication _app;
     private readonly HttpClient _client;
@@ -69,6 +70,7 @@ public sealed class GatewayIngestEndpointsTests : IDisposable
         using var scope = _app.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<SensorsDbContext>();
         var snapshot = Assert.Single(dbContext.GatewayTelemetrySnapshots);
+        Assert.Equal(GatewayId, snapshot.GatewayId);
         Assert.Equal(42, snapshot.GatewaySnapshotId);
         Assert.Equal("Http", snapshot.Transport);
         var sample = Assert.Single(dbContext.MeasurementSamples.Include(entity => entity.Values));
@@ -77,6 +79,28 @@ public sealed class GatewayIngestEndpointsTests : IDisposable
         var value = Assert.Single(sample.Values);
         Assert.Equal("temperature", value.MetricKey);
         Assert.Equal(21.5, value.NumericValue);
+    }
+
+    [Fact]
+    public async Task Ingest_AllowsSameSnapshotIdFromDifferentGateways()
+    {
+        _client.DefaultRequestHeaders.Add("X-Api-Key", ApiKey);
+        var first = await _client.PostAsJsonAsync("/api/telemetry/ingest", ValidBatch());
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+
+        var second = await _client.PostAsJsonAsync("/api/telemetry/ingest", new
+        {
+            gatewayId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+            pendingCount = 1,
+            snapshots = new[] { Snapshot(42) },
+        });
+
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        var body = await second.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(1, body.GetProperty("accepted").GetInt32());
+        using var scope = _app.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SensorsDbContext>();
+        Assert.Equal(2, dbContext.GatewayTelemetrySnapshots.Count());
     }
 
     [Fact]
@@ -103,6 +127,7 @@ public sealed class GatewayIngestEndpointsTests : IDisposable
         _client.DefaultRequestHeaders.Add("X-Api-Key", ApiKey);
         var oversized = new
         {
+            gatewayId = GatewayId,
             pendingCount = 3,
             snapshots = new[]
             {
@@ -119,11 +144,34 @@ public sealed class GatewayIngestEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task Ingest_WithoutGatewayId_IsRejected()
+    {
+        _client.DefaultRequestHeaders.Add("X-Api-Key", ApiKey);
+        var batch = new
+        {
+            pendingCount = 1,
+            snapshots = new[] { Snapshot(42) },
+        };
+
+        var response = await _client.PostAsJsonAsync("/api/telemetry/ingest", batch);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var scope = _app.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SensorsDbContext>();
+        Assert.Empty(dbContext.GatewayTelemetrySnapshots);
+    }
+
+    [Fact]
     public async Task Ingest_EmptyBatch_ReturnsZeroWithoutStoreWrites()
     {
         _client.DefaultRequestHeaders.Add("X-Api-Key", ApiKey);
 
-        var response = await _client.PostAsJsonAsync("/api/telemetry/ingest", new { pendingCount = 0, snapshots = Array.Empty<object>() });
+        var response = await _client.PostAsJsonAsync("/api/telemetry/ingest", new
+        {
+            gatewayId = GatewayId,
+            pendingCount = 0,
+            snapshots = Array.Empty<object>(),
+        });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -143,6 +191,7 @@ public sealed class GatewayIngestEndpointsTests : IDisposable
 
     private static object ValidBatch() => new
     {
+        gatewayId = GatewayId,
         pendingCount = 1,
         snapshots = new[]
         {

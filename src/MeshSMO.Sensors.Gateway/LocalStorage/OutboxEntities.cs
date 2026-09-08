@@ -23,6 +23,17 @@ public sealed class OutboxSnapshot
     public DateTimeOffset CreatedAt { get; set; }
 }
 
+/// <summary>
+/// Stable identity of this gateway outbox. It namespaces the local autoincrement
+/// snapshot ids when telemetry is delivered to the main API.
+/// </summary>
+public sealed class GatewayIdentity
+{
+    public int Id { get; set; }
+
+    public Guid InstanceId { get; set; }
+}
+
 /// <summary>Writability probe row; the health check inserts and deletes it, never touching queued snapshots.</summary>
 public sealed class OutboxHealthProbe
 {

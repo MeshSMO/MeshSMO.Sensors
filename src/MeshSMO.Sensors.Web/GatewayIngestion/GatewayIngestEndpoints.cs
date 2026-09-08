@@ -41,7 +41,17 @@ public static class GatewayIngestEndpoints
             IOptions<GatewayIngestOptions> options,
             CancellationToken cancellationToken) =>
         {
-            if (batch is null || batch.Snapshots.Count == 0)
+            if (batch is null)
+                return Results.Ok(new GatewayIngestResponse(0));
+
+            if (batch.GatewayId == Guid.Empty)
+            {
+                return Results.Json(
+                    new { error = "GatewayIdRequired" },
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+
+            if (batch.Snapshots.Count == 0)
                 return Results.Ok(new GatewayIngestResponse(0));
 
             if (batch.Snapshots.Count > options.Value.MaximumBatchSize)
@@ -56,7 +66,10 @@ public static class GatewayIngestEndpoints
             await using (scope.ConfigureAwait(false))
             {
                 var importer = scope.ServiceProvider.GetRequiredService<GatewayTelemetryImporter>();
-                imported = await importer.ImportBatchAsync(batch.Snapshots, cancellationToken).ConfigureAwait(false);
+                imported = await importer.ImportBatchAsync(
+                    batch.GatewayId,
+                    batch.Snapshots,
+                    cancellationToken).ConfigureAwait(false);
             }
 
             return Results.Ok(new GatewayIngestResponse(imported));

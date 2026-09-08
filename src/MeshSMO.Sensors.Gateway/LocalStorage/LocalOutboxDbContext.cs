@@ -11,6 +11,7 @@ namespace MeshSMO.Sensors.Gateway.LocalStorage;
 public sealed class LocalOutboxDbContext(DbContextOptions<LocalOutboxDbContext> options) : DbContext(options)
 {
     public DbSet<OutboxSnapshot> Snapshots => Set<OutboxSnapshot>();
+    public DbSet<GatewayIdentity> GatewayIdentities => Set<GatewayIdentity>();
     public DbSet<OutboxHealthProbe> HealthProbes => Set<OutboxHealthProbe>();
     public DbSet<SensorPollState> SensorPollStates => Set<SensorPollState>();
 
@@ -26,6 +27,12 @@ public sealed class LocalOutboxDbContext(DbContextOptions<LocalOutboxDbContext> 
         snapshot.Property(entity => entity.CreatedAt).HasColumnName("created_at");
         snapshot.HasIndex(entity => new { entity.CapturedAt, entity.Id })
             .HasDatabaseName("ix_telemetry_snapshots_captured_at");
+
+        var gatewayIdentity = modelBuilder.Entity<GatewayIdentity>();
+        gatewayIdentity.ToTable("gateway_identity");
+        gatewayIdentity.HasKey(entity => entity.Id);
+        gatewayIdentity.Property(entity => entity.Id).HasColumnName("id");
+        gatewayIdentity.Property(entity => entity.InstanceId).HasColumnName("instance_id");
 
         var probe = modelBuilder.Entity<OutboxHealthProbe>();
         probe.ToTable("health_probe");

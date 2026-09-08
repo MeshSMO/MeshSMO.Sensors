@@ -17,6 +17,7 @@ public sealed class LocalTelemetryStoreTests
         await using var _ = firstServices;
         var firstStore = CreateStore(firstServices);
         await MigrateAsync(firstServices, database.Path);
+        var gatewayId = await firstStore.GetGatewayIdAsync(CancellationToken.None);
         var firstId = await firstStore.AppendAsync(
             capturedAt,
             "http",
@@ -35,6 +36,8 @@ public sealed class LocalTelemetryStoreTests
         await MigrateAsync(reopenedServices, database.Path);
         var pending = await reopenedStore.ReadPendingAsync(10, CancellationToken.None);
 
+        Assert.NotEqual(Guid.Empty, gatewayId);
+        Assert.Equal(gatewayId, await reopenedStore.GetGatewayIdAsync(CancellationToken.None));
         Assert.Collection(
             pending,
             first =>
@@ -56,6 +59,25 @@ public sealed class LocalTelemetryStoreTests
         Assert.Equal(1, await reopenedStore.CountPendingAsync(CancellationToken.None));
         var remaining = await reopenedStore.ReadPendingAsync(10, CancellationToken.None);
         Assert.Equal(secondId, Assert.Single(remaining).Id);
+    }
+
+    [Fact]
+    public async Task SeparateOutboxDatabasesHaveDifferentGatewayIds()
+    {
+        using var firstDatabase = new TemporarySqliteDatabase();
+        using var secondDatabase = new TemporarySqliteDatabase();
+        var firstServices = CreateServices(firstDatabase.Path);
+        await using var _ = firstServices;
+        var secondServices = CreateServices(secondDatabase.Path);
+        await using var __ = secondServices;
+        await MigrateAsync(firstServices, firstDatabase.Path);
+        await MigrateAsync(secondServices, secondDatabase.Path);
+
+        var firstId = await CreateStore(firstServices).GetGatewayIdAsync(CancellationToken.None);
+        var secondId = await CreateStore(secondServices).GetGatewayIdAsync(CancellationToken.None);
+
+        Assert.NotEqual(Guid.Empty, firstId);
+        Assert.NotEqual(firstId, secondId);
     }
 
     [Fact]

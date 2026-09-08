@@ -6,8 +6,8 @@ namespace MeshSMO.Sensors.Web.GatewayIngestion;
 /// Pull mode: polls the sensor-gateway local SQLite outbox over its telemetry
 /// API and persists the batches in PostgreSQL. Snapshots are acknowledged
 /// (removed on the gateway) only after they are durably stored, and duplicates
-/// are skipped via the unique gateway snapshot id, so failures on either side
-/// are safe. Disabled when Gateway:Mode is not Pull or the gateway is not
+/// are skipped via the unique gateway identity and snapshot id, so failures on
+/// either side are safe. Disabled when Gateway:Mode is not Pull or the gateway is not
 /// configured.
 /// </summary>
 public sealed class GatewayIngestionWorker(
@@ -79,7 +79,10 @@ public sealed class GatewayIngestionWorker(
         await using (scope.ConfigureAwait(false))
         {
             var importer = scope.ServiceProvider.GetRequiredService<GatewayTelemetryImporter>();
-            imported = await importer.ImportBatchAsync(batch.Snapshots, cancellationToken).ConfigureAwait(false);
+            imported = await importer.ImportBatchAsync(
+                batch.GatewayId,
+                batch.Snapshots,
+                cancellationToken).ConfigureAwait(false);
             ackIds = batch.Snapshots.Select(snapshot => snapshot.Id).ToList();
         }
 

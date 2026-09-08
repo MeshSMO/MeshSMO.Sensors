@@ -83,6 +83,8 @@ public sealed class GatewayWorkerTests
         public TaskCompletionSource<AppendedSnapshot> Appended { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        public Task<Guid> GetGatewayIdAsync(CancellationToken cancellationToken) => Task.FromResult(Guid.NewGuid());
+
         public Task<long> AppendAsync(
             DateTimeOffset capturedAt,
             string transport,

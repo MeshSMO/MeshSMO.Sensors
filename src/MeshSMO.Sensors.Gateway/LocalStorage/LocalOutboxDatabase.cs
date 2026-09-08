@@ -36,6 +36,16 @@ public static class LocalOutboxDatabase
             // persisted in the database file, so setting it at startup is enough.
             await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode = WAL;", cancellationToken);
             await db.Database.MigrateAsync(cancellationToken);
+
+            if (!await db.GatewayIdentities.AnyAsync(cancellationToken).ConfigureAwait(false))
+            {
+                db.GatewayIdentities.Add(new GatewayIdentity
+                {
+                    Id = 1,
+                    InstanceId = Guid.NewGuid(),
+                });
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
         }
     }
 }

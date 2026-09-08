@@ -26,12 +26,15 @@ public sealed class GatewayTelemetryImporter(
 {
     /// <summary>Imports the batch and returns the number of newly stored snapshots.</summary>
     public async Task<int> ImportBatchAsync(
+        Guid gatewayId,
         IReadOnlyList<GatewayTelemetrySnapshotDto> snapshots,
         CancellationToken cancellationToken)
     {
+        ArgumentOutOfRangeException.ThrowIfEqual(gatewayId, Guid.Empty);
+
         var batchIds = snapshots.Select(snapshot => snapshot.Id).ToArray();
         var existingIds = await dbContext.GatewayTelemetrySnapshots
-            .Where(snapshot => batchIds.Contains(snapshot.GatewaySnapshotId))
+            .Where(snapshot => snapshot.GatewayId == gatewayId && batchIds.Contains(snapshot.GatewaySnapshotId))
             .Select(snapshot => snapshot.GatewaySnapshotId)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
         var existingSet = existingIds.ToHashSet();
@@ -48,6 +51,7 @@ public sealed class GatewayTelemetryImporter(
             var entity = new GatewayTelemetrySnapshot
             {
                 Id = Guid.NewGuid(),
+                GatewayId = gatewayId,
                 GatewaySnapshotId = snapshot.Id,
                 CapturedAt = snapshot.CapturedAt,
                 ImportedAt = importedAt,

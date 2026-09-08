@@ -153,12 +153,15 @@ public sealed class SensorsDbContext(DbContextOptions<SensorsDbContext> options)
         snapshot.ToTable("gateway_telemetry_snapshots");
         snapshot.HasKey(entity => entity.Id);
         snapshot.Property(entity => entity.Id).HasColumnName("id");
+        snapshot.Property(entity => entity.GatewayId).HasColumnName("gateway_id");
         snapshot.Property(entity => entity.GatewaySnapshotId).HasColumnName("gateway_snapshot_id");
         snapshot.Property(entity => entity.CapturedAt).HasColumnName("captured_at");
         snapshot.Property(entity => entity.ImportedAt).HasColumnName("imported_at");
         snapshot.Property(entity => entity.Transport).HasColumnName("transport").HasMaxLength(64);
         snapshot.Property(entity => entity.PayloadJson).HasColumnName("payload_json").HasColumnType("jsonb");
-        snapshot.HasIndex(entity => entity.GatewaySnapshotId).IsUnique().HasDatabaseName("ux_gateway_telemetry_gateway_snapshot_id");
+        snapshot.HasIndex(entity => new { entity.GatewayId, entity.GatewaySnapshotId })
+            .IsUnique()
+            .HasDatabaseName("ux_gateway_telemetry_gateway_id_snapshot_id");
         snapshot.HasIndex(entity => entity.CapturedAt).HasDatabaseName("ix_gateway_telemetry_snapshots_captured_at");
     }
 }

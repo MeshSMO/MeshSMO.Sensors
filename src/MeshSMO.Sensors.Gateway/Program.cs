@@ -81,8 +81,9 @@ builder.Services.AddHttpClient<TelemetryPushClient>((serviceProvider, client) =>
         client.BaseAddress = new($"{options.ApiUrl.AbsoluteUri.TrimEnd('/')}/");
     client.Timeout = Timeout.InfiniteTimeSpan;
 })
-// Ingest is idempotent by snapshot id, so the standard handler may safely
-// retry POST together with applying its timeout, limiter, and circuit breaker.
+// Ingest is idempotent by gateway identity plus snapshot id, so the standard
+// handler may safely retry POST together with applying its timeout, limiter,
+// and circuit breaker.
 .AddStandardResilienceHandler();
 
 var app = builder.Build();

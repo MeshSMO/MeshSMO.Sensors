@@ -61,6 +61,7 @@ public sealed class GatewayTelemetryApiTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var batch = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.NotEqual(Guid.Empty, batch.GetProperty("gatewayId").GetGuid());
         Assert.Equal(1, batch.GetProperty("pendingCount").GetInt64());
         var snapshot = batch.GetProperty("snapshots").EnumerateArray().Single();
         Assert.Equal("Serial", snapshot.GetProperty("transport").GetString());

@@ -5,6 +5,13 @@ namespace MeshSMO.Sensors.Gateway.LocalStorage;
 
 public sealed class LocalTelemetryStore(IDbContextFactory<LocalOutboxDbContext> contextFactory) : ILocalTelemetryStore
 {
+    public async Task<Guid> GetGatewayIdAsync(CancellationToken cancellationToken)
+    {
+        var db = await contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using (db.ConfigureAwait(false))
+            return await db.GatewayIdentities.Select(identity => identity.InstanceId).SingleAsync(cancellationToken);
+    }
+
     public async Task<long> AppendAsync(
         DateTimeOffset capturedAt,
         string transport,

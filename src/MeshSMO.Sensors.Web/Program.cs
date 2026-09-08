@@ -163,10 +163,11 @@ app.MapGet("/api/v1/telemetry/snapshots", async Task<IResult> (
     var pageSize = limit is null or < 1 ? 20 : Math.Min(limit.Value, 200);
     var snapshots = await dbContext.GatewayTelemetrySnapshots
         .AsNoTracking()
-        .OrderByDescending(snapshot => snapshot.GatewaySnapshotId)
+        .OrderByDescending(snapshot => snapshot.ImportedAt)
         .Take(pageSize)
         .Select(snapshot => new
         {
+            gatewayId = snapshot.GatewayId,
             gatewaySnapshotId = snapshot.GatewaySnapshotId,
             capturedAt = snapshot.CapturedAt,
             importedAt = snapshot.ImportedAt,
