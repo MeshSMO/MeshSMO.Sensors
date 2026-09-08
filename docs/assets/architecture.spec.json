@@ -1,0 +1,201 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "MeshSMO Sensors — архитектура",
+    "output": "architecture.html",
+    "quality_profile": "showcase"
+  },
+  "layout": {
+    "mode": "grid",
+    "cols": 5,
+    "gapX": 45,
+    "gapY": 52,
+    "cellW": 140,
+    "cellH": 62
+  },
+  "components": [
+    {
+      "id": "nodes",
+      "type": "external",
+      "label": "Датчики MeshCore",
+      "sublabel": "pull-only · Cayenne LPP",
+      "row": 1,
+      "col": 0
+    },
+    {
+      "id": "repeater",
+      "type": "external",
+      "label": "Репитер MeshCoreTel",
+      "sublabel": "ESP32 · acquisition API",
+      "row": 1,
+      "col": 1
+    },
+    {
+      "id": "poller",
+      "type": "backend",
+      "label": "sensor-gateway",
+      "sublabel": "poller · retry",
+      "row": 1,
+      "col": 2
+    },
+    {
+      "id": "outbox",
+      "type": "database",
+      "label": "SQLite outbox",
+      "sublabel": "WAL · EF Core",
+      "row": 2,
+      "col": 2
+    },
+    {
+      "id": "ingest",
+      "type": "backend",
+      "label": "Ingestion",
+      "sublabel": "pull | push · ack",
+      "row": 2,
+      "col": 3
+    },
+    {
+      "id": "pg",
+      "type": "database",
+      "label": "PostgreSQL 17",
+      "sublabel": "samples · status",
+      "row": 2,
+      "col": 4
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "sensor-web · BFF",
+      "sublabel": "/api/v1 · OpenAPI",
+      "row": 1,
+      "col": 4
+    },
+    {
+      "id": "spa",
+      "type": "frontend",
+      "label": "TanStack Start SPA",
+      "sublabel": "prerender · fallback",
+      "row": 0,
+      "col": 4
+    },
+    {
+      "id": "browser",
+      "type": "external",
+      "label": "Браузер",
+      "sublabel": "sensors.meshsmo.ru",
+      "row": 0,
+      "col": 3
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "sensor-gateway (.NET Worker)",
+      "wraps": [
+        "poller",
+        "outbox"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "sensor-web + sensor-db",
+      "wraps": [
+        "ingest",
+        "pg",
+        "api",
+        "spa"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "radio",
+      "from": "nodes",
+      "to": "repeater",
+      "label": "LoRa · REQ / ANON_REQ",
+      "labelDy": -30
+    },
+    {
+      "id": "transport",
+      "from": "repeater",
+      "to": "poller",
+      "label": "HTTPS · Serial",
+      "labelAt": [
+        377,
+        156
+      ]
+    },
+    {
+      "id": "snapshots",
+      "from": "poller",
+      "to": "outbox",
+      "label": "снапшоты",
+      "labelDy": 24
+    },
+    {
+      "id": "delivery",
+      "from": "outbox",
+      "to": "ingest",
+      "label": "батчи + ack",
+      "labelDy": -30
+    },
+    {
+      "id": "write",
+      "from": "ingest",
+      "to": "pg",
+      "label": "Npgsql",
+      "labelDy": -30
+    },
+    {
+      "id": "read",
+      "from": "api",
+      "to": "pg",
+      "label": "чтение",
+      "labelDy": 24
+    },
+    {
+      "id": "view",
+      "from": "browser",
+      "to": "spa",
+      "label": "HTTPS"
+    },
+    {
+      "id": "client-api",
+      "from": "spa",
+      "to": "api",
+      "label": "fetch /api/v1",
+      "variant": "dashed",
+      "labelDy": 24
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Радиоконтур",
+      "items": [
+        "Опрос pull-only нод через acquisition API прошивки репитера",
+        "ANON-логин bootstrap, retry с randomized backoff, per-sensor расписания",
+        "Альтернативный канал — стоковый компаньон (companion frame protocol)"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Доставка ровно-однажды",
+      "items": [
+        "SQLite outbox переживает рестарты web",
+        "Режимы pull (web опрашивает gateway) и push (gateway постит сам)",
+        "Ack только после успешного коммита в PostgreSQL"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Отображение",
+      "items": [
+        "BFF: /api/v1, OpenAPI, rate limit per-IP",
+        "Статический prerender индексируемых страниц + SPA-fallback",
+        "On-demand прогноз ML.NET SSA за флагом Forecasting:Enabled"
+      ]
+    }
+  ]
+}

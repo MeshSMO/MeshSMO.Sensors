@@ -26,21 +26,12 @@
 
 ## Архитектура
 
-```mermaid
-flowchart LR
-    N["🌡️ Датчики MeshCore<br/>pull-only · Cayenne LPP"] <-- "LoRa<br/>REQ / ANON_REQ" --> R["📶 Репитер MeshCoreTel<br/>ESP32 · acquisition API"]
-    subgraph GATEWAY ["sensor-gateway (.NET Worker)"]
-        W["Poller<br/>расписания · retry"] --> O[("SQLite<br/>outbox")]
-    end
-    subgraph WEB ["sensor-web (BFF + SPA)"]
-        I["Ingestion<br/>pull / push"] --> P[("PostgreSQL 17")]
-        P --> A["API /api/v1"]
-    end
-    R <-- "HTTPS · Serial · Companion" --> W
-    O -- "батчи + ack" --> I
-    B["🌐 Браузер"] --> A
-    B --> S["Статика<br/>prerender + SPA-fallback"]
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture-dark.png">
+  <img src="docs/assets/architecture-light.png" alt="Архитектура MeshSMO Sensors: датчики MeshCore → репитер → gateway (SQLite outbox) → sensor-web (ingestion → PostgreSQL → BFF) → браузер">
+</picture>
+
+:link: [Интерактивная версия](./docs/assets/architecture.html) — pan/zoom, трассировка связей, тёмная/светлая тема, экспорт в PNG/SVG.
 
 Границы простые: **gateway не знает про PostgreSQL**, **web не знает про MeshCore**, **фронт не знает про LoRa** — только `/api/v1/*`.
 
