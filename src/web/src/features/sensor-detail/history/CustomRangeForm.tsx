@@ -1,12 +1,13 @@
 import { format } from "date-fns";
-import { ru } from "date-fns/locale";
 import { CalendarDays, Clock } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { DateRange } from "react-day-picker";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { dateFnsLocale } from "@/i18n/config";
 
 export function CustomRangeForm({
   from,
@@ -17,6 +18,7 @@ export function CustomRangeForm({
   to?: string | undefined;
   onApply: (from: string, to: string) => void;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [dates, setDates] = useState<DateRange | undefined>(() => ({
     from: dateFromIso(from),
@@ -46,7 +48,7 @@ export function CustomRangeForm({
       }}
     >
       <div className="min-w-0 flex-1 basis-full sm:basis-72">
-        <p className="mb-1 text-xs text-muted-foreground">Даты</p>
+        <p className="mb-1 text-xs text-muted-foreground">{t("history.custom.dates")}</p>
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
             <Button
@@ -58,14 +60,14 @@ export function CustomRangeForm({
               {dates?.from ? (
                 dates.to ? (
                   <span className="truncate">
-                    {format(dates.from, "d MMM yyyy", { locale: ru })} —{" "}
-                    {format(dates.to, "d MMM yyyy", { locale: ru })}
+                    {format(dates.from, "d MMM yyyy", { locale: dateFnsLocale })} —{" "}
+                    {format(dates.to, "d MMM yyyy", { locale: dateFnsLocale })}
                   </span>
                 ) : (
-                  format(dates.from, "d MMMM yyyy", { locale: ru })
+                  format(dates.from, "d MMMM yyyy", { locale: dateFnsLocale })
                 )
               ) : (
-                <span className="text-muted-foreground">Выберите начало и конец</span>
+                <span className="text-muted-foreground">{t("history.custom.selectDates")}</span>
               )}
             </Button>
           </PopoverTrigger>
@@ -74,7 +76,7 @@ export function CustomRangeForm({
               mode="range"
               selected={dates}
               onSelect={setDates}
-              locale={ru}
+              locale={dateFnsLocale}
               {...(dates?.from ? { defaultMonth: dates.from } : {})}
               className="pointer-events-auto p-3"
             />
@@ -82,13 +84,23 @@ export function CustomRangeForm({
         </Popover>
       </div>
 
-      <TimeInput label="Время с" value={startTime} onChange={setStartTime} />
-      <TimeInput label="Время по" value={endTime} onChange={setEndTime} />
+      <TimeInput
+        label={t("history.custom.startTime")}
+        value={startTime}
+        placeholder="00:00"
+        onChange={setStartTime}
+      />
+      <TimeInput
+        label={t("history.custom.endTime")}
+        value={endTime}
+        placeholder="23:59"
+        onChange={setEndTime}
+      />
       <Button type="submit" size="sm" disabled={!complete || invalid}>
-        Показать
+        {t("common.actions.show")}
       </Button>
       {invalid ? (
-        <p className="basis-full text-xs text-offline">Начало должно быть раньше конца.</p>
+        <p className="basis-full text-xs text-offline">{t("history.custom.invalidRange")}</p>
       ) : null}
     </form>
   );
@@ -97,10 +109,12 @@ export function CustomRangeForm({
 function TimeInput({
   label,
   value,
+  placeholder,
   onChange,
 }: {
   label: string;
   value: string;
+  placeholder: string;
   onChange: (value: string) => void;
 }) {
   return (
@@ -115,7 +129,7 @@ function TimeInput({
           inputMode="numeric"
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          placeholder={label === "Время с" ? "00:00" : "23:59"}
+          placeholder={placeholder}
           aria-label={label}
           className="num bg-surface-raised pl-9"
         />

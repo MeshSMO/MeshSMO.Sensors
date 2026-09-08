@@ -9,6 +9,7 @@ import {
   YAxis,
 } from "recharts";
 import type { MeasurementPoint } from "@/lib/api";
+import { formatChartTime } from "@/i18n/formatters";
 import { getMetric } from "@/lib/metrics";
 import { formatDateTime, formatValue } from "@/lib/format";
 
@@ -74,14 +75,7 @@ export default function CombinedChart({ series }: { series: ChartSeries[] }) {
             type="number"
             domain={["dataMin", "dataMax"]}
             scale="time"
-            tickFormatter={(v: number) =>
-              new Intl.DateTimeFormat("ru-RU", {
-                day: "2-digit",
-                month: "2-digit",
-                hour: "2-digit",
-                minute: "2-digit",
-              }).format(new Date(v))
-            }
+            tickFormatter={formatChartTime}
             stroke="var(--muted-foreground)"
             fontSize={11}
           />

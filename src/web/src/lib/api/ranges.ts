@@ -1,17 +1,6 @@
 export const ranges = ["6h", "12h", "24h", "7d", "30d", "6m", "1y", "custom"] as const;
 export type RangeKey = (typeof ranges)[number];
 
-export const rangeLabels: Record<RangeKey, string> = {
-  "6h": "6 ч",
-  "12h": "12 ч",
-  "24h": "24 ч",
-  "7d": "7 дн",
-  "30d": "30 дн",
-  "6m": "6 мес",
-  "1y": "1 год",
-  custom: "Период",
-};
-
 const rangeMilliseconds: Record<Exclude<RangeKey, "custom">, number> = {
   "6h": 6 * 3_600_000,
   "12h": 12 * 3_600_000,

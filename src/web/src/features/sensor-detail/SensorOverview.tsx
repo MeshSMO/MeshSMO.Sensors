@@ -1,4 +1,5 @@
 import { Star } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { SkeletonLine } from "@/components/site/Shell";
 import { StatusBadge } from "@/components/site/StatusBadge";
 import { useLatest, useSensor, useStatus } from "@/lib/api";
@@ -26,6 +27,7 @@ export function SensorReadings({
   metrics: string[];
   pollIntervalSeconds: number;
 }) {
+  const { t } = useTranslation();
   const { data, isPending, isError } = useLatest(slug, pollIntervalSeconds);
   const { favorites, toggleFavorite } = useFavoriteMetrics();
   const sensorFavorites = favorites.get(slug) ?? new Set<string>();
@@ -39,7 +41,7 @@ export function SensorReadings({
 
   return (
     <section className="mt-10">
-      <h2 className="text-xl font-semibold tracking-tight">Показания</h2>
+      <h2 className="text-xl font-semibold tracking-tight">{t("sensor.readings")}</h2>
       <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4" aria-live="polite">
         {keys.map((key) => {
           const meta = getMetric(key);
@@ -52,9 +54,14 @@ export function SensorReadings({
               <p className="text-xs text-muted-foreground">{label}</p>
               <button
                 type="button"
-                aria-label={`${isFavorite ? "Убрать" : "Добавить"} показатель «${label}» ${isFavorite ? "из" : "в"} избранного`}
+                aria-label={t(
+                  isFavorite ? "sensor.favoriteMetricRemove" : "sensor.favoriteMetricAdd",
+                  { label },
+                )}
                 aria-pressed={isFavorite}
-                title={isFavorite ? "Убрать из избранного" : "Добавить в избранное"}
+                title={
+                  isFavorite ? t("common.actions.removeFavorite") : t("common.actions.addFavorite")
+                }
                 className="absolute top-2.5 right-2.5 inline-flex size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={() => toggleFavorite(slug, key)}
               >
@@ -78,7 +85,7 @@ export function SensorReadings({
                 )}
               </p>
               <p className="num mt-2 text-xs text-muted-foreground">
-                {value ? formatDateTime(value.timestamp) : "нет измерений"}
+                {value ? formatDateTime(value.timestamp) : t("sensor.noMeasurements")}
               </p>
             </div>
           );
@@ -97,21 +104,25 @@ export function SensorDiagnostics({
   protocol: string;
   pollIntervalSeconds: number;
 }) {
+  const { t } = useTranslation();
   const { data } = useStatus(slug, pollIntervalSeconds);
   const rows: Array<[string, string]> = [
-    ["RSSI", data?.lastRssi != null ? `${formatNumber(data.lastRssi, 1)} dBm` : "—"],
-    ["SNR", data?.lastSnr != null ? `${formatNumber(data.lastSnr, 2)} dB` : "—"],
-    ["Последний опрос", formatDateTime(data?.lastPollAt)],
-    ["Последний успешный", formatDateTime(data?.lastSuccessAt)],
-    ["Неудач подряд", data ? String(data.consecutiveFailures) : "—"],
-    ["Интервал опроса", `${pollIntervalSeconds} с`],
-    ["Протокол", protocol],
+    ["RSSI", data?.lastRssi != null ? `${formatNumber(data.lastRssi, 1)} dBm` : t("common.noData")],
+    ["SNR", data?.lastSnr != null ? `${formatNumber(data.lastSnr, 2)} dB` : t("common.noData")],
+    [t("sensor.lastPoll"), formatDateTime(data?.lastPollAt)],
+    [t("sensor.lastSuccess"), formatDateTime(data?.lastSuccessAt)],
+    [
+      t("sensor.consecutiveFailures"),
+      data ? formatNumber(data.consecutiveFailures, 0) : t("common.noData"),
+    ],
+    [t("sensor.pollInterval"), t("sensor.pollIntervalValue", { count: pollIntervalSeconds })],
+    [t("sensor.protocol"), protocol],
   ];
 
   return (
     <section className="mt-12 rounded-xl border border-dashed border-border bg-surface/50 px-5 py-5">
       <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
-        Диагностика канала
+        {t("sensor.diagnostics")}
       </h2>
       <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
         {rows.map(([label, value]) => (

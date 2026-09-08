@@ -1,5 +1,6 @@
 import { getRouteApi } from "@tanstack/react-router";
 import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { EmptyState } from "@/components/site/Shell";
 import {
   resolveRange,
@@ -27,6 +28,7 @@ export function SensorHistory({
   selected: string[];
   search: SensorSearch;
 }) {
+  const { t } = useTranslation();
   const navigate = sensorRoute.useNavigate();
   const range = search.range ?? "24h";
   const mode = search.mode ?? "separate";
@@ -82,7 +84,7 @@ export function SensorHistory({
 
   return (
     <section className="mt-10">
-      <h2 className="text-xl font-semibold tracking-tight">История</h2>
+      <h2 className="text-xl font-semibold tracking-tight">{t("history.title")}</h2>
       <HistoryControls
         metrics={metrics}
         selected={selected}
@@ -97,12 +99,12 @@ export function SensorHistory({
       {forecastEnabled ? (
         <p className="mt-2 text-xs text-muted-foreground" aria-live="polite">
           {forecastQuery.isPending
-            ? "Строим прогноз по истории измерений…"
+            ? t("history.forecastPending")
             : forecastQuery.isError
-              ? "Не удалось построить прогноз. Попробуйте ещё раз позже."
+              ? t("history.forecastError")
               : forecastQuery.data?.availability === "ready"
-                ? "Пунктиром показан расчётный прогноз; полоса отражает его неопределённость."
-                : forecastAvailabilityMessage(forecastQuery.data?.availability)}
+                ? t("history.forecastReady")
+                : forecastAvailabilityMessage(forecastQuery.data?.availability, t)}
         </p>
       ) : null}
 
@@ -117,8 +119,8 @@ export function SensorHistory({
       {range === "custom" && !bounds ? (
         <div className="panel mt-4 px-4 py-4">
           <EmptyState
-            title="Укажите период"
-            description="Задайте дату и время начала и конца — история загрузится по этому интервалу."
+            title={t("history.custom.emptyTitle")}
+            description={t("history.custom.emptyDescription")}
           />
         </div>
       ) : (
@@ -133,19 +135,22 @@ export function SensorHistory({
   );
 }
 
-function forecastAvailabilityMessage(availability: ForecastAvailability | undefined): string {
+function forecastAvailabilityMessage(
+  availability: ForecastAvailability | undefined,
+  t: ReturnType<typeof useTranslation>["t"],
+): string {
   switch (availability) {
     case "insufficient_data":
-      return "Для прогноза пока недостаточно истории измерений.";
+      return t("history.forecastAvailability.insufficient_data");
     case "sparse_data":
-      return "Прогноз недоступен: в истории слишком много пропусков.";
+      return t("history.forecastAvailability.sparse_data");
     case "stale_data":
-      return "Прогноз недоступен: последние показания устарели.";
+      return t("history.forecastAvailability.stale_data");
     case "low_quality":
-      return "Модель не прошла проверку качества на истории этого показателя.";
+      return t("history.forecastAvailability.low_quality");
     case "disabled":
-      return "Прогноз пока отключён для этого показателя.";
+      return t("history.forecastAvailability.disabled");
     default:
-      return "Прогноз пока недоступен.";
+      return t("history.forecastAvailability.unknown");
   }
 }

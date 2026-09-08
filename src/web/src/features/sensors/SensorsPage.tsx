@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { Star } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { EmptyState } from "@/components/site/Shell";
 import { StatusBadge } from "@/components/site/StatusBadge";
 import { useLatest, useSensors } from "@/lib/api";
@@ -10,6 +11,7 @@ import { getMetric, metricLabel } from "@/lib/metrics";
 import { sensorRegistry, type RegistrySensor } from "@/lib/registry";
 
 export function SensorsPage() {
+  const { t } = useTranslation();
   const { data } = useSensors();
   const { favorites, toggleFavorite } = useFavoriteSensors();
   const { favorites: favoriteMetrics } = useFavoriteMetrics();
@@ -22,19 +24,13 @@ export function SensorsPage() {
 
   return (
     <>
-      <p className="eyebrow">Реестр</p>
-      <h1 className="mt-3 text-3xl font-semibold tracking-tight">Публичные датчики</h1>
-      <p className="mt-3 max-w-2xl text-muted-foreground">
-        Каждый датчик передаёт показания по радиосети MeshCore. Статус и последние значения
-        подгружаются с сервера телеметрии; описание и перечень показателей доступны всегда.
-      </p>
+      <p className="eyebrow">{t("sensors.eyebrow")}</p>
+      <h1 className="mt-3 text-3xl font-semibold tracking-tight">{t("sensors.title")}</h1>
+      <p className="mt-3 max-w-2xl text-muted-foreground">{t("sensors.description")}</p>
 
       {sensorRegistry.length === 0 ? (
         <div className="mt-8">
-          <EmptyState
-            title="Пока ни один датчик не опубликован"
-            description="Сеть разворачивается. Как только первый датчик выйдет в эфир, он появится здесь."
-          />
+          <EmptyState title={t("sensors.emptyTitle")} description={t("sensors.emptyDescription")} />
         </div>
       ) : (
         <ul className="mt-8 grid gap-4 sm:grid-cols-2">
@@ -67,6 +63,8 @@ function SensorCard({
   favoriteMetrics: string[];
   onToggleFavorite: () => void;
 }) {
+  const { t } = useTranslation();
+
   return (
     <li className="panel relative flex h-full transition-colors hover:bg-surface-raised">
       <Link
@@ -81,16 +79,21 @@ function SensorCard({
         <span className="text-sm text-muted-foreground">{sensor.description}</span>
         <span className="num text-xs text-muted-foreground">
           {sensor.location
-            ? `${formatCoordinate(sensor.location.latitude)}, ${formatCoordinate(sensor.location.longitude)}`
-            : "Координаты не опубликованы"}
+            ? t("common.coordinates.pair", {
+                latitude: formatCoordinate(sensor.location.latitude),
+                longitude: formatCoordinate(sensor.location.longitude),
+              })
+            : t("common.coordinates.unavailable")}
         </span>
         <MetricTags sensor={sensor} favorites={favoriteMetrics} />
       </Link>
       <button
         type="button"
-        aria-label={isFavorite ? "Убрать из избранного" : "Добавить в избранное"}
+        aria-label={
+          isFavorite ? t("common.actions.removeFavorite") : t("common.actions.addFavorite")
+        }
         aria-pressed={isFavorite}
-        title={isFavorite ? "Убрать из избранного" : "Добавить в избранное"}
+        title={isFavorite ? t("common.actions.removeFavorite") : t("common.actions.addFavorite")}
         className="absolute top-4 right-4 inline-flex size-9 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         onClick={onToggleFavorite}
       >

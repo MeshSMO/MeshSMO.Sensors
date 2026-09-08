@@ -1,31 +1,30 @@
 import { Link } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import { SkeletonLine } from "@/components/site/Shell";
 import { StatusBadge } from "@/components/site/StatusBadge";
 import { useDashboard } from "@/lib/api";
 import { chargeLevel, hasBatteryMetric, liIonChargePercent, type ChargeLevel } from "@/lib/battery";
-import { normalizeState } from "@/lib/format";
+import { formatNumber, normalizeState } from "@/lib/format";
 import { sensorRegistry } from "@/lib/registry";
 
 export function HomePage() {
+  const { t } = useTranslation();
+
   return (
     <>
       <section className="relative overflow-hidden rounded-2xl border border-border bg-surface px-6 py-14 sm:px-10">
         <div className="mesh-grid pointer-events-none absolute inset-0 opacity-40" aria-hidden />
         <div className="relative max-w-2xl">
-          <p className="eyebrow">LoRa · MeshCore · Смоленская область</p>
+          <p className="eyebrow">{t("home.hero.eyebrow")}</p>
           <h1 className="mt-4 text-4xl font-semibold tracking-tight sm:text-5xl">
-            Телеметрия датчиков в открытом доступе
+            {t("home.hero.title")}
           </h1>
-          <p className="mt-4 text-base text-muted-foreground">
-            MeshSMO собирает показания физических датчиков через радиосеть MeshCore и публикует их
-            без задержек и посредников. Никаких выдуманных цифр — только то, что реально пришло из
-            эфира.
-          </p>
+          <p className="mt-4 text-base text-muted-foreground">{t("home.hero.description")}</p>
           <Link
             to="/sensors"
             className="mt-8 inline-flex items-center rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground transition-opacity hover:opacity-90"
           >
-            Смотреть датчики
+            {t("home.hero.action")}
           </Link>
         </div>
       </section>
@@ -36,14 +35,15 @@ export function HomePage() {
 }
 
 function LiveDashboard() {
+  const { t } = useTranslation();
   const { data, isPending, isError } = useDashboard();
   const summary = data?.summary;
   const sensors = data?.sensors ?? [];
   const counters: Array<[string, number | undefined]> = [
-    ["Всего", summary?.total],
-    ["В сети", summary?.online],
-    ["Нестабильны", summary?.degraded],
-    ["Не отвечают", summary?.offline],
+    [t("home.dashboard.total"), summary?.total],
+    [t("home.dashboard.online"), summary?.online],
+    [t("home.dashboard.degraded"), summary?.degraded],
+    [t("home.dashboard.offline"), summary?.offline],
   ];
   const visibleSensors = sensors.length
     ? sensors.map((sensor) => ({ ...sensor, state: normalizeState(sensor.state) }))
@@ -52,8 +52,8 @@ function LiveDashboard() {
   return (
     <section className="mt-12">
       <div className="flex items-baseline justify-between gap-4">
-        <h2 className="text-xl font-semibold tracking-tight">Состояние сети</h2>
-        <p className="text-xs text-muted-foreground">Обновляется каждые 20 секунд</p>
+        <h2 className="text-xl font-semibold tracking-tight">{t("home.dashboard.title")}</h2>
+        <p className="text-xs text-muted-foreground">{t("home.dashboard.refresh")}</p>
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -88,9 +88,7 @@ function LiveDashboard() {
       </ul>
 
       {isError ? (
-        <p className="mt-4 text-xs text-muted-foreground">
-          Сервер телеметрии сейчас недоступен — показан статический список датчиков.
-        </p>
+        <p className="mt-4 text-xs text-muted-foreground">{t("home.dashboard.unavailable")}</p>
       ) : null}
     </section>
   );
@@ -103,11 +101,12 @@ const chargeLevelStyles: Record<ChargeLevel, string> = {
 };
 
 function BatteryReadout({ volts }: { volts: number | null }) {
+  const { t } = useTranslation();
   const percent = liIonChargePercent(volts);
   if (percent === null) {
     return (
-      <span className="num" title="Нет корректных данных о заряде батареи">
-        Батарея: —
+      <span className="num" title={t("common.battery.unavailable")}>
+        {t("common.battery.label", { value: t("common.noData") })}
       </span>
     );
   }
@@ -115,9 +114,9 @@ function BatteryReadout({ volts }: { volts: number | null }) {
   return (
     <span
       className={`num ${chargeLevelStyles[chargeLevel(percent)]}`}
-      title={`Li-ion, напряжение ${volts?.toFixed(2)} В`}
+      title={t("common.battery.voltage", { value: formatNumber(volts, 2) })}
     >
-      Батарея: {percent}%
+      {t("common.battery.label", { value: `${percent}%` })}
     </span>
   );
 }

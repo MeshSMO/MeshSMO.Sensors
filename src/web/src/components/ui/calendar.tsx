@@ -5,6 +5,7 @@ import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react
 import { DayButton, DayPicker, getDefaultClassNames } from "react-day-picker";
 
 import { cn } from "@/lib/utils";
+import { defaultLocale } from "@/i18n/config";
 import { Button, buttonVariants } from "@/components/ui/button";
 
 function Calendar({
@@ -32,7 +33,7 @@ function Calendar({
       )}
       captionLayout={captionLayout}
       formatters={{
-        formatMonthDropdown: (date) => date.toLocaleString("default", { month: "short" }),
+        formatMonthDropdown: (date) => date.toLocaleString(defaultLocale, { month: "short" }),
         ...formatters,
       }}
       classNames={{
@@ -154,7 +155,7 @@ function CalendarDayButton({
       ref={ref}
       variant="ghost"
       size="icon"
-      data-day={day.date.toLocaleDateString()}
+      data-day={day.date.toLocaleDateString(defaultLocale)}
       data-selected-single={
         modifiers["selected"] &&
         !modifiers["range_start"] &&

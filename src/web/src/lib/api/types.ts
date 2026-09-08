@@ -76,13 +76,6 @@ export type MeasurementsResponse = {
 export const forecastHorizons = ["1h", "6h", "12h", "24h"] as const;
 export type ForecastHorizon = (typeof forecastHorizons)[number];
 
-export const forecastHorizonLabels: Record<ForecastHorizon, string> = {
-  "1h": "1 ч",
-  "6h": "6 ч",
-  "12h": "12 ч",
-  "24h": "24 ч",
-};
-
 export type ForecastAvailability =
   "ready" | "insufficient_data" | "sparse_data" | "stale_data" | "low_quality" | "disabled";
 

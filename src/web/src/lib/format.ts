@@ -1,13 +1,12 @@
 import { getMetric } from "./metrics";
+import {
+  formatLocalizedDateTime,
+  formatLocalizedNumber,
+  formatLocalizedTime,
+} from "@/i18n/formatters";
+import { translate } from "@/i18n";
 
 export type SensorState = "Online" | "Degraded" | "Offline" | "Unknown";
-
-export const stateLabels: Record<SensorState, string> = {
-  Online: "В сети",
-  Degraded: "Нестабилен",
-  Offline: "Не отвечает",
-  Unknown: "Статус неизвестен",
-};
 
 export function normalizeState(value: string | null | undefined): SensorState {
   if (value === "Online" || value === "Degraded" || value === "Offline") return value;
@@ -15,8 +14,10 @@ export function normalizeState(value: string | null | undefined): SensorState {
 }
 
 export function formatValue(metricKey: string, value: number | null | undefined): string {
-  if (value === null || value === undefined || Number.isNaN(value)) return "—";
-  return value.toFixed(getMetric(metricKey).precision);
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return translate("common.noData");
+  }
+  return formatLocalizedNumber(value, getMetric(metricKey).precision);
 }
 
 /** Универсальное отображение показания: числа, флаги, текст, метки времени. */
@@ -28,46 +29,39 @@ export function formatReading(
   const meta = getMetric(metricKey);
   if (meta.kind === "boolean") {
     const raw = textValue ?? (numericValue == null ? null : String(numericValue));
-    if (raw === null) return "—";
-    return raw === "true" || raw === "1" ? "да" : "нет";
+    if (raw === null) return translate("common.noData");
+    return raw === "true" || raw === "1" ? translate("common.yes") : translate("common.no");
   }
   if (meta.kind === "timestamp") {
     if (textValue) return formatDateTime(textValue);
-    if (numericValue == null) return "—";
+    if (numericValue == null) return translate("common.noData");
     return formatDateTime(new Date(numericValue * 1000).toISOString());
   }
-  if (meta.kind === "text") return textValue ?? "—";
+  if (meta.kind === "text") return textValue ?? translate("common.noData");
   return formatValue(metricKey, numericValue);
 }
 
 export function formatNumber(value: number | null | undefined, digits = 1): string {
-  if (value === null || value === undefined || Number.isNaN(value)) return "—";
-  return value.toFixed(digits);
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return translate("common.noData");
+  }
+  return formatLocalizedNumber(value, digits);
 }
 
 export function formatDateTime(iso: string | null | undefined): string {
-  if (!iso) return "—";
+  if (!iso) return translate("common.noData");
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
+  if (Number.isNaN(date.getTime())) return translate("common.noData");
+  return formatLocalizedDateTime(date);
 }
 
 export function formatTime(iso: string | null | undefined): string {
-  if (!iso) return "—";
+  if (!iso) return translate("common.noData");
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("ru-RU", {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
+  if (Number.isNaN(date.getTime())) return translate("common.noData");
+  return formatLocalizedTime(date);
 }
 
 export function formatCoordinate(value: number): string {
-  return value.toFixed(4);
+  return formatLocalizedNumber(value, 4);
 }

@@ -1,4 +1,5 @@
 import { lazy, Suspense } from "react";
+import { useTranslation } from "react-i18next";
 import { EmptyState, SkeletonLine } from "@/components/site/Shell";
 import HistoryChartGrid from "@/components/site/HistoryChartGrid";
 import type { ForecastResponse, MeasurementPoint } from "@/lib/api";
@@ -86,13 +87,12 @@ export function HistoryCharts({
 }
 
 function ChartPlaceholder({ pending }: { pending: boolean }) {
+  const { t } = useTranslation();
+
   return pending ? (
     <SkeletonLine className="h-72 w-full" />
   ) : (
-    <EmptyState
-      title="История пока пуста"
-      description="История появится, когда датчик начнёт передавать данные."
-    />
+    <EmptyState title={t("history.emptyTitle")} description={t("history.emptyDescription")} />
   );
 }
 
@@ -105,6 +105,7 @@ function ChartSummary({
   points: MeasurementPoint[];
   prefix?: string;
 }) {
+  const { t } = useTranslation();
   const meta = getMetric(metricKey);
   const values = (key: "min" | "avg" | "max") =>
     points.map((point) => point[key]).filter((value): value is number => value !== null);
@@ -115,13 +116,16 @@ function ChartSummary({
 
   return (
     <p className="num mt-3 text-xs text-muted-foreground">
-      {prefix}среднее{" "}
-      {formatNumber(
-        averages.reduce((sum, value) => sum + value, 0) / averages.length,
-        meta.precision,
-      )}{" "}
-      {meta.unit} · минимум {formatValue(metricKey, Math.min(...minimums))} · максимум{" "}
-      {formatValue(metricKey, Math.max(...maximums))}
+      {t("charts.summary", {
+        prefix,
+        average: formatNumber(
+          averages.reduce((sum, value) => sum + value, 0) / averages.length,
+          meta.precision,
+        ),
+        unit: meta.unit,
+        minimum: formatValue(metricKey, Math.min(...minimums)),
+        maximum: formatValue(metricKey, Math.max(...maximums)),
+      })}
     </p>
   );
 }

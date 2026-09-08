@@ -1,13 +1,8 @@
 import { ChevronDown, Sparkles } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  forecastHorizonLabels,
-  forecastHorizons,
-  rangeLabels,
-  ranges,
-  type RangeKey,
-} from "@/lib/api";
+import { forecastHorizons, ranges, type RangeKey } from "@/lib/api";
 import { metricLabel } from "@/lib/metrics";
 import type { ChartMode, SensorSearch } from "../route-config";
 import type { SearchPatch } from "./history-preferences";
@@ -31,10 +26,11 @@ export function HistoryControls({
   onToggleMetric: (metric: string) => void;
   onUpdate: (patch: SearchPatch) => void;
 }) {
+  const { t } = useTranslation();
   const selectedLabel =
     selected.length === 1 && selected[0]
       ? metricLabel(selected[0])
-      : `Выбрано показателей: ${selected.length}`;
+      : t("history.selectedMetrics", { count: selected.length });
 
   return (
     <>
@@ -64,8 +60,8 @@ export function HistoryControls({
         <SegmentedControl
           value={mode}
           options={[
-            ["separate", "Отдельно"],
-            ["combined", "Вместе"],
+            ["separate", t("history.separate")],
+            ["combined", t("history.combined")],
           ]}
           onChange={(nextMode) =>
             onUpdate({
@@ -87,8 +83,8 @@ export function HistoryControls({
           }`}
           title={
             selected.length !== 1
-              ? "Для прогноза выберите один показатель"
-              : "Прогноз строится ML-моделями по истории измерений"
+              ? t("history.forecastSelectMetric")
+              : t("history.forecastDescription")
           }
         >
           <span
@@ -101,20 +97,23 @@ export function HistoryControls({
             className={`relative h-3.5 w-3.5 ${forecastEnabled ? "text-accent" : ""}`}
             aria-hidden
           />
-          <span className="relative">Прогноз</span>
+          <span className="relative">{t("history.forecast")}</span>
         </button>
 
         {forecastEnabled ? (
           <SegmentedControl
             value={forecast ?? "24h"}
-            options={forecastHorizons.map((horizon) => [horizon, forecastHorizonLabels[horizon]])}
+            options={forecastHorizons.map((horizon) => [horizon, t(`history.horizons.${horizon}`)])}
             onChange={(nextForecast) => onUpdate({ forecast: nextForecast })}
             numeric
           />
         ) : null}
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-2" aria-label="Период истории">
+      <div
+        className="mt-3 flex flex-wrap gap-2"
+        aria-label={t("common.accessibility.historyPeriod")}
+      >
         {ranges.map((key) => (
           <button
             key={key}
@@ -132,7 +131,7 @@ export function HistoryControls({
                 : "border-border text-muted-foreground hover:text-foreground"
             }`}
           >
-            {rangeLabels[key]}
+            {t(`history.ranges.${key}`)}
           </button>
         ))}
       </div>

@@ -1,5 +1,6 @@
 import { GripVertical, MoveDiagonal2 } from "lucide-react";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { useHistoryChartLayout } from "@/features/sensor-detail/history/useHistoryChartLayout";
 
 export type HistoryChartGridItem = {
@@ -16,6 +17,7 @@ export default function HistoryChartGrid({
   slug: string;
   items: HistoryChartGridItem[];
 }) {
+  const { t } = useTranslation();
   const layout = useHistoryChartLayout(slug, items);
 
   return (
@@ -47,7 +49,7 @@ export default function HistoryChartGrid({
               type="button"
               draggable
               className="-ml-1 flex min-w-0 flex-1 touch-none cursor-grab items-center gap-1 rounded-sm text-left active:cursor-grabbing"
-              aria-label={`Переместить карточку «${item.title}». Для клавиатуры используйте стрелки.`}
+              aria-label={t("common.accessibility.moveCard", { title: item.title })}
               onDragStart={(event) => layout.handleNativeDragStart(event, item.id)}
               onDragEnd={layout.clearDragState}
               onPointerDown={(event) => layout.handlePointerDragStart(event, item.id)}
@@ -81,8 +83,8 @@ export default function HistoryChartGrid({
             className={`absolute right-1 bottom-1 z-10 flex h-7 w-7 touch-none items-end justify-end rounded-sm p-1 text-muted-foreground transition-colors hover:bg-surface-raised hover:text-accent ${
               layout.resizingId === item.id ? "bg-surface-raised text-accent" : ""
             }`}
-            aria-label={`Изменить размер карточки «${item.title}». Для клавиатуры используйте стрелки.`}
-            title="Потяните или используйте стрелки. Home или двойной щелчок — сбросить."
+            aria-label={t("common.accessibility.resizeCard", { title: item.title })}
+            title={t("common.accessibility.resizeCardHelp")}
             onPointerDown={(event) => layout.handleResizeStart(event, item.id)}
             onPointerMove={layout.handleResizeMove}
             onPointerUp={layout.handleResizeEnd}

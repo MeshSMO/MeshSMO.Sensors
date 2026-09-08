@@ -16,9 +16,9 @@ export {
   useSensors,
   useStatus,
 } from "./queries";
-export { rangeLabels, ranges, resolveRange } from "./ranges";
+export { ranges, resolveRange } from "./ranges";
 export type { CustomRange, RangeKey } from "./ranges";
-export { forecastHorizonLabels, forecastHorizons } from "./types";
+export { forecastHorizons } from "./types";
 export type {
   DashboardResponse,
   ForecastAvailability,

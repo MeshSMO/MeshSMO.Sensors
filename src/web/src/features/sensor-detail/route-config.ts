@@ -1,5 +1,7 @@
 import { notFound } from "@tanstack/react-router";
 import { forecastHorizons, ranges, type ForecastHorizon, type RangeKey } from "@/lib/api";
+import { defaultLocale } from "@/i18n/config";
+import { translate } from "@/i18n";
 import { getMetric, metricLabel } from "@/lib/metrics";
 import { getRegistrySensor, type RegistrySensor } from "@/lib/registry";
 import { absoluteSiteUrl, createPageMeta } from "@/lib/seo";
@@ -66,11 +68,10 @@ export function createSensorHead(sensor: RegistrySensor) {
   const metricNames = sensor.metrics.map(metricLabel);
   const metricsPhrase = metricNames.slice(0, 3).join(", ").toLowerCase();
   const title = metricsPhrase
-    ? `Датчик «${sensor.displayName}» — ${metricsPhrase} | MeshSMO`
-    : `Датчик «${sensor.displayName}» — телеметрия | MeshSMO`;
+    ? translate("seo.sensor.title", { name: sensor.displayName, metrics: metricsPhrase })
+    : translate("seo.sensor.fallbackTitle", { name: sensor.displayName });
   const description =
-    sensor.description ??
-    `Показания датчика ${sensor.displayName} в сети MeshSMO: текущие значения, история и диагностика радиоканала.`;
+    sensor.description ?? translate("seo.sensor.description", { name: sensor.displayName });
 
   return {
     meta: [
@@ -93,11 +94,16 @@ function createBreadcrumbSchema(sensor: RegistrySensor, url: string) {
       "@context": "https://schema.org",
       "@type": "BreadcrumbList",
       itemListElement: [
-        { "@type": "ListItem", position: 1, name: "Главная", item: absoluteSiteUrl() },
+        {
+          "@type": "ListItem",
+          position: 1,
+          name: translate("common.navigation.home"),
+          item: absoluteSiteUrl(),
+        },
         {
           "@type": "ListItem",
           position: 2,
-          name: "Датчики",
+          name: translate("common.navigation.sensors"),
           item: absoluteSiteUrl("/sensors"),
         },
         { "@type": "ListItem", position: 3, name: sensor.displayName, item: url },
@@ -112,10 +118,10 @@ function createDatasetSchema(sensor: RegistrySensor, url: string) {
     children: JSON.stringify({
       "@context": "https://schema.org",
       "@type": "Dataset",
-      name: `Телеметрия датчика «${sensor.displayName}»`,
+      name: translate("seo.sensor.datasetName", { name: sensor.displayName }),
       description: sensor.description,
       url,
-      inLanguage: "ru",
+      inLanguage: defaultLocale,
       isAccessibleForFree: true,
       creator: { "@type": "Organization", name: "MeshSMO" },
       measurementTechnique: sensor.protocol,
