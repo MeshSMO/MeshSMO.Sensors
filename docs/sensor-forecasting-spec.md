@@ -21,7 +21,8 @@
 9. Поддерживаемые горизонты MVP: `1h`, `6h`, `12h`, `24h`.
 10. Первый алгоритм — SSA из `Microsoft.ML.TimeSeries`; архитектура не должна привязывать API к SSA, чтобы позже добавить regression-модель с lag/calendar/exogenous features.
 
-Текущая реализация находится в ветке `codex/sensor-forecasting`. Проекты Forecasting, BFF endpoint, in-memory coordination и frontend UI реализованы; `Forecasting:Enabled` по умолчанию остаётся `false` до проверки на реальных рядах по Phase F0/F4.
+Проект Forecasting, BFF endpoint, in-memory coordination и frontend UI реализованы;
+`Forecasting:Enabled` по умолчанию остаётся `false` до проверки на реальных рядах по Phase F0/F4.
 
 ## 3. Почему это соответствует текущей архитектуре
 
@@ -374,14 +375,20 @@ CPU-bound обучение нельзя выполнять параллельн�
 {
   "Forecasting": {
     "Enabled": false,
-    "Step": "5m",
-    "TrainingWindow": "28d",
-    "MinimumHistory": "14d",
+    "StepMinutes": 5,
+    "TrainingWindowDays": 28,
+    "MinimumHistoryDays": 14,
+    "MinimumHistoryDaysByHorizon": {
+      "1h": 3,
+      "6h": 3,
+      "12h": 5,
+      "24h": 7
+    },
     "MinimumCoverage": 0.85,
     "ConfidenceLevel": 0.90,
-    "ResultCacheTtl": "5m",
+    "ResultCacheMinutes": 5,
     "MaximumConcurrentTrainings": 1,
-    "CalculationTimeout": "10s",
+    "CalculationTimeoutSeconds": 10,
     "Series": {
       "garden-east:temperature": {
         "Enabled": true,
@@ -397,6 +404,10 @@ CPU-bound обучение нельзя выполнять параллельн�
   }
 }
 ```
+
+`MinimumHistoryDaysByHorizon` переопределяет общий `MinimumHistoryDays` для указанного горизонта.
+Значение должно оставлять достаточно данных для трёх rolling backtest folds и как минимум двух
+суточных циклов в первом обучающем окне; некорректная конфигурация отклоняется при старте BFF.
 
 Формат duration должен переиспользовать существующий подход `RegistryDuration`, а не вводить второй несовместимый парсер.
 

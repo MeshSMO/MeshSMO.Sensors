@@ -44,6 +44,10 @@ services:
       ConnectionStrings__Sensors: Host=sensor-db;Port=5432;Database=${POSTGRES_DB:-meshsmo_sensors};Username=${POSTGRES_USER:-meshsmo};Password=${POSTGRES_PASSWORD}
       Public__BaseUrl: ${PUBLIC_BASE_URL:-https://sensors.meshsmo.ru}
       Forecasting__Enabled: ${FORECASTING_ENABLED:-false}
+      Forecasting__MinimumHistoryDaysByHorizon__1h: ${FORECASTING_MINIMUM_HISTORY_1H_DAYS:-3}
+      Forecasting__MinimumHistoryDaysByHorizon__6h: ${FORECASTING_MINIMUM_HISTORY_6H_DAYS:-3}
+      Forecasting__MinimumHistoryDaysByHorizon__12h: ${FORECASTING_MINIMUM_HISTORY_12H_DAYS:-5}
+      Forecasting__MinimumHistoryDaysByHorizon__24h: ${FORECASTING_MINIMUM_HISTORY_24H_DAYS:-7}
       Gateway__Mode: ${GATEWAY_MODE:-Pull}
       Gateway__BaseUrl: ${GATEWAY_BASE_URL:-http://sensor-gateway:8080}
       Gateway__ApiKey: ${GATEWAY_API_KEY:-}

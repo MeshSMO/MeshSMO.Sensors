@@ -69,9 +69,7 @@ builder.Services
         static options => options.StepMinutes > 0 && 60 % options.StepMinutes == 0,
         "Forecasting:StepMinutes must be a positive divisor of one hour.")
     .Validate(
-        static options => options.TrainingWindowDays > 0 &&
-            options.MinimumHistoryDays > 0 &&
-            options.MinimumHistoryDays <= options.TrainingWindowDays,
+        static options => options.HasValidHistoryConfiguration(),
         "Forecasting history windows are invalid.")
     .Validate(
         static options => options.MinimumCoverage is > 0 and <= 1 &&

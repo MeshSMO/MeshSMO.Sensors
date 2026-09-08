@@ -39,7 +39,8 @@ public sealed class MlNetForecastService : IForecastService
         if (horizon <= TimeSpan.Zero || horizon > TimeSpan.FromHours(24) || horizon.Ticks % step.Ticks != 0)
             throw new ArgumentOutOfRangeException(nameof(horizon), "Horizon must be a positive multiple of the forecast step and no longer than 24 hours.");
 
-        var prepared = _preparer.Prepare(series, utcNow);
+        var minimumHistoryDays = _options.MinimumHistoryDaysFor(horizon);
+        var prepared = _preparer.Prepare(series, utcNow, minimumHistoryDays);
         if (!prepared.IsReady)
         {
             return ForecastResult.Unavailable(
@@ -276,7 +277,7 @@ public sealed class MlNetForecastService : IForecastService
         ArgumentNullException.ThrowIfNull(options);
         if (options.StepMinutes <= 0 || 60 % options.StepMinutes != 0)
             throw new ArgumentOutOfRangeException(nameof(options), "StepMinutes must be a positive divisor of one hour.");
-        if (options.TrainingWindowDays <= 0 || options.MinimumHistoryDays <= 0 || options.MinimumHistoryDays > options.TrainingWindowDays)
+        if (!options.HasValidHistoryConfiguration())
             throw new ArgumentOutOfRangeException(nameof(options), "Training and minimum history windows are invalid.");
         if (!double.IsFinite(options.MinimumCoverage) || options.MinimumCoverage is <= 0 or > 1)
             throw new ArgumentOutOfRangeException(nameof(options), "MinimumCoverage must be in (0, 1].");
