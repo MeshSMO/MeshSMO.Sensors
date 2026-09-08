@@ -60,10 +60,14 @@ jobs:
         id: meta
         with:
           images: ghcr.io/meshsmo/meshsmo-sensors-${{ matrix.image }}
+          # Описание образа: без явного labels metadata-action выдаёт пустой
+          # org.opencontainers.image.description, который перекрывает LABEL из
+          # Dockerfile. latest добавляется flavor'ом latest=auto по умолчанию.
+          labels: |
+            org.opencontainers.image.description=${{ matrix.description }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ghcr.io
@@ -77,11 +81,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # OCI-описание на уровне манифеста: именно его показывает страница
-          # пакета GHCR для multi-arch образов (LABEL в Dockerfile ложится
-          # в конфиг платформенных образов).
-          annotations: |
-            org.opencontainers.image.description=${{ matrix.description }}
+          # Аннотации манифеста (manifest:key=value): именно их показывает
+          # страница пакета GHCR для multi-arch образов (LABEL в Dockerfile
+          # ложится только в конфиг платформенных образов).
+          annotations: ${{ steps.meta.outputs.annotations }}
           cache-from: type=gha,scope=image-${{ matrix.image }}
 
   github-release:
