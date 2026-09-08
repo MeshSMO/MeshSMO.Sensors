@@ -36,7 +36,7 @@ flowchart LR
         I["Ingestion<br/>pull / push"] --> P[("PostgreSQL 17")]
         P --> A["API /api/v1"]
     end
-    R <--> "HTTPS · Serial · Companion" --> W
+    R <-- "HTTPS · Serial · Companion" --> W
     O -- "батчи + ack" --> I
     B["🌐 Браузер"] --> A
     B --> S["Статика<br/>prerender + SPA-fallback"]
