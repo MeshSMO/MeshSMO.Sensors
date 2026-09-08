@@ -19,7 +19,7 @@ public sealed class SeriesPreparerTests
             .ToArray();
         var series = Series(observations, Now.AddMinutes(-2));
 
-        var result = new SeriesPreparer(options).Prepare(series, Now);
+        var result = new SeriesPreparer(options).Prepare(series, Now, options.MinimumHistoryDays);
 
         Assert.True(result.IsReady);
         Assert.Equal(48, result.Values.Count);
@@ -39,7 +39,8 @@ public sealed class SeriesPreparerTests
             .ToArray();
         var series = Series(observations, Now.AddMinutes(-2));
 
-        var result = new SeriesPreparer(Options(minimumCoverage: 0.90)).Prepare(series, Now);
+        var options = Options(minimumCoverage: 0.90);
+        var result = new SeriesPreparer(options).Prepare(series, Now, options.MinimumHistoryDays);
 
         Assert.True(result.IsReady);
         Assert.Equal(3, result.InterpolatedPoints);
@@ -56,7 +57,8 @@ public sealed class SeriesPreparerTests
             .ToArray();
         var series = Series(observations, Now.AddMinutes(-2));
 
-        var result = new SeriesPreparer(Options()).Prepare(series, Now);
+        var options = Options();
+        var result = new SeriesPreparer(options).Prepare(series, Now, options.MinimumHistoryDays);
 
         Assert.Equal(ForecastAvailability.SparseData, result.Availability);
     }
@@ -69,9 +71,25 @@ public sealed class SeriesPreparerTests
             .ToArray();
         var series = Series(observations, Now.AddHours(-1));
 
-        var result = new SeriesPreparer(Options()).Prepare(series, Now);
+        var options = Options();
+        var result = new SeriesPreparer(options).Prepare(series, Now, options.MinimumHistoryDays);
 
         Assert.Equal(ForecastAvailability.StaleData, result.Availability);
+    }
+
+    [Fact]
+    public void Prepare_HorizonMinimumExceedsAvailableHistory_ReturnsInsufficientData()
+    {
+        var options = Options();
+        var observations = Enumerable.Range(0, 48)
+            .Select(index => new ForecastObservation(Now.AddHours(-48 + index), index))
+            .ToArray();
+        var series = Series(observations, Now.AddMinutes(-2));
+
+        var result = new SeriesPreparer(options).Prepare(series, Now, minimumHistoryDays: 3);
+
+        Assert.Equal(ForecastAvailability.InsufficientData, result.Availability);
+        Assert.Contains("3 days", result.Reason, StringComparison.Ordinal);
     }
 
     private static ForecastingOptions Options(double minimumCoverage = 0.85) => new()

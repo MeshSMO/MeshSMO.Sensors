@@ -7,7 +7,10 @@ public sealed class SeriesPreparer(ForecastingOptions options)
 {
     private const int MaximumInterpolatedGap = 2;
 
-    public PreparedSeries Prepare(ForecastSeries series, DateTimeOffset generatedAt)
+    public PreparedSeries Prepare(
+        ForecastSeries series,
+        DateTimeOffset generatedAt,
+        int minimumHistoryDays)
     {
         var step = TimeSpan.FromMinutes(options.StepMinutes);
         if (!options.Enabled)
@@ -62,12 +65,12 @@ public sealed class SeriesPreparer(ForecastingOptions options)
         }
 
         var expectedCount = StepsBetween(segmentStart, lastCompleteBucket, step) + 1;
-        var minimumCount = checked((int)(TimeSpan.FromDays(options.MinimumHistoryDays).Ticks / step.Ticks));
+        var minimumCount = checked((int)(TimeSpan.FromDays(minimumHistoryDays).Ticks / step.Ticks));
         if (expectedCount < minimumCount)
         {
             return Unavailable(
                 ForecastAvailability.InsufficientData,
-                $"At least {options.MinimumHistoryDays} days of history are required.",
+                $"At least {minimumHistoryDays} days of history are required for this forecast horizon.",
                 generatedAt,
                 step);
         }

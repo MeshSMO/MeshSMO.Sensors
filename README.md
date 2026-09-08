@@ -50,11 +50,18 @@ dotnet run --project src/MeshSMO.Sensors.Web --launch-profile http
 Forecast API выключен по умолчанию. Для локальной проверки после накопления достаточной истории:
 
 ```powershell
-$env:Forecasting__Enabled = "true"
+dotnet user-secrets set --project src/MeshSMO.Sensors.Web "Forecasting:Enabled" "true"
+dotnet user-secrets set --project src/MeshSMO.Sensors.Web "Forecasting:MinimumHistoryDaysByHorizon:1h" "3"
+dotnet user-secrets set --project src/MeshSMO.Sensors.Web "Forecasting:MinimumHistoryDaysByHorizon:6h" "3"
+dotnet user-secrets set --project src/MeshSMO.Sensors.Web "Forecasting:MinimumHistoryDaysByHorizon:12h" "5"
+dotnet user-secrets set --project src/MeshSMO.Sensors.Web "Forecasting:MinimumHistoryDaysByHorizon:24h" "7"
 dotnet run --project src/MeshSMO.Sensors.Web --launch-profile http
 ```
 
-Прогноз строится по запросу отдельно для каждой пары датчик/метрика, кешируется в памяти на короткое время и не создаёт таблиц или записей в PostgreSQL.
+Прогноз строится по запросу отдельно для каждой пары датчик/метрика, кешируется в
+памяти на короткое время и не создаёт таблиц или записей в PostgreSQL. Минимальная история
+настраивается отдельно для каждого горизонта через `Forecasting:MinimumHistoryDaysByHorizon`;
+`MinimumHistoryDays` используется как fallback для горизонтов без явной настройки.
 
 ## Gateway и MeshCoreTel Repeater
 
