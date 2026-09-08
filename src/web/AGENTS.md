@@ -35,14 +35,14 @@ npm run format         # Prettier — единственный способ фо
 
 ## Структура
 
-| Путь | Что |
-|---|---|
-| `src/routes/` | файловые маршруты TanStack Router (`index`, `sensors.index`, `sensors.$slug`, `map`, `about`); `routeTree.gen.ts` генерируется |
-| `src/features/` | фичи: `home`, `sensors`, `sensor-detail` (history/, SensorPage), `map`, `about`, `app` |
-| `src/components/site/` | доменные компоненты (MetricChart, CombinedChart, SensorMap, StatusBadge, Shell…) |
-| `src/components/ui/` | shadcn/Radix-примитивы |
-| `src/lib/` | api-клиент и query-хуки, registry, seo, metrics, format, favorite-* (localStorage) |
-| `src/i18n/` | русская локализация (i18next) |
-| `scripts/` | `generate-registry.mjs` (prebuild), `postbuild.mjs` (SPA-фолбэк) |
+| Путь                   | Что                                                                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `src/routes/`          | файловые маршруты TanStack Router (`index`, `sensors.index`, `sensors.$slug`, `map`, `about`); `routeTree.gen.ts` генерируется |
+| `src/features/`        | фичи: `home`, `sensors`, `sensor-detail` (history/, SensorPage), `map`, `about`, `app`                                         |
+| `src/components/site/` | доменные компоненты (MetricChart, CombinedChart, SensorMap, StatusBadge, Shell…)                                               |
+| `src/components/ui/`   | shadcn/Radix-примитивы                                                                                                         |
+| `src/lib/`             | api-клиент и query-хуки, registry, seo, metrics, format, favorite-* (localStorage)                                             |
+| `src/i18n/`            | русская локализация (i18next)                                                                                                  |
+| `scripts/`             | `generate-registry.mjs` (prebuild), `postbuild.mjs` (SPA-фолбэк)                                                               |
 
 Исторический промпт редизайна (Lovable/TanStack Start, контракты API в нём актуальны): [docs/reference/frontend-redesign-prompt.md](../../docs/reference/frontend-redesign-prompt.md).
