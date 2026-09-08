@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "@tanstack/react-router";
 import {
   Drawer,
@@ -9,7 +10,7 @@ import {
 } from "@/components/ui/drawer";
 import { StatusBadge } from "@/components/site/StatusBadge";
 import { SkeletonLine } from "@/components/site/Shell";
-import { rangeLabels, useLatest, useMeasurements, useStatus, type RangeKey } from "@/lib/api";
+import { useLatest, useMeasurements, useStatus, type RangeKey } from "@/lib/api";
 import { getRegistrySensor } from "@/lib/registry";
 import { getMetric, metricLabel } from "@/lib/metrics";
 import {
@@ -44,6 +45,7 @@ export function SensorDrawer({
 }
 
 function DrawerBody({ slug, state }: { slug: string; state: SensorState | null }) {
+  const { t } = useTranslation();
   const registry = getRegistrySensor(slug);
   const poll = registry?.pollIntervalSeconds ?? undefined;
   const latest = useLatest(slug, poll);
@@ -65,14 +67,16 @@ function DrawerBody({ slug, state }: { slug: string; state: SensorState | null }
           <StatusBadge state={liveState} />
         </div>
         <DrawerDescription className="text-left">
-          {registry?.description ?? "Датчик сети MeshSMO."}
+          {registry?.description ?? t("sensor.fallbackDescription")}
         </DrawerDescription>
       </DrawerHeader>
 
       {registry?.location ? (
         <p className="num text-xs text-muted-foreground">
-          {formatCoordinate(registry.location.latitude)},{" "}
-          {formatCoordinate(registry.location.longitude)}
+          {t("common.coordinates.pair", {
+            latitude: formatCoordinate(registry.location.latitude),
+            longitude: formatCoordinate(registry.location.longitude),
+          })}
         </p>
       ) : null}
 
@@ -107,7 +111,7 @@ function DrawerBody({ slug, state }: { slug: string; state: SensorState | null }
           value={metric}
           onChange={(event) => setMetric(event.target.value)}
           className="rounded-md border border-border bg-surface-raised px-2 py-1.5 text-sm"
-          aria-label="Показатель для графика"
+          aria-label={t("common.accessibility.metricForChart")}
         >
           {(numericMetrics.length > 0 ? numericMetrics : metrics).map((key) => (
             <option key={key} value={key}>
@@ -128,7 +132,7 @@ function DrawerBody({ slug, state }: { slug: string; state: SensorState | null }
                   : "border-border text-muted-foreground hover:text-foreground"
               }`}
             >
-              {rangeLabels[key]}
+              {t(`history.ranges.${key}`)}
             </button>
           ))}
         </div>
@@ -137,11 +141,11 @@ function DrawerBody({ slug, state }: { slug: string; state: SensorState | null }
       <div className="panel mt-3 h-64 px-2 py-3">
         {history.isPending ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-            Загружаем историю…
+            {t("history.loading")}
           </div>
         ) : history.isError || (history.data?.points.length ?? 0) === 0 ? (
           <div className="flex h-full items-center justify-center px-4 text-center text-sm text-muted-foreground">
-            История пока недоступна — измерений за выбранный период нет.
+            {t("history.unavailable")}
           </div>
         ) : (
           <Suspense fallback={<div className="h-full" />}>
@@ -155,11 +159,11 @@ function DrawerBody({ slug, state }: { slug: string; state: SensorState | null }
       </div>
 
       <dl className="mt-6 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-        <Fact label="Последний опрос" value={formatDateTime(status.data?.lastPollAt)} />
+        <Fact label={t("sensor.lastPoll")} value={formatDateTime(status.data?.lastPollAt)} />
         <Fact label="RSSI" value={formatNumber(status.data?.lastRssi ?? null)} />
         <Fact label="SNR" value={formatNumber(status.data?.lastSnr ?? null)} />
         <Fact
-          label="Неудач подряд"
+          label={t("sensor.consecutiveFailures")}
           value={formatNumber(status.data?.consecutiveFailures ?? null)}
         />
       </dl>
@@ -170,7 +174,7 @@ function DrawerBody({ slug, state }: { slug: string; state: SensorState | null }
           params={{ slug }}
           className="inline-flex items-center justify-center rounded-md border border-accent bg-surface px-4 py-2 text-sm font-medium transition-colors hover:bg-surface-raised"
         >
-          Открыть страницу датчика
+          {t("common.actions.openSensor")}
         </Link>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { SensorState } from "@/lib/format";
+import { translate } from "@/i18n";
 
 export type MapPoint = {
   slug: string;
@@ -133,5 +134,11 @@ export default function SensorMap({
     map.panTo([point.latitude, point.longitude], { animate: true });
   }, [selected, points]);
 
-  return <div ref={containerRef} className="h-full w-full" aria-label="Карта датчиков" />;
+  return (
+    <div
+      ref={containerRef}
+      className="h-full w-full"
+      aria-label={translate("common.accessibility.map")}
+    />
+  );
 }

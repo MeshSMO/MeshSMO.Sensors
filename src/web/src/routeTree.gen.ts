@@ -19,27 +19,27 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any).lazy(() => import('./routes/index.lazy').then((d) => d.Route))
 const AboutRoute = AboutRouteImport.update({
   id: '/about',
   path: '/about',
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any).lazy(() => import('./routes/about.lazy').then((d) => d.Route))
 const MapRoute = MapRouteImport.update({
   id: '/map',
   path: '/map',
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any).lazy(() => import('./routes/map.lazy').then((d) => d.Route))
 const SensorsIndexRoute = SensorsIndexRouteImport.update({
   id: '/sensors/',
   path: '/sensors/',
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any).lazy(() => import('./routes/sensors.index.lazy').then((d) => d.Route))
 const SensorsSlugRoute = SensorsSlugRouteImport.update({
   id: '/sensors/$slug',
   path: '/sensors/$slug',
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any).lazy(() => import('./routes/sensors.$slug.lazy').then((d) => d.Route))
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute

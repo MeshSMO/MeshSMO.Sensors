@@ -11,6 +11,8 @@ import {
   YAxis,
 } from "recharts";
 import { useId } from "react";
+import { useTranslation } from "react-i18next";
+import { formatChartTime } from "@/i18n/formatters";
 import type { ForecastResponse, MeasurementPoint } from "@/lib/api";
 import { getMetric, type MetricChartOptions, type MetricChartZone } from "@/lib/metrics";
 import { formatDateTime, formatValue } from "@/lib/format";
@@ -80,6 +82,7 @@ export default function MetricChart({
   unit: string | null;
   forecast?: ForecastResponse | undefined;
 }) {
+  const { t } = useTranslation();
   const meta = getMetric(metricKey);
   const gradientId = `metric-zones-${useId().replace(/:/g, "")}`;
   const rows: Row[] = points.map((p) => ({
@@ -152,14 +155,7 @@ export default function MetricChart({
             type="number"
             domain={["dataMin", "dataMax"]}
             scale="time"
-            tickFormatter={(v: number) =>
-              new Intl.DateTimeFormat("ru-RU", {
-                day: "2-digit",
-                month: "2-digit",
-                hour: "2-digit",
-                minute: "2-digit",
-              }).format(new Date(v))
-            }
+            tickFormatter={formatChartTime}
             stroke="var(--muted-foreground)"
             fontSize={11}
           />
@@ -198,7 +194,8 @@ export default function MetricChart({
             labelFormatter={(v) => formatDateTime(new Date(Number(v)).toISOString())}
             formatter={(value: unknown, name: string) => {
               if (Array.isArray(value)) {
-                const label = name === "интервал прогноза" ? name : "мин–макс";
+                const label =
+                  name === t("charts.forecastInterval") ? name : t("charts.minimumMaximum");
                 return [
                   `${formatValue(metricKey, value[0] as number)} … ${formatValue(metricKey, value[1] as number)} ${unit ?? meta.unit}`,
                   label,
@@ -213,7 +210,7 @@ export default function MetricChart({
             fill={lineColor}
             fillOpacity={0.15}
             isAnimationActive={false}
-            name="мин–макс"
+            name={t("charts.minimumMaximum")}
           />
           <Area
             dataKey="forecastBand"
@@ -221,7 +218,7 @@ export default function MetricChart({
             fill={lineColor}
             fillOpacity={0.1}
             isAnimationActive={false}
-            name="интервал прогноза"
+            name={t("charts.forecastInterval")}
           />
           <Line
             dataKey="avg"
@@ -229,7 +226,7 @@ export default function MetricChart({
             strokeWidth={2}
             dot={false}
             isAnimationActive={false}
-            name="среднее"
+            name={t("charts.average")}
           />
           <Line
             dataKey="forecast"
@@ -238,7 +235,7 @@ export default function MetricChart({
             strokeDasharray="5 5"
             dot={false}
             isAnimationActive={false}
-            name="прогноз"
+            name={t("charts.forecast")}
           />
         </ComposedChart>
       </ResponsiveContainer>
