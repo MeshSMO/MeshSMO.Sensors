@@ -32,6 +32,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 COPY --from=backend /app/publish ./
 COPY --from=frontend /src/src/web/.output/public ./wwwroot
+LABEL org.opencontainers.image.description="Public telemetry site for MeshSMO Sensors: ASP.NET Core BFF (API v1) with a prerendered TanStack Start frontend."
 ENV ASPNETCORE_HTTP_PORTS=8080
 # curl is needed by the compose healthcheck (/health/ready). ML.NET TimeSeries
 # loads libMklImports.so, which requires the OpenMP runtime as libiomp5.so.

@@ -17,6 +17,7 @@ RUN dotnet publish src/MeshSMO.Sensors.DbMigrator/MeshSMO.Sensors.DbMigrator.csp
 
 FROM mcr.microsoft.com/dotnet/runtime:10.0 AS final
 WORKDIR /app
+LABEL org.opencontainers.image.description="One-shot migrator for MeshSMO Sensors: applies EF Core migrations and syncs the YAML sensor registry into PostgreSQL."
 COPY --from=build /app/publish ./
 # Sensor registry YAMLs are deployment-local and sensitive (may resolve node
 # passwords from env); they are mounted at runtime via compose, not baked in.

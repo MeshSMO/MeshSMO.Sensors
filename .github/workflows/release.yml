@@ -35,10 +35,20 @@ jobs:
           # ML.NET TimeSeries currently ships libMklImports only for linux-x64.
           - image: web
             platforms: linux/amd64
+            description: >-
+              Public telemetry site for MeshSMO Sensors: ASP.NET Core BFF
+              (API v1) with a prerendered TanStack Start frontend.
           - image: gateway
             platforms: linux/amd64,linux/arm64
+            description: >-
+              Telemetry gateway for MeshSMO Sensors: polls pull-only
+              MeshCore/LoRa sensor nodes via the repeater and buffers batches
+              in a SQLite outbox.
           - image: dbmigrator
             platforms: linux/amd64,linux/arm64
+            description: >-
+              One-shot migrator for MeshSMO Sensors: applies EF Core
+              migrations and syncs the YAML sensor registry into PostgreSQL.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4
@@ -53,7 +63,6 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
             type=raw,value=latest
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
@@ -68,6 +77,11 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # OCI-описание на уровне манифеста: именно его показывает страница
+          # пакета GHCR для multi-arch образов (LABEL в Dockerfile ложится
+          # в конфиг платформенных образов).
+          annotations: |
+            org.opencontainers.image.description=${{ matrix.description }}
           cache-from: type=gha,scope=image-${{ matrix.image }}
 
   github-release:

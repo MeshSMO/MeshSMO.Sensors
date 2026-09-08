@@ -19,6 +19,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 ENV ASPNETCORE_HTTP_PORTS=8080
 EXPOSE 8080
+LABEL org.opencontainers.image.description="Telemetry gateway for MeshSMO Sensors: polls pull-only MeshCore/LoRa sensor nodes via the repeater and buffers batches in a SQLite outbox."
 COPY --from=build /app/publish ./
 # curl is needed by the compose healthcheck (/health/ready).
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
