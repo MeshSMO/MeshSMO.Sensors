@@ -14,8 +14,13 @@ permissions:
 jobs:
   quality-gate:
     uses: ./.github/workflows/ci.yml
+    # GitHub валидирует permissions вложенного workflow на старте: ci.yml
+    # содержит publish-rolling с packages: write, поэтому caller обязан
+    # предоставить их, иначе ран падает с startup_failure. Сам publish-rolling
+    # здесь не выполняется: его if требует refs/heads/main|master.
     permissions:
       contents: read
+      packages: write
 
   publish-images:
     needs: quality-gate
