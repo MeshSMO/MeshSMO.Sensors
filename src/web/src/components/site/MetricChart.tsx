@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { useId } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { formatChartTime } from "@/i18n/formatters";
 import type { ForecastResponse, MeasurementPoint } from "@/lib/api";
@@ -26,6 +26,11 @@ type Row = {
 };
 
 type NumericDomain = [number, number];
+
+const CHART_MARGIN = { top: 8, right: 8, bottom: 0, left: 0 } as const;
+// Геометрия области данных по вертикали: margin.top .. (высота контейнера - высота XAxis).
+// XAxis привязан к этому же значению явно — фикс зависит от этой константы.
+const X_AXIS_HEIGHT = 30;
 
 function chartDomain(
   rows: Row[],
@@ -85,6 +90,19 @@ export default function MetricChart({
   const { t } = useTranslation();
   const meta = getMetric(metricKey);
   const gradientId = `metric-zones-${useId().replace(/:/g, "")}`;
+  // Нижняя граница области данных в px svg: цвет зоны в градиенте должен
+  // привязываться к значению на оси Y, а не к bbox отрисованного элемента.
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [plotBottom, setPlotBottom] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const element = containerRef.current;
+    if (!element) return undefined;
+    const update = () => setPlotBottom(element.clientHeight - X_AXIS_HEIGHT);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   const rows: Row[] = points.map((p) => ({
     t: new Date(p.timestamp).getTime(),
     avg: p.avg,
@@ -117,15 +135,30 @@ export default function MetricChart({
   const zones = meta.chart?.zones ?? [];
   const domain = chartDomain(rows, meta.chart);
   const gradientStops = domain ? zoneGradientStops(zones, domain) : [];
-  const lineColor = gradientStops.length > 0 ? `url(#${gradientId})` : meta.color;
+  // objectBoundingBox (умолчание SVG) считает offsets в bbox самого элемента:
+  // у плоской линии bbox в сотые вольта, и весь набор зон сжимается в неё —
+  // линия красится не по значению. Поэтому градиент — в px области данных.
+  const zoneGradient =
+    domain !== undefined &&
+    gradientStops.length > 0 &&
+    plotBottom !== null &&
+    plotBottom > CHART_MARGIN.top;
+  const lineColor = zoneGradient ? `url(#${gradientId})` : meta.color;
 
   return (
-    <div className="history-metric-chart h-72 w-full">
+    <div ref={containerRef} className="history-metric-chart h-72 w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={rows} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-          {domain ? (
+        <ComposedChart data={rows} margin={CHART_MARGIN}>
+          {zoneGradient && plotBottom !== null ? (
             <defs>
-              <linearGradient id={gradientId} x1="0" y1="100%" x2="0" y2="0%">
+              <linearGradient
+                id={gradientId}
+                gradientUnits="userSpaceOnUse"
+                x1={0}
+                y1={plotBottom}
+                x2={0}
+                y2={CHART_MARGIN.top}
+              >
                 {gradientStops.map((stop) => (
                   <stop key={stop.key} offset={`${stop.offset}%`} stopColor={stop.color} />
                 ))}
@@ -155,6 +188,7 @@ export default function MetricChart({
             type="number"
             domain={["dataMin", "dataMax"]}
             scale="time"
+            height={X_AXIS_HEIGHT}
             tickFormatter={formatChartTime}
             stroke="var(--muted-foreground)"
             fontSize={11}
