@@ -62,7 +62,7 @@ public sealed class MeshCoreHttpOptions
     /// Acquisition calls (api/request, api/login) are bounded separately:
     /// their timeout derives from the requested radio window (2.5× window +
     /// slack) because the firmware can spend up to two windows on one call
-    /// (direct attempt + flood retry, see docs/repeater-firmware-acquisition-spec.md §8.6).
+    /// (direct attempt + flood retry, see docs/specs/repeater-acquisition-spec.md §8.6).
     /// </summary>
     public int TimeoutSeconds { get; set; } = 15;
 }

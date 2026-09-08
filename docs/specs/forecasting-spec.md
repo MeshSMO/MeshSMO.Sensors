@@ -21,8 +21,7 @@
 9. Поддерживаемые горизонты MVP: `1h`, `6h`, `12h`, `24h`.
 10. Первый алгоритм — SSA из `Microsoft.ML.TimeSeries`; архитектура не должна привязывать API к SSA, чтобы позже добавить regression-модель с lag/calendar/exogenous features.
 
-Проект Forecasting, BFF endpoint, in-memory coordination и frontend UI реализованы;
-`Forecasting:Enabled` по умолчанию остаётся `false` до проверки на реальных рядах по Phase F0/F4.
+Текущая реализация слита в `master` (PR #13, 2026-09-07; рабочая ветка удалена). Проекты Forecasting, BFF endpoint, in-memory coordination и frontend UI реализованы; `Forecasting:Enabled` по умолчанию остаётся `false` до проверки на реальных рядах по Phase F0/F4.
 
 ## 3. Почему это соответствует текущей архитектуре
 
@@ -505,6 +504,8 @@ EF InMemory не подходит для проверки PostgreSQL bucketing. 
 Если cold calculation не укладывается, сначала сократить candidate grid и/или перейти на 15-минутный step. Персистентный model cache или отдельный worker рассматриваются только после измерений.
 
 ## 15. План реализации
+
+> **Статус (2026-09-08):** фазы F1–F3 реализованы и слиты в `master` (PR #13, 2026-09-07; UI — кнопка «Прогноз» с горизонтами 1/6/12/24 ч). F0-profiling на реальных рядах и F4 (production validation) не выполнялись — фича остаётся за флагом `Forecasting:Enabled` (по умолчанию `false`). Отдельный console-benchmark F0 не делался: корректность библиотеки покрыта синтетическими unit/golden-тестами.
 
 ### Phase F0 — data profiling и ML spike
 

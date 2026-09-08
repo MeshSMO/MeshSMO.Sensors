@@ -1,9 +1,11 @@
 # MeshSMO Sensors — техническая спецификация и план реализации
 
-**Статус:** Draft v0.1  
+**Статус:** Draft v0.1 (актуализирован 2026-09-08)  
 **Дата:** 2026-09-05  
 **Проект:** MeshSMO  
 **Цель:** сервис сбора, хранения и публичного отображения показаний pull-only датчиков, доступных через MeshCore/LoRa.
+
+> **О статусе реализации.** Это исходный план; фактическое состояние системы — [AGENTS.md](../../AGENTS.md) (раздел «Текущий статус») и [ARCHITECTURE.md](../../ARCHITECTURE.md). Реализованы и проверены на железе фазы 0, 1, 3–8; из 9/10 (operations/hardening) сознательно не сделаны OTel, бэкапы/runbook и security-сканы. Прогнозирование сделано по отдельной спеке — [forecasting-spec](./forecasting-spec.md). После написания спеки два решения изменились (помечены в тексте): фронт переписан с React Router на **TanStack Start** (SPA-режим, prerender сохранён — §3, §19.1, ADR-004), а собственный бинарный протокол датчиков (Phase 2) заменён на **acquisition API прошивки репитера + Cayenne LPP** (§7, [repeater-acquisition-spec](./repeater-acquisition-spec.md)).
 
 ---
 
@@ -112,6 +114,8 @@ React **не имеет отдельного production runtime**. Node.js ис�
 
 ## Frontend
 
+> **Факт (2026-09):** фронт реализован на **TanStack Start** в SPA-режиме (`ssr:false`, prerender статикой, без Node-рантайма) — см. `src/web` и [frontend-redesign-prompt](../reference/frontend-redesign-prompt.md). Ниже — исходное решение спеки (React Router); механика prerender + SPA-fallback сохранена той же.
+
 - React
 - TypeScript
 - React Router **Framework Mode**
@@ -134,7 +138,7 @@ React **не имеет отдельного production runtime**. Node.js ис�
 
 # 4. Структура репозитория
 
-Рекомендуется **monorepo одного bounded context**.
+Рекомендуется **monorepo одного bounded context**. Дерево ниже — исходный план; фактическая структура описана в [AGENTS.md](../../AGENTS.md) (главное отличие: `src/web` на TanStack Start, `src/web/src` вместо `app/`).
 
 ```text
 sensors/
@@ -146,10 +150,10 @@ sensors/
 │   ├── MeshSMO.Sensors.Web/
 │   ├── MeshSMO.Sensors.DbMigrator/
 │   └── web/
-│       ├── app/
+│       ├── src/
 │       ├── public/
+│       ├── scripts/
 │       ├── package.json
-│       ├── react-router.config.ts
 │       ├── vite.config.ts
 │       └── tsconfig.json
 │
@@ -160,7 +164,6 @@ sensors/
 │
 ├── tests/
 │   ├── MeshSMO.Sensors.UnitTests/
-│   ├── MeshSMO.Sensors.IntegrationTests/
 │   ├── MeshSMO.Sensors.ProtocolTests/
 │   └── web/
 │
@@ -170,15 +173,14 @@ sensors/
 │   └── env.example
 │
 ├── docs/
-│   ├── protocol.md
-│   ├── operations.md
-│   └── adr/
+│   ├── specs/
+│   └── reference/
 │
 ├── .github/
 │   └── workflows/
 │       ├── ci.yml
-│       ├── docker.yml
-│       └── deploy.yml
+│       ├── release.yml
+│       └── codeql.yml
 │
 ├── Directory.Build.props
 ├── Directory.Packages.props
@@ -585,7 +587,7 @@ public interface ISensorProtocol
 0x7F Error
 ```
 
-Точные integer encoding/endian/checksum описать в `docs/protocol.md` и покрыть golden tests.
+Точные integer encoding/endian/checksum описать в `docs/reference/wire-protocol.md` и покрыть golden tests.
 
 Не использовать JSON внутри LoRa без отдельной причины: бинарный формат компактнее и предсказуемее по airtime.
 
@@ -1126,6 +1128,8 @@ WebSocket на первой версии не нужен.
 
 ## 19.1. Основное решение
 
+> **Факт (2026-09):** в реализации — TanStack Start в SPA-режиме (`spa.enabled`, prerender-набор `prerenderPaths` в `vite.config.ts` собирается из публичной проекции registry). Принцип тот же: prerender индексируемых страниц статикой + SPA-fallback, без SSR-рантайма.
+
 Использовать React Router Framework Mode:
 
 ```ts
@@ -1176,7 +1180,7 @@ initial request
 
 ## 19.3. Dynamic sensor pages
 
-Реализация: registry читается на пребилде скриптом `src/web/scripts/generate-registry.mjs` (npm prebuild), который создаёт `src/web/app/generated/sensorRegistry.json`. Маршруты сенсоров рендерят контент из этого JSON напрямую — при `ssr:false` React Router запрещает `loader` в prerender-роутах.
+Реализация: registry читается на пребилде скриптом `src/web/scripts/generate-registry.mjs` (npm prebuild), который создаёт gitignored `src/web/src/generated/sensorRegistry.json`. Маршруты сенсоров рендерят контент из этого JSON напрямую — при отключённом SSR prerender-роутам не нужны `loader`'ы.
 
 `prerender()` читает registry и генерирует URL для каждого:
 
@@ -1756,7 +1760,7 @@ DatabaseWriteFailed
 
 Если sensor protocol допускает повтор request ID после reboot, учитывать временную область/epoch.
 
-Решение обязательно зафиксировать в `docs/protocol.md`.
+Решение обязательно зафиксировать в `docs/reference/wire-protocol.md`.
 
 ---
 
@@ -2012,6 +2016,8 @@ Gateway не подключается к PostgreSQL: он пишет тольк�
 
 Публичные indexable routes pre-rendered.
 
+> **Факт (2026-09):** решение реализовано на TanStack Start в SPA-режиме вместо React Router — принципы (без SSR-рантайма, статический prerender индексируемых маршрутов + SPA-fallback) не изменились.
+
 ## ADR-005 — GitOps sensor registry
 
 Sensor metadata и slug version-controlled.
@@ -2065,12 +2071,14 @@ Sensor registry загружается и синхронизируется с Po
 - [x] migrator;
 - [x] registry sync;
 - [x] duplicate slug/public key validation;
-- [ ] integration tests;
+- [x] integration tests;
 - [x] добавить первый test sensor.
 
 ---
 
 # 51. Phase 2 — Sensor protocol
+
+> **Статус (2026-09-08):** фаза заменена другим решением — собственный бинарный envelope не понадобился. Датчики отвечают **Cayenne LPP** через acquisition API прошивки репитера (контракт — [repeater-acquisition-spec](./repeater-acquisition-spec.md)); wire-детали — [wire-protocol](../reference/wire-protocol.md). Свой envelope отложен до собственной прошивки датчиков (см. ADR-005/§5 mini-ADR в ARCHITECTURE.md). Задачи ниже не актуальны, кроме golden-тестов — они сделаны для LPP-декодера.
 
 ### Результат
 
@@ -2116,7 +2124,7 @@ connect -> command/stats -> local SQLite -> reconnect
 - [x] cancellation;
 - [x] local SQLite outbox;
 - [x] fake transport test;
-- [ ] integration test с реальным hardware вручную;
+- [x] integration test с реальным hardware вручную (2026-09-06: датчик опрашивается через репитер end-to-end);
 - [ ] записать hardware setup в `operations.md`.
 
 Не писать scheduler, пока transport не доказан отдельно.
@@ -2129,7 +2137,7 @@ connect -> command/stats -> local SQLite -> reconnect
 
 Один реальный датчик регулярно опрашивается, measurements появляются в PostgreSQL.
 Реализовано: опрос идёт через acquisition API прошивки
-(`POST /api/request`, контракт — `docs/repeater-firmware-acquisition-spec.md`), protocol_id =
+(`POST /api/request`, контракт — `docs/specs/repeater-acquisition-spec.md`), protocol_id =
 `meshcore-req-lpp`: REQ = `timestamp(4 LE) + 0x03 + 0x00`, ответ = `timestamp(4) + Cayenne LPP`.
 
 ### Tasks
@@ -2176,6 +2184,8 @@ connect -> command/stats -> local SQLite -> reconnect
 
 # 55. Phase 6 — Frontend shell + SEO
 
+> **Статус (2026-09-08):** фаза закрыта. Выполнена сначала на React Router, в 2026-09 фронт переписан на **TanStack Start** (SPA-режим, prerender сохранён; см. [frontend-redesign-prompt](../reference/frontend-redesign-prompt.md)). SEO-ассерты выполнены как unit-тесты BFF (`SitemapAndFallbackTests`), отдельного CI-шага нет.
+
 ### Результат
 
 `/`, `/sensors`, `/sensors/:slug` содержат полезный HTML до выполнения JavaScript.
@@ -2206,14 +2216,16 @@ connect -> command/stats -> local SQLite -> reconnect
 
 ### Tasks
 
-- [ ] overview cards;
-- [ ] sensor table/cards;
-- [ ] status badges;
-- [ ] latest values;
-- [ ] loading/error/empty states;
-- [ ] mobile layout;
-- [ ] query caching;
-- [ ] frontend polling.
+> **Статус (2026-09-08):** закрыта в переписанном фронте: живой дашборд на TanStack Query с polling, карточки, статусы, проценты батареи.
+
+- [x] overview cards;
+- [x] sensor table/cards;
+- [x] status badges;
+- [x] latest values;
+- [x] loading/error/empty states;
+- [x] mobile layout;
+- [x] query caching;
+- [x] frontend polling.
 
 ---
 
@@ -2221,16 +2233,18 @@ connect -> command/stats -> local SQLite -> reconnect
 
 ### Tasks
 
-- [ ] chart library spike;
-- [ ] temperature chart;
-- [ ] humidity;
-- [ ] pressure;
-- [ ] battery;
-- [ ] time range selector;
-- [ ] URL-synced query params;
-- [ ] min/avg/max;
+> **Статус (2026-09-08):** основное закрыто в переписанном фронте: recharts, метрик-ориентированные графики (включая температуру/влажность/батарею), min/avg/max через `resolution=auto`, диапазоны в URL (`validateSearch`), визуализация пропусков (`connectNulls`), зоны цвета по значениям оси. Остались: accessibility summary графиков и performance-тест на максимальном датасете.
+
+- [x] chart library spike (выбран recharts);
+- [x] temperature chart;
+- [x] humidity;
+- [x] pressure;
+- [x] battery;
+- [x] time range selector;
+- [x] URL-synced query params;
+- [x] min/avg/max;
 - [ ] tooltip timezone;
-- [ ] missing-data visualization;
+- [x] missing-data visualization;
 - [ ] chart accessibility summary;
 - [ ] performance test на максимальном разрешённом dataset.
 

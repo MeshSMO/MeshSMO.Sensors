@@ -1,6 +1,6 @@
-# protocol.md — wire-протоколы сбора телеметрии
+# Wire-протоколы сбора телеметрии
 
-Статус: актуален на 2026-09-06. Реализация: `src/MeshSMO.Sensors.Gateway/Polling/`, контракт прошивки: `docs/repeater-firmware-acquisition-spec.md`.
+Статус: актуален на 2026-09-06. Реализация: `src/MeshSMO.Sensors.Gateway/Polling/`, контракт прошивки: [repeater-acquisition-spec](../specs/repeater-acquisition-spec.md).
 
 ---
 

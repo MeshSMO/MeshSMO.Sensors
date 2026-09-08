@@ -16,7 +16,7 @@ public sealed class OutboxSnapshot
     /// <summary>Transport the payload arrived over (e.g. "http", "serial").</summary>
     public string Transport { get; set; } = string.Empty;
 
-    /// <summary>The payload exactly as documented in docs/protocol.md.</summary>
+    /// <summary>The payload exactly as documented in docs/reference/wire-protocol.md.</summary>
     public string PayloadJson { get; set; } = string.Empty;
 
     /// <summary>When the row was appended to the outbox (UTC).</summary>

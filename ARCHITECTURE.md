@@ -1,6 +1,6 @@
 # ARCHITECTURE
 
-Архитектура MeshSMO Sensors. Нормативный документ — `docs/MeshSMO-Sensors-IMPLEMENTATION_SPEC.md`; здесь — фактическое состояние и обоснования.
+Архитектура MeshSMO Sensors. Нормативный документ — [docs/specs/implementation-spec.md](./docs/specs/implementation-spec.md); здесь — фактическое состояние и обоснования.
 
 ## 1. Компоненты и границы
 
@@ -52,12 +52,12 @@
 1. Загружает включённые датчики из GitOps-registry (`ISensorRegistry`).
 2. Последовательно (concurrency = 1, deterministic jitter по slug) для каждого датчика по его `polling.interval`:
    - строит REQ: `timestamp(4 LE) + 0x03 + 0x00` (MeshCore `GET_TELEMETRY_DATA`);
-   - отправляет через настроенный канал `IMeshNodeClient`: по умолчанию `POST /api/request` репитера (см. `docs/repeater-firmware-acquisition-spec.md`); альтернатива — стоковый компаньон (`MeshCore:Mode=Companion`, companion frame protocol по TCP:5000, `CMD_SEND_BINARY_REQ` — тот же LoRa-wire; без RSSI/SNR, wire-timestamp генерирует прошивка компаньона);
+   - отправляет через настроенный канал `IMeshNodeClient`: по умолчанию `POST /api/request` репитера (см. `docs/specs/repeater-acquisition-spec.md`); альтернатива — стоковый компаньон (`MeshCore:Mode=Companion`, companion frame protocol по TCP:5000, `CMD_SEND_BINARY_REQ` — тот же LoRa-wire; без RSSI/SNR, wire-timestamp генерирует прошивка компаньона);
    - при первом таймауте ноды — однократный ANON-логин bootstrap (`POST /api/login`; пароль: `mesh.loginPassword` датчика из registry — поддерживает `${VAR}`-подстановку из env, пустая строка = у ноды нет пароля, иначе общий `SensorPolling:LoginPassword`);
    - ответ: `timestamp(4) + Cayenne LPP` → `CayenneLppDecoder` → маппинг каналов из registry (`TelemetryChannelMapping`: `(channel, type|*) → metric, displayName, unit`) → значения;
    - payload `{type:"sensor_poll", sensor, requestId, rssi, snr, responseHex, readings:[{metric,value,unit}]}` → в outbox.
 
-Wire-детали: [docs/protocol.md](./docs/protocol.md).
+Wire-детали: [docs/reference/wire-protocol.md](./docs/reference/wire-protocol.md).
 
 ### 2.3. Ingestion в PostgreSQL
 
@@ -76,11 +76,11 @@ Ack — только после коммита транзакции (pull: `POST
 
 ### 2.4. Чтение (BFF)
 
-`/api/v1/sensors`, `/sensors/{slug}`, `/sensors/{slug}/status` (материализованный `sensor_status`, фолбэк `Unknown`), `/sensors/{slug}/latest` (последние значения с `displayName`/`unit` из `sensor_metrics`), `/dashboard` (агрегат одним payload'ом), `/sitemap.xml`. Больше нет ничего — фронт живёт на этих эндпоинтах.
+`/api/v1/sensors`, `/sensors/{slug}`, `/sensors/{slug}/status` (материализованный `sensor_status`, фолбэк `Unknown`), `/sensors/{slug}/latest` (последние значения с `displayName`/`unit` из `sensor_metrics`), `/sensors/{slug}/measurements` (история: `resolution=auto`, downsample min/avg/max, бюджет ~5k точек; ошибки — 404/400 `ValidationError`), `/sensors/{slug}/forecast` (см. §2.5), `/dashboard` (агрегат одним payload'ом), `/openapi/v1.json`, `/sitemap.xml`, `/robots.txt`. Публичное API ограничено rate limit'ом per-IP 120 req/min (политика `public-api`) — фронт живёт только на этих эндпоинтах.
 
 ### 2.5. Прогнозирование
 
-`GET /api/v1/sensors/{slug}/forecast?metric=...&horizon=1h|6h|12h|24h` читает только числовые значения выбранной пары датчик/метрика. PostgreSQL агрегирует историю в равномерные UTC-buckets; `MeshSMO.Sensors.Forecasting` проверяет полноту ряда, выполняет rolling backtest SSA против last-value и seasonal-naive baseline и возвращает прогноз только после quality gate. Готовый ответ кратковременно кешируется в памяти BFF; single-flight и глобальный semaphore ограничивают CPU. Прогнозные точки и модели в БД не сохраняются. Подробный контракт: [docs/sensor-forecasting-spec.md](./docs/sensor-forecasting-spec.md).
+`GET /api/v1/sensors/{slug}/forecast?metric=...&horizon=1h|6h|12h|24h` читает только числовые значения выбранной пары датчик/метрика. PostgreSQL агрегирует историю в равномерные UTC-buckets; `MeshSMO.Sensors.Forecasting` проверяет полноту ряда, выполняет rolling backtest SSA против last-value и seasonal-naive baseline и возвращает прогноз только после quality gate. Готовый ответ кратковременно кешируется в памяти BFF; single-flight и глобальный semaphore ограничивают CPU. Прогнозные точки и модели в БД не сохраняются. Подробный контракт: [docs/specs/forecasting-spec.md](./docs/specs/forecasting-spec.md).
 
 ## 3. Модель данных (PostgreSQL)
 
@@ -90,7 +90,7 @@ Ack — только после коммита транзакции (pull: `POST
 | `sensor_metrics` | состав метрик + presentation metadata | PK (sensor_id, metric_key); `display_name`, `unit` |
 | `measurement_samples` | один успешный ответ датчика | unique `(sensor_id, request_id)`; rssi/snr/raw_payload |
 | `measurement_values` | значения по метрикам | PK (sample_id, metric_key); unit; индекс под графики |
-| `poll_attempts` | диагастика попыток (схема есть, не заполняется) | — |
+| `poll_attempts` | диагностика попыток опроса (пишется gateway'ом, импортируется web'ом) | unique `(sensor_id, request_id, attempt_number)` |
 | `sensor_status` | материализованный статус для дашборда | 1:1 к sensor |
 | `gateway_telemetry_snapshots` | raw-архив outbox gateway (payload_json; таблица плоских readings дропнута 2026-09-06) | unique `(gateway_id, gateway_snapshot_id)` |
 
@@ -101,7 +101,7 @@ Ack — только после коммита транзакции (pull: `POST
 - `deploy/compose.yaml`: `sensor-db` → `sensor-migrator` (one-shot) → `sensor-web` (:8080 наружу) + `sensor-gateway` (без published-порта, volume `/app/data` для SQLite, ro-mount `config/`).
 - Конфигурация только env (12-factor): см. `deploy/env.example`. Секреты — в `deploy/.env` (не в git).
 - Сборки: `deploy/Dockerfile.{web,gateway,dbmigrator}`; web — node-стадия собирает фронт, dotnet-стадия публикует BFF c `/p:SkipFrontendBuild=true`.
-- CI (`.github/workflows/ci.yml`): dotnet restore/build/test, валидация registry, npm typecheck/lint/test/build, docker build трёх образов. CD пока нет.
+- CI (`.github/workflows/ci.yml`): gitleaks по истории, dotnet restore/build/test (Release), npm lint/format:check/typecheck/build, docker build трёх образов (в PR — без публикации). Registry-YAML в CI не валидируются (gitignored) — валидация выполняется на каждом старте gateway/DbMigrator. Каждый push в основную ветку публикует rolling-образы `ghcr.io/meshsmo/meshsmo-sensors-{web,gateway,dbmigrator}` (`:<ветка>`, `:sha-<hash>`); `release.yml` на теге `v*.*.*` публикует версионированные образы и создаёт GitHub Release; `codeql.yml` — статанализ безопасности.
 
 ## 5. Ключевые решения (мини-ADR)
 
@@ -119,7 +119,11 @@ Ack — только после коммита транзакции (pull: `POST
 
 ## 6. Известные ограничения / что дальше
 
-- Нет retry-окна внутри опроса, `poll_attempts` не заполняется, нет gateway health-check-компонентов (спека §53, §36).
-- Нет historical API (`/measurements` + downsampling, спека §14.2, §15) и графиков.
-- Нет OTel/metrics (только JSON console logs), нет CD в ghcr, нет backup/runbook (спека §37–42, §58–59).
-- Фронт будет переделан по `docs/frontend-redesign-prompt.md` — не вкладывайся в текущую вёрстку.
+Работает end-to-end на железе: acquisition-опрос нод (REQ + ANON-bootstrap), outbox с доставкой pull и push, пер-сенсорные расписания опроса, BFF с историей/статусами/прогнозом, фронт (дашборд, графики, карта, прогноз), регистри-конвейер YAML → PostgreSQL → prerender. Актуальный статус и грабли — [AGENTS.md](./AGENTS.md).
+
+Осознанно отложено (Phase 9/10 спеки):
+
+- нет OTel/metrics/traces (структурные console-логи), нет бэкапов/restore-runbook и soak/restore-дрелей;
+- нет security headers/CSP и container-сканов (CodeQL и gitleaks в CI есть);
+- деплой на хост ручной: CI публикует образы в ghcr, но сервер не обновляется сам;
+- из Phase 8 в бэклоге: accessibility summary графиков, performance-тест на максимальном датасете.

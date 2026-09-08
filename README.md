@@ -1,53 +1,104 @@
-# MeshSMO Sensors
+<div align="center">
 
-Сервис сбора и публикации показаний pull-only датчиков MeshSMO через MeshCore/LoRa.
+# 📡 MeshSMO Sensors
 
-Реализовано и проверено на железе:
+**Сбор и публичное отображение телеметрии pull-only датчиков через радиосеть MeshCore (LoRa)**
 
-- gateway собирает телеметрию MeshCoreTel Repeater (HTTPS или USB Serial CLI) и опрашивает pull-only датчики через acquisition API прошивки (`POST /api/request` + ANON-логин), ответы — Cayenne LPP с маппингом каналов из реестра;
-- локальная SQLite outbox в gateway; sensor-web выгружает её в PostgreSQL (ack + идемпотентность);
-- PostgreSQL-модель (sensors, measurements, gateway telemetry), one-shot DbMigrator;
-- реестр датчиков в YAML (deployment-local, в git не хранится) с валидацией, синхронизацией и prerender-маршрутами;
-- публичный `/api/v1` (sensors, latest, status, dashboard, history и on-demand forecast), sitemap.xml, robots.txt;
-- per-sensor/per-metric прогнозирование через ML.NET SSA с rolling backtest, quality gate и без хранения прогнозов в БД;
-- React Router Framework Mode с `ssr: false`, prerender и SPA fallback;
-- полный стек в Docker (`deploy/compose.yaml`), CI на GitHub Actions.
+[![CI](https://github.com/MeshSMO/MeshSMO.Sensors/actions/workflows/ci.yml/badge.svg)](https://github.com/MeshSMO/MeshSMO.Sensors/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/MeshSMO/MeshSMO.Sensors/actions/workflows/codeql.yml/badge.svg)](https://github.com/MeshSMO/MeshSMO.Sensors/actions/workflows/codeql.yml)
+[![Release](https://github.com/MeshSMO/MeshSMO.Sensors/actions/workflows/release.yml/badge.svg)](https://github.com/MeshSMO/MeshSMO.Sensors/actions/workflows/release.yml)
+[![gitleaks](https://img.shields.io/badge/secrets-gitleaks-6CC644?logo=git&logoColor=white)](./gitleaks.toml)
 
-> **Для агентов и новых разработчиков:** начни с [AGENTS.md](./AGENTS.md) — карта репозитория, команды и найденные грабли.
+[![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
+[![Frontend](https://img.shields.io/badge/TanStack%20Start-SPA%20%2B%20prerender-FF6154)](https://tanstack.com/start)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Images](https://img.shields.io/badge/images-ghcr.io%2Fmeshsmo-2496ED?logo=docker&logoColor=white)](https://github.com/orgs/MeshSMO/packages)
 
-## Документация
+**[sensors.meshsmo.ru](https://sensors.meshsmo.ru/)**
 
-| Файл | О чём |
-|---|---|
-| [AGENTS.md](./AGENTS.md) | точка входа: структура, команды, грабли, статус |
-| [ARCHITECTURE.md](./ARCHITECTURE.md) | компоненты, потоки данных, решения, ограничения |
-| [docs/protocol.md](./docs/protocol.md) | wire-протоколы: REQ/ANON, Cayenne LPP, payload'ы outbox |
-| [docs/MeshSMO-Sensors-IMPLEMENTATION_SPEC.md](./docs/MeshSMO-Sensors-IMPLEMENTATION_SPEC.md) | полная спека и план фаз |
-| [docs/repeater-firmware-acquisition-spec.md](./docs/repeater-firmware-acquisition-spec.md) | контракт прошивки репитера (acquisition) |
-| [docs/sensor-forecasting-spec.md](./docs/sensor-forecasting-spec.md) | архитектура, API, quality gates и план AI-прогноза |
+</div>
 
-## Локальная проверка без Docker
+---
 
-```powershell
-dotnet tool restore
-dotnet restore MeshSMO.Sensors.slnx
-# Собирает одновременно .NET и frontend через ProjectReference на .esproj
-dotnet build MeshSMO.Sensors.slnx --no-restore
-dotnet test MeshSMO.Sensors.slnx --no-build
-dotnet run --project src/MeshSMO.Sensors.DbMigrator -- --validate-registry
+Система собирает показания физических датчиков (температура, влажность, давление, батарея), отвечающих на mesh-запросы Cayenne LPP, складывает их в SQLite-outbox на gateway, доставляет в PostgreSQL (pull или push, ровно-однажды) и публикует через BFF-актор `/api/v1/*` с SEO-оптимизированным статическим фронтом. Есть on-demand прогноз любой числовой метрики (ML.NET SSA с quality gate) — без сохранения прогнозов в БД.
+
+Реализовано и проверено на железе.
+
+## Архитектура
+
+```mermaid
+flowchart LR
+    N["🌡️ Датчики MeshCore<br/>pull-only · Cayenne LPP"] <-- "LoRa<br/>REQ / ANON_REQ" --> R["📶 Репитер MeshCoreTel<br/>ESP32 · acquisition API"]
+    subgraph GATEWAY ["sensor-gateway (.NET Worker)"]
+        W["Poller<br/>расписания · retry"] --> O[("SQLite<br/>outbox")]
+    end
+    subgraph WEB ["sensor-web (BFF + SPA)"]
+        I["Ingestion<br/>pull / push"] --> P[("PostgreSQL 17")]
+        P --> A["API /api/v1"]
+    end
+    R <--> "HTTPS · Serial · Companion" --> W
+    O -- "батчи + ack" --> I
+    B["🌐 Браузер"] --> A
+    B --> S["Статика<br/>prerender + SPA-fallback"]
 ```
 
-Для разработки BFF и Vite запускаются одной командой. SPA proxy поднимет frontend на `http://localhost:5173`, а Vite проксирует `/api` и `/health` в BFF:
+Границы простые: **gateway не знает про PostgreSQL**, **web не знает про MeshCore**, **фронт не знает про LoRa** — только `/api/v1/*`.
 
-```powershell
+| Компонент | Что делает |
+|---|---|
+| `sensor-gateway` | Единственный, кто общается с репитером (HTTPS / USB-serial / компаньон): панельная телеметрия (opt-in) и опрос датчиков по per-sensor расписаниям. Пишет в SQLite-outbox, отдаёт батчи по внутреннему API (pull) или сам доставляет в web (push) |
+| `sensor-web` | ASP.NET Core BFF + TanStack Start SPA (статический prerender, без Node-рантайма): принимает батчи, пишет в PostgreSQL, отдаёт `/api/v1`, статику, sitemap/robots |
+| `sensor-db` | PostgreSQL 17 — только для web и DbMigrator |
+| `sensor-dbmigrator` | One-shot: EF-миграции + синк YAML-реестра датчиков в БД |
+
+## Возможности
+
+- 🔁 **Опрос pull-only нод** через acquisition API прошивки репитера: `POST /api/request` + ANON-логин bootstrap, due-time очередь, retry с randomized backoff, per-sensor расписания по времени суток (`polling.schedule` с IANA-таймзоной)
+- 📦 **Надёжная доставка**: SQLite-outbox переживает падения web; pull- и push-режимы, идемпотентность по `(sensor_id, request_id)`, ack только после коммита в PostgreSQL
+- 📊 **Публичный API**: список/детали датчиков, статусы, последние значения, история с `resolution=auto` (downsample min/avg/max, бюджет ~5k точек), дашборд-агрегат, OpenAPI на `/openapi/v1.json`, rate limit per-IP
+- 🔮 **Прогноз on demand** (ML.NET SSA): rolling backtest против baseline, quality gate, горизонты 1–24 ч, флаг `Forecasting:Enabled` — модели и прогнозы в БД не хранятся
+- 🗺️ **Фронт**: живой дашборд, страницы датчиков с графиками (recharts, зоны по значениям оси), карта нод, русская локализация
+- 🔍 **SEO без SSR**: статический prerender индексируемых маршрутов из реестра + SPA-fallback, per-route canonical, JSON-LD, sitemap
+
+## Быстрый старт
+
+### Полный стек в Docker
+
+```bash
+git clone https://github.com/MeshSMO/MeshSMO.Sensors.git
+cd MeshSMO.Sensors/deploy
+cp env.example .env        # заполнить секреты (пароли БД/репитера, ключи API)
+docker compose up -d --build
+# web → http://localhost:8080
+```
+
+Вместо локальной сборки можно запустить опубликованные образы (нужен `docker login ghcr.io` для приватных пакетов):
+
+```bash
+docker compose -f deploy/compose.yaml -f deploy/compose.registry.yaml up -d
+```
+
+Порядок старта compose: `sensor-db` → `sensor-migrator` (миграции + синк реестра, one-shot) → `sensor-web` + `sensor-gateway`.
+
+### Локальная разработка без Docker
+
+Требуется .NET 10 SDK и Node.js 24 (фронт собирается через esproj автоматически).
+
+```bash
+dotnet tool restore
+dotnet build MeshSMO.Sensors.slnx
+dotnet test tests/MeshSMO.Sensors.UnitTests
+```
+
+BFF + Vite одной командой: SPA-proxy сам поднимет фронтенд на `http://localhost:5173`, Vite проксирует `/api` и `/health` в BFF на `:5200`:
+
+```bash
 dotnet run --project src/MeshSMO.Sensors.Web --launch-profile http
 ```
 
-`dotnet publish src/MeshSMO.Sensors.Web` также собирает frontend и включает `.output/public` в `wwwroot`; Node.js в production runtime не нужен.
+Фронтенд отдельно: `cd src/web && npm ci && npm run dev` (dev-сервер на `:5173`). Публичная проекция реестра (`src/generated/sensorRegistry.json`) генерируется на prebuild из `config/sensors/*.yaml`.
 
-Отдельные frontend-команды по-прежнему доступны из `src/web` для быстрых проверок `npm run lint`, `npm run typecheck` и `npm run build`.
-
-Forecast API выключен по умолчанию. Для локальной проверки после накопления достаточной истории:
+Прогнозный API выключен по умолчанию. Для локальной проверки после накопления достаточной истории:
 
 ```powershell
 dotnet user-secrets set --project src/MeshSMO.Sensors.Web "Forecasting:Enabled" "true"
@@ -58,106 +109,63 @@ dotnet user-secrets set --project src/MeshSMO.Sensors.Web "Forecasting:MinimumHi
 dotnet run --project src/MeshSMO.Sensors.Web --launch-profile http
 ```
 
-Прогноз строится по запросу отдельно для каждой пары датчик/метрика, кешируется в
-памяти на короткое время и не создаёт таблиц или записей в PostgreSQL. Минимальная история
-настраивается отдельно для каждого горизонта через `Forecasting:MinimumHistoryDaysByHorizon`;
-`MinimumHistoryDays` используется как fallback для горизонтов без явной настройки.
+Минимальная история настраивается отдельно для каждого горизонта через `Forecasting:MinimumHistoryDaysByHorizon`; `MinimumHistoryDays` используется как fallback для горизонтов без явной настройки.
 
-## Gateway и MeshCoreTel Repeater
+> ⚠️ **Gateway локально трогает железо.** `dotnet run --project src/MeshSMO.Sensors.Gateway` шлёт реальный ANON-логин на репитер и может сбить сессию продового gateway. Для смоук-тестов отключите радио: `$env:MeshCore__Mode = "Disabled"`.
 
-Поддерживаются два прямых интерфейса репитера:
+Валидация YAML-реестра без БД (используется и в CI):
 
-- `Http` — [HTTPS API MeshCoreTel-firmware](https://vbart.github.io/MeshCoreTel-firmware/api/): `/login`, `X-Auth-Token`, `/api/command` и `/api/stats`;
-- `Serial` — USB/UART CLI репитера со скоростью `115200` по умолчанию.
-
-Запросы к устройству выполняются последовательно. Gateway переподключается после ошибок и собирает данные раз в минуту: HTTP сохраняет полный `/api/stats`, Serial — результаты `stats-core`, `stats-radio`, `stats-packets` и постраничный `sensor list`.
-
-HTTP:
-
-```powershell
-$env:MeshCore__Mode = "Http"
-$env:MeshCore__Http__BaseAddress = "https://192.168.1.123"
-$env:MeshCore__Http__AdminPassword = "your-admin-password"
-$env:MeshCore__Http__AllowInvalidServerCertificate = "true"
-dotnet run --project src/MeshSMO.Sensors.Gateway
+```bash
+dotnet run --project src/MeshSMO.Sensors.DbMigrator -- --validate-registry
 ```
 
-`AllowInvalidServerCertificate=true` нужен для штатного self-signed сертификата прошивки. Использовать этот режим следует только в доверенной локальной сети; API устройства не нужно публиковать в интернет.
+## Конфигурация
 
-Serial:
+Только переменные окружения (12-factor); полный аннотированный список — [deploy/env.example](./deploy/env.example), детали — спека §35. Ключевые:
 
-```powershell
-$env:MeshCore__Mode = "Serial"
-$env:MeshCore__Serial__PortName = "COM4" # Linux: /dev/serial/by-id/usb-...
-$env:MeshCore__Serial__BaudRate = "115200"
-dotnet run --project src/MeshSMO.Sensors.Gateway
+```text
+ConnectionStrings__Sensors=...                    # PostgreSQL (web, dbmigrator)
+Registry__Directory=config/sensors                # YAML-реестр датчиков
+MeshCore__Mode=Http|Serial|Companion|Disabled
+MeshCore__Http__BaseAddress=https://192.168.1.123
+MeshCore__Http__AdminPassword=...                 # пароль панели репитера
+SensorPolling__LoginPassword=...                  # общий пароль нод (per-node — mesh.loginPassword в YAML)
+Gateway__Mode=Pull|Push                           # доставка outbox (push: + Push__ApiUrl, ключи GATEWAY_*_API_KEY)
+Forecasting__Enabled=false                        # прогнозный API
+Forecasting__MinimumHistoryDaysByHorizon__24h=7   # минимум истории по горизонту (fallback — MinimumHistoryDays)
+Public__BaseUrl=https://sensors.meshsmo.ru        # canonical/sitemap
 ```
 
-Показания сохраняются в `data/gateway-telemetry.db`. Таблица `telemetry_snapshots` содержит исходный JSON каждого опроса, а `telemetry_readings` — развёрнутые значения с ключами вроде `core.battery_mv` и `sensors.temperature`. Записи остаются в outbox до явного `AcknowledgeAsync`, поэтому рестарт Gateway их не теряет.
-
-MQTT прошивки сейчас является исходящим uplink в настроенные MeshCoreTel/LetsMesh брокеры, а не прямым локальным command transport. Поэтому отдельного режима `Mqtt` в Gateway нет.
-
-## Миграции и синхронизация реестра
-
-DbMigrator требует доступную PostgreSQL и connection string из окружения:
-
-```powershell
-$env:ConnectionStrings__Sensors = "Host=localhost;Port=5432;Database=meshsmo_sensors;Username=meshsmo;Password=..."
-dotnet run --project src/MeshSMO.Sensors.DbMigrator
-```
-
-Обычные Web и Gateway процессы миграции не запускают. Новую миграцию создавать так:
-
-```powershell
-dotnet ef migrations add MigrationName `
-  --project src/MeshSMO.Sensors.Infrastructure `
-  --startup-project src/MeshSMO.Sensors.Infrastructure `
-  --context SensorsDbContext `
-  --output-dir Persistence/Migrations
-```
+Секреты в git не хранятся: реестр датчиков `config/sensors/*.yaml` gitignored (в репозитории только `schema.json`), пароли нод подставляются из env через `${VAR}`. Литеральный `$` в `deploy/.env` экранируется как `$$`.
 
 ## CI и релизы
 
-GitHub Actions (`.github/workflows`):
+- **CI** (`ci.yml`) — gitleaks по истории, .NET build + тесты (Release), фронт: lint + Prettier + typecheck + build, сборка трёх Docker-образов (в PR — без публикации). Каждый push в `master` публикует rolling-образы `ghcr.io/meshsmo/meshsmo-sensors-{web,gateway,dbmigrator}` с тегами `<ветка>` и `sha-<hash>` (amd64; gateway/dbmigrator ещё и arm64).
+- **Release** (`release.yml`) — на теге `v*.*.*`: прогоняет CI как quality gate, публикует версионированные образы (`1.2.3`, `1.2`, `1`, `latest`) и создаёт GitHub Release.
+- **CodeQL** (`codeql.yml`) — статанализ безопасности.
 
-- **CI** (`ci.yml`) — на каждый push в `main`/`master` и на PR: параллельно .NET build + unit/protocol тесты + валидация реестра, frontend typecheck/test/build и сборка трёх Docker-образов. Каждый push в основную ветку публикует rolling-образы `ghcr.io/meshsmo/meshsmo-sensors-{web,gateway,dbmigrator}` с тегами `<ветка>` и `sha-<hash>`.
-- **Release** (`release.yml`) — на push тега `v*.*.*`: прогоняет тот же CI как quality gate, публикует версионированные образы (`1.2.3`, `1.2`, `1`, `latest`) и создаёт GitHub Release с автосгенерированными notes. `workflow_dispatch` без тега переопубликует только `latest`.
+Релиз:
 
-Порядок релиза:
-
-```powershell
+```bash
 git tag v0.1.0
 git push origin v0.1.0
 ```
 
-Запуск стека из опубликованных образов вместо локальной сборки (нужен `docker login ghcr.io` для приватных пакетов):
+## Документация
 
-```bash
-docker compose -f deploy/compose.yaml -f deploy/compose.registry.yaml up -d
-```
+Полный индекс — [docs/README.md](./docs/README.md).
 
-Префикс и тег образов переопределяются переменными `MESHSMO_IMAGE_PREFIX` и `MESHSMO_IMAGE_TAG`.
+| Документ | О чём |
+|---|---|
+| [AGENTS.md](./AGENTS.md) | точка входа для агентов и новых разработчиков: структура, команды, найденные грабли, актуальный статус |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | компоненты, потоки данных, мини-ADR, ограничения |
+| [docs/specs/implementation-spec.md](./docs/specs/implementation-spec.md) | главная спека: требования, модель данных, SEO-стратегия, план фаз |
+| [docs/specs/repeater-acquisition-spec.md](./docs/specs/repeater-acquisition-spec.md) | контракт прошивки репитера (acquisition + ANON-логин) |
+| [docs/specs/forecasting-spec.md](./docs/specs/forecasting-spec.md) | прогнозирование: ML.NET SSA, quality gates, API |
+| [docs/reference/wire-protocol.md](./docs/reference/wire-protocol.md) | wire-форматы: REQ/ANON, Cayenne LPP, payload'ы outbox |
+| [CODESTYLE.md](./CODESTYLE.md) | правила кодстайла (warnings-as-errors) — читать перед C#-правками |
+| [SECURITY.md](./SECURITY.md) | политика безопасности и сообщение об уязвимостях |
 
-## Конфигурация
+## Статус
 
-Основные переменные окружения:
-
-```text
-ConnectionStrings__Sensors=...
-Registry__Directory=config/sensors
-MeshCore__Mode=Http
-MeshCore__ReconnectDelaySeconds=5
-MeshCore__TelemetryCollectionIntervalSeconds=60
-MeshCore__Http__BaseAddress=https://192.168.1.123
-MeshCore__Http__AdminPassword=...
-MeshCore__Http__AllowInvalidServerCertificate=true
-MeshCore__Http__TimeoutSeconds=15
-MeshCore__Serial__PortName=/dev/serial/by-id/usb-...
-MeshCore__Serial__BaudRate=115200
-MeshCore__Serial__CommandTimeoutSeconds=10
-LocalTelemetry__DatabasePath=data/gateway-telemetry.db
-Polling__MaxConcurrentPolls=1
-Public__BaseUrl=https://sensors.meshsmo.ru
-```
-
-Docker/Compose-файлы подготовлены в `deploy`, но для этого стартового среза локально не запускались и не проверялись.
+MVP работает end-to-end на железе. Осознанно отложено (Phase 9/10 спеки): OTel/метрики, бэкапы + runbook, security headers/CSP, restore-drill и soak-тесты, авто-деплой на хост.

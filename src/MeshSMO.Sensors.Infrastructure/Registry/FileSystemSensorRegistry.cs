@@ -16,7 +16,7 @@ public sealed partial class FileSystemSensorRegistry(
     Func<string, string?>? environmentVariableLookup = null) : ISensorRegistry
 {
     /// <summary>Wire limit: the node login password travels inside ANON_REQ as
-    /// timestamp(4) + password, 15 bytes max (docs/repeater-firmware-acquisition-spec.md §8.2).</summary>
+    /// timestamp(4) + password, 15 bytes max (docs/specs/repeater-acquisition-spec.md §8.2).</summary>
     private const int MaximumLoginPasswordBytes = 15;
 
     private readonly Func<string, string?> _environmentVariableLookup =
