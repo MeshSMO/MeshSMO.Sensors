@@ -104,7 +104,6 @@ export const forecastQueryOptions = (
       );
     },
     enabled: isBrowser && enabled && metric !== undefined,
-    staleTime: 5 * 60_000,
     retry: 0,
   });
 
