@@ -10,7 +10,8 @@ export function AboutPage() {
       <h1 className="mt-3 text-3xl font-semibold tracking-tight">{t("about.title")}</h1>
       <p className="mt-3 max-w-2xl text-muted-foreground">{t("about.description")}</p>
 
-      <ol className="mt-8 grid gap-4 sm:grid-cols-2">
+      <h2 className="mt-10 text-2xl font-semibold tracking-tight">{t("about.howTitle")}</h2>
+      <ol className="mt-4 grid gap-4 sm:grid-cols-2">
         {steps.map((step) => (
           <li key={step.title} className="panel px-5 py-5">
             <h2 className="text-base font-semibold">{step.title}</h2>
@@ -24,6 +25,7 @@ export function AboutPage() {
         <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
           <li>{t("about.limitations.coordinates")}</li>
           <li>{t("about.limitations.gaps")}</li>
+          <li>{t("about.limitations.measurements")}</li>
           <li>{t("about.limitations.thresholds")}</li>
         </ul>
       </section>
