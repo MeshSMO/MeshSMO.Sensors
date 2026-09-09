@@ -44,6 +44,8 @@ RUN apt-get update \
         || ln -s "$(basename "$omp_path")" "$(dirname "$omp_path")/libiomp5.so"; } \
     && ldd /app/runtimes/linux-x64/native/libMklImports.so | grep -q 'libiomp5.so => /' \
     && rm -rf /var/lib/apt/lists/*
+# /app/logs hosts the Serilog file sink volume; it must be writable by APP_UID.
+RUN mkdir -p /app/logs && chown -R $APP_UID /app/logs
 USER $APP_UID
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "MeshSMO.Sensors.Web.dll"]

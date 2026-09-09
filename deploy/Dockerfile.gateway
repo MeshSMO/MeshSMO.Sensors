@@ -23,7 +23,8 @@ LABEL org.opencontainers.image.description="Telemetry gateway for MeshSMO Sensor
 COPY --from=build /app/publish ./
 # curl is needed by the compose healthcheck (/health/ready).
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
-# /app/data hosts the SQLite outbox volume; it must be writable by APP_UID.
-RUN mkdir -p /app/data && chown -R $APP_UID /app/data
+# /app/data hosts the SQLite outbox volume, /app/logs the Serilog file sink;
+# both must be writable by APP_UID.
+RUN mkdir -p /app/data /app/logs && chown -R $APP_UID /app/data /app/logs
 USER $APP_UID
 ENTRYPOINT ["dotnet", "MeshSMO.Sensors.Gateway.dll"]

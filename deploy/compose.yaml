@@ -52,6 +52,9 @@ services:
       Gateway__BaseUrl: ${GATEWAY_BASE_URL:-http://sensor-gateway:8080}
       Gateway__ApiKey: ${GATEWAY_API_KEY:-}
       Gateway__Ingest__ApiKey: ${GATEWAY_INGEST_API_KEY:-}
+    volumes:
+      # Файловый лог Serilog (EF SQL пишется только сюда, не в консоль)
+      - sensor-web-logs:/app/logs
     depends_on:
       sensor-migrator:
         condition: service_completed_successfully
@@ -96,6 +99,7 @@ services:
         required: false
     volumes:
       - sensor-gateway-data:/app/data
+      - sensor-gateway-logs:/app/logs
       - ../config:/app/config:ro
     healthcheck:
       # Ready = локальные ресурсы (SQLite outbox, YAML registry). Недоступность
@@ -109,3 +113,5 @@ services:
 volumes:
   sensor-db-data:
   sensor-gateway-data:
+  sensor-web-logs:
+  sensor-gateway-logs:

@@ -13,14 +13,29 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Serilog;
+using Serilog.Filters;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Logging.ClearProviders();
-builder.Logging.AddSimpleConsole(options =>
-{
-    options.SingleLine = true;
-    options.TimestampFormat = "yyyy-MM-dd HH:mm:ss ";
-});
+
+// Serilog: levels live in appsettings ("Serilog:MinimumLevel", overridable via
+// Serilog__* env). EF SQL stays out of the console — one SaveChanges can emit a
+// huge multi-insert batch — but keeps flowing into the rolling file sink.
+builder.Host.UseSerilog((context, loggerConfiguration) => loggerConfiguration
+    .ReadFrom.Configuration(context.Configuration)
+    .Enrich.FromLogContext()
+    .WriteTo.Logger(console => console
+        .Filter.ByExcluding(Matching.FromSource("Microsoft.EntityFrameworkCore.Database.Command"))
+        .WriteTo.Console(outputTemplate:
+            "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}"))
+    .WriteTo.File(
+        Path.Combine(AppContext.BaseDirectory, "logs", "web-.log"),
+        outputTemplate:
+            "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}",
+        rollingInterval: RollingInterval.Day,
+        fileSizeLimitBytes: 134_217_728,
+        rollOnFileSizeLimit: true,
+        retainedFileCountLimit: 14));
 builder.Services.AddSensorsInfrastructure(builder.Configuration);
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<SensorsDbContext>("database", tags: ["ready"]);
@@ -210,5 +225,6 @@ app.MapFallback(async Task<IResult> (
 });
 
 app.Run();
+Log.CloseAndFlush();
 
 public partial class Program;

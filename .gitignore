@@ -23,6 +23,8 @@
 TestResults/
 artifacts/
 data/
+# Serilog file sink (sensors-.log rolls here when apps run outside bin/)
+logs/
 
 # Sensor registry: deployment-local, may contain node credentials
 # (mesh.loginPassword references). Only schema.json is tracked.
