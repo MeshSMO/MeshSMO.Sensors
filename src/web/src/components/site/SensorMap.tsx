@@ -59,6 +59,9 @@ export default function SensorMap({
         className: "map-dark-tiles",
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       }).addTo(map);
+      // Дефолтный префикс Leaflet (флаг + ссылка на библиотеку) не рендерим; ссылка на
+      // OpenStreetMap обязана остаться по tile usage policy — без неё режут доступ к тайлам.
+      map.attributionControl.setPrefix(false);
       mapRef.current = map;
       render();
     })();
