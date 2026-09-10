@@ -57,7 +57,8 @@ public sealed class MeasurementHistoryEndpointsTests : IDisposable
 
         var sensor = CreateSensor("smolensk-center", "Смоленск — центр", enabled: true, visible: true, "pub-key-1");
         var hidden = CreateSensor("private-node", "Private node", enabled: true, visible: false, "pub-key-2");
-        dbContext.Sensors.AddRange(sensor, hidden);
+        var anomalySensor = CreateSensor("anomaly-node", "Anomaly node", enabled: true, visible: true, "pub-key-3");
+        dbContext.Sensors.AddRange(sensor, hidden, anomalySensor);
         dbContext.SaveChanges();
         dbContext.SensorMetrics
             .Single(metric => metric.SensorId == sensor.Id && metric.MetricKey == "temperature")
@@ -76,6 +77,20 @@ public sealed class MeasurementHistoryEndpointsTests : IDisposable
             Value(sample4.Id, sensor.Id, "temperature", 28, Minute(9)),
             Value(sample2.Id, sensor.Id, "humidity", 50, Minute(3)),
             Value(nightSample.Id, sensor.Id, "solar_panel_voltage", 1.07, Night));
+        for (var index = 0; index < 8; index++)
+        {
+            var timestamp = From.AddMinutes((index - 8) * 5);
+            var sample = Sample(anomalySensor.Id, 100 + index, timestamp);
+            dbContext.MeasurementSamples.Add(sample);
+            dbContext.MeasurementValues.Add(
+                Value(sample.Id, anomalySensor.Id, "temperature", 20 + index % 2 * 0.2, timestamp));
+        }
+
+        var spikeTimestamp = From.AddMinutes(5);
+        var spikeSample = Sample(anomalySensor.Id, 108, spikeTimestamp);
+        dbContext.MeasurementSamples.Add(spikeSample);
+        dbContext.MeasurementValues.Add(
+            Value(spikeSample.Id, anomalySensor.Id, "temperature", 35, spikeTimestamp));
         dbContext.SaveChanges();
         _client = (_app.Services.GetRequiredService<IServer>() as TestServer)!.CreateClient();
     }
@@ -180,10 +195,9 @@ public sealed class MeasurementHistoryEndpointsTests : IDisposable
         var anomaly = body.GetProperty("points")[0].GetProperty("anomaly");
         Assert.Equal(SolarPanelAnomalyDetector.AnomalyCode, anomaly.GetProperty("code").GetString());
         Assert.Equal("warning", anomaly.GetProperty("severity").GetString());
-        Assert.Equal(1.07, anomaly.GetProperty("observedMaximum").GetDouble());
-        Assert.Equal(
-            SolarPanelAnomalyDetector.NightVoltageThreshold,
-            anomaly.GetProperty("expectedMaximum").GetDouble());
+        Assert.Equal(1.07, anomaly.GetProperty("observedValue").GetDouble());
+        Assert.Equal(0, anomaly.GetProperty("expectedValue").GetDouble());
+        Assert.Equal(SolarPanelAnomalyDetector.NightVoltageThreshold, anomaly.GetProperty("threshold").GetDouble());
         Assert.True(anomaly.GetProperty("solarElevationDegrees").GetDouble() < -6);
     }
 
@@ -201,6 +215,63 @@ public sealed class MeasurementHistoryEndpointsTests : IDisposable
 
         Assert.Null(anomaly);
         Assert.True(SolarPanelAnomalyDetector.SolarElevationDegrees(From, 54.7818, 32.0401) > 20);
+    }
+
+    [Theory]
+    [InlineData("temperature", RobustSeriesAnomalyDetector.TemperatureAnomalyCode, 20, 35)]
+    [InlineData("humidity", RobustSeriesAnomalyDetector.HumidityAnomalyCode, 50, 75)]
+    public void RobustSeriesAnomalyDetector_IsolatedSpike_MarksAnomaly(
+        string metricKey,
+        string expectedCode,
+        double baseline,
+        double spike)
+    {
+        var points = Enumerable.Range(0, 8)
+            .Select(index => HistoryPoint(index, baseline + (index % 2 == 0 ? -0.2 : 0.2)))
+            .Append(HistoryPoint(8, spike))
+            .ToArray();
+
+        var anomalies = RobustSeriesAnomalyDetector.Detect(
+            metricKey,
+            MeasurementResolution.FiveMinutes,
+            points);
+
+        var anomaly = Assert.Single(anomalies).Value;
+        Assert.Equal(expectedCode, anomaly.Code);
+        Assert.Equal(spike, anomaly.ObservedValue);
+        Assert.InRange(anomaly.ExpectedValue, baseline - 0.01, baseline + 0.01);
+        Assert.Null(anomaly.SolarElevationDegrees);
+    }
+
+    [Fact]
+    public void RobustSeriesAnomalyDetector_NormalDrift_DoesNotMarkAnomaly()
+    {
+        var points = Enumerable.Range(0, 24)
+            .Select(index => HistoryPoint(index, 20 + index * 0.1))
+            .ToArray();
+
+        var anomalies = RobustSeriesAnomalyDetector.Detect(
+            "temperature",
+            MeasurementResolution.FiveMinutes,
+            points);
+
+        Assert.Empty(anomalies);
+    }
+
+    [Fact]
+    public async Task Measurements_TemperatureSpike_UsesContextBeforeRequestedRange()
+    {
+        var response = await _client.GetAsync(
+            MeasurementsUri("temperature", From, From.AddMinutes(10), "raw", slug: "anomaly-node"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var points = body.GetProperty("points");
+        var point = Assert.Single(points.EnumerateArray());
+        Assert.Equal(35, point.GetProperty("avg").GetDouble());
+        Assert.Equal(
+            RobustSeriesAnomalyDetector.TemperatureAnomalyCode,
+            point.GetProperty("anomaly").GetProperty("code").GetString());
     }
 
     [Fact]
@@ -303,6 +374,9 @@ public sealed class MeasurementHistoryEndpointsTests : IDisposable
     private static DateTimeOffset Minute(int minutes) => From.AddMinutes(minutes);
 
     private static DateTimeOffset Night => new(2026, 9, 5, 19, 0, 0, TimeSpan.Zero);
+
+    private static MeasurementHistoryPoint HistoryPoint(int index, double value) =>
+        new(From.AddMinutes(index * 5), value, value, value, 1);
 
     private static string MeasurementsUri(
         string metric, DateTimeOffset from, DateTimeOffset to, string resolution, string slug = "smolensk-center") =>

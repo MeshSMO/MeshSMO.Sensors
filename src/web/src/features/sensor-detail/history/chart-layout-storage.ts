@@ -58,6 +58,6 @@ export function toCardStyle(size: CardSize | undefined): CSSProperties {
   const percentage = Math.round(size.width * 10_000) / 100;
   return {
     "--history-card-width": `${percentage}%`,
-    height: `${Math.round(size.height)}px`,
+    minHeight: `${Math.round(size.height)}px`,
   } as CSSProperties;
 }

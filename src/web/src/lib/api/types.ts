@@ -68,11 +68,12 @@ export type MeasurementPoint = {
 };
 
 export type MeasurementAnomaly = {
-  code: "unexpected_night_voltage";
+  code: "unexpected_night_voltage" | "temperature_outlier" | "humidity_outlier";
   severity: "warning";
-  observedMaximum: number;
-  expectedMaximum: number;
-  solarElevationDegrees: number;
+  observedValue: number;
+  expectedValue: number;
+  threshold: number;
+  solarElevationDegrees: number | null;
 };
 
 export type MeasurementsResponse = {

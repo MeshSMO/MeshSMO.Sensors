@@ -32,6 +32,7 @@ public static class SolarPanelAnomalyDetector
                 AnomalyCode,
                 "warning",
                 point.Max,
+                0,
                 NightVoltageThreshold,
                 solarElevation)
             : null;

@@ -76,13 +76,23 @@ public static class MeasurementHistoryEndpoints
                     $"Unknown metric '{metric}' for sensor '{sensor.Slug.Value}'.");
             }
 
-            var points = await reader.ReadAsync(
+            var contextFrom = RobustSeriesAnomalyDetector.Supports(metric, effectiveResolution)
+                ? fromValue - RobustSeriesAnomalyDetector.ContextLookback(
+                    effectiveResolution,
+                    sensor.PollIntervalSeconds)
+                : fromValue;
+            var analysisPoints = await reader.ReadAsync(
                 sensor.Id.Value,
                 metric,
-                fromValue,
+                contextFrom,
                 toValue,
                 effectiveResolution,
                 cancellationToken).ConfigureAwait(false);
+            var robustAnomalies = RobustSeriesAnomalyDetector.Detect(
+                metric,
+                effectiveResolution,
+                analysisPoints);
+            var points = analysisPoints.Where(point => point.Timestamp >= fromValue);
             return Results.Ok(new
             {
                 sensor = new { slug = sensor.Slug.Value, displayName = sensor.DisplayName },
@@ -105,7 +115,7 @@ public static class MeasurementHistoryEndpoints
                         sensor.Latitude,
                         sensor.Longitude,
                         effectiveResolution,
-                        point),
+                        point) ?? robustAnomalies.GetValueOrDefault(point.Timestamp),
                 }),
             });
         }).RequireRateLimiting("public-api");

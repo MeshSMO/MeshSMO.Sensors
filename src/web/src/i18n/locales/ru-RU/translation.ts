@@ -216,11 +216,19 @@ export const translation = {
     densityAuto: "Авто",
     densityHint:
       "Доля точек исходной частоты измерений: 100% — почти все измерения, 50% — примерно каждая вторая. Пусто — автоматическое прореживание. Чем выше плотность, тем тяжелее график.",
-    anomalyDetected_one: "Обнаружено {{count}} необычное ночное измерение.",
-    anomalyDetected_few: "Обнаружено {{count}} необычных ночных измерения.",
-    anomalyDetected_many: "Обнаружено {{count}} необычных ночных измерений.",
+    nightVoltageAnomalyDetected_one: "Обнаружено {{count}} необычное ночное измерение.",
+    nightVoltageAnomalyDetected_few: "Обнаружено {{count}} необычных ночных измерения.",
+    nightVoltageAnomalyDetected_many: "Обнаружено {{count}} необычных ночных измерений.",
+    temperatureAnomalyDetected_one: "Обнаружено {{count}} необычное отклонение температуры.",
+    temperatureAnomalyDetected_few: "Обнаружено {{count}} необычных отклонения температуры.",
+    temperatureAnomalyDetected_many: "Обнаружено {{count}} необычных отклонений температуры.",
+    humidityAnomalyDetected_one: "Обнаружено {{count}} необычное отклонение влажности.",
+    humidityAnomalyDetected_few: "Обнаружено {{count}} необычных отклонения влажности.",
+    humidityAnomalyDetected_many: "Обнаружено {{count}} необычных отклонений влажности.",
     unexpectedNightVoltageHint:
       "Напряжение появилось при Солнце ниже горизонта; возможная причина — искусственное освещение.",
+    robustAnomalyHint:
+      "Значение заметно отличается от скользящей медианы недавних измерений этого датчика; это диагностический признак, а не подтверждённая неисправность.",
     ranges: {
       "6h": "6 ч",
       "12h": "12 ч",
@@ -243,7 +251,7 @@ export const translation = {
     forecastInterval: "интервал прогноза",
     average: "среднее",
     forecast: "прогноз",
-    anomaly: "необычное ночное значение",
+    anomaly: "аномальное измерение",
     summary: "{{prefix}}среднее {{average}} {{unit}} · минимум {{minimum}} · максимум {{maximum}}",
   },
   metrics: {

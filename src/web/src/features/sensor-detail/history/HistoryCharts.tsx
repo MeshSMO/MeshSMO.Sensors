@@ -92,16 +92,35 @@ export function HistoryCharts({
 
 function AnomalySummary({ points }: { points: MeasurementPoint[] }) {
   const { t } = useTranslation();
-  const count = points.filter((point) => point.anomaly?.code === "unexpected_night_voltage").length;
-  if (count === 0) return null;
+  const code = points.find((point) => point.anomaly)?.anomaly?.code;
+  if (code === undefined) return null;
+
+  const count = points.filter((point) => point.anomaly?.code === code).length;
+
+  const message = (() => {
+    switch (code) {
+      case "temperature_outlier":
+        return t("history.temperatureAnomalyDetected", { count });
+      case "humidity_outlier":
+        return t("history.humidityAnomalyDetected", { count });
+      default:
+        return t("history.nightVoltageAnomalyDetected", { count });
+    }
+  })();
+  const hint =
+    code === "unexpected_night_voltage"
+      ? t("history.unexpectedNightVoltageHint")
+      : t("history.robustAnomalyHint");
 
   return (
-    <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs text-foreground">
-      <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-amber-400" />
-      <p>
-        <span className="font-medium">{t("history.anomalyDetected", { count })}</span>{" "}
-        {t("history.unexpectedNightVoltageHint")}
-      </p>
+    <div className="mt-3 flex items-start gap-2.5 rounded-lg border border-amber-400/25 bg-gradient-to-r from-amber-400/10 to-amber-400/3 px-3 py-2.5 text-xs leading-relaxed">
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-amber-400">
+        <TriangleAlert aria-hidden="true" className="size-3.5" />
+      </span>
+      <div className="min-w-0">
+        <p className="font-medium text-foreground">{message}</p>
+        <p className="mt-0.5 text-muted-foreground">{hint}</p>
+      </div>
     </div>
   );
 }
