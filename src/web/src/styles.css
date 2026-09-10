@@ -145,10 +145,14 @@
   min-width: 0;
 }
 
+.history-chart-card[style] {
+  min-height: var(--history-card-height, 22.5rem);
+}
+
 .history-chart-card[style] .history-metric-chart {
-  height: auto;
+  height: max(18rem, calc(var(--history-card-height, 22.5rem) - 4.5rem));
   min-height: 18rem;
-  flex: 1 1 0%;
+  flex: 0 0 auto;
 }
 
 @media (min-width: 40rem) {
