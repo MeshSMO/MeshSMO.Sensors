@@ -6,6 +6,7 @@ import {
   ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
+  Scatter,
   Tooltip,
   XAxis,
   YAxis,
@@ -20,6 +21,7 @@ import { formatDateTime, formatValue } from "@/lib/format";
 type Row = {
   t: number;
   avg: number | null;
+  anomaly: number | null;
   band: [number, number] | null;
   forecast: number | null;
   forecastBand: [number, number] | null;
@@ -106,6 +108,7 @@ export default function MetricChart({
   const rows: Row[] = points.map((p) => ({
     t: new Date(p.timestamp).getTime(),
     avg: p.avg,
+    anomaly: p.anomaly ? p.avg : null,
     band: p.min !== null && p.max !== null ? ([p.min, p.max] as [number, number]) : null,
     forecast: null,
     forecastBand: null,
@@ -126,6 +129,7 @@ export default function MetricChart({
       ...forecast.points.map((point) => ({
         t: new Date(point.timestamp).getTime(),
         avg: null,
+        anomaly: null,
         band: null,
         forecast: point.predicted,
         forecastBand: [point.lower, point.upper] as [number, number],
@@ -261,6 +265,12 @@ export default function MetricChart({
             dot={false}
             isAnimationActive={false}
             name={t("charts.average")}
+          />
+          <Scatter
+            dataKey="anomaly"
+            fill="#fb923c"
+            isAnimationActive={false}
+            name={t("charts.anomaly")}
           />
           <Line
             dataKey="forecast"

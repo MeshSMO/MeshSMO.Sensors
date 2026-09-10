@@ -100,6 +100,12 @@ public static class MeasurementHistoryEndpoints
                     min = point.Min,
                     avg = point.Avg,
                     max = point.Max,
+                    anomaly = SolarPanelAnomalyDetector.Detect(
+                        metric,
+                        sensor.Latitude,
+                        sensor.Longitude,
+                        effectiveResolution,
+                        point),
                 }),
             });
         }).RequireRateLimiting("public-api");

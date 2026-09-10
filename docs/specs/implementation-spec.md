@@ -969,11 +969,18 @@ GET /api/v1/sensors/{slug}/measurements
       "timestamp": "2026-09-04T00:00:00Z",
       "min": 17.8,
       "avg": 18.1,
-      "max": 18.6
+      "max": 18.6,
+      "anomaly": null
     }
   ]
 }
 ```
+
+Для `solar_panel_voltage` точки разрешения `raw`, `5m` и `15m` дополнительно получают
+расчётное поле `anomaly`. Значение выше `0,1 В` при высоте Солнца не более `−6°`
+помечается кодом `unexpected_night_voltage`; положение Солнца рассчитывается по UTC,
+координатам датчика и середине бакета. Это признак необычного освещения, а не утверждение
+о неисправности оборудования. Для остальных точек поле равно `null`.
 
 ## 14.3. Dashboard
 
@@ -2362,7 +2369,7 @@ MVP считается готовым, если:
 - MQTT bridge;
 - Home Assistant;
 - long-term aggregation;
-- automatic anomaly detection.
+- generic automatic anomaly detection beyond the solar-panel night rule.
 
 ---
 

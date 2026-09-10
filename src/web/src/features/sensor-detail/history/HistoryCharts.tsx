@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
+import { TriangleAlert } from "lucide-react";
 import { EmptyState, SkeletonLine } from "@/components/site/Shell";
 import HistoryChartGrid from "@/components/site/HistoryChartGrid";
 import type { ForecastResponse, MeasurementPoint } from "@/lib/api";
@@ -45,12 +46,14 @@ export function HistoryCharts({
         {populatedSeries.length > 0 ? (
           <div className="mt-3 space-y-1">
             {populatedSeries.map((item) => (
-              <ChartSummary
-                key={item.metricKey}
-                metricKey={item.metricKey}
-                points={item.points}
-                prefix={`${metricLabel(item.metricKey)}: `}
-              />
+              <div key={item.metricKey}>
+                <ChartSummary
+                  metricKey={item.metricKey}
+                  points={item.points}
+                  prefix={`${metricLabel(item.metricKey)}: `}
+                />
+                <AnomalySummary points={item.points} />
+              </div>
             ))}
           </div>
         ) : null}
@@ -77,12 +80,29 @@ export function HistoryCharts({
                 />
               </Suspense>
               <ChartSummary metricKey={item.metricKey} points={item.points} />
+              <AnomalySummary points={item.points} />
             </>
           ) : (
             <ChartPlaceholder pending={item.isPending} />
           ),
       }))}
     />
+  );
+}
+
+function AnomalySummary({ points }: { points: MeasurementPoint[] }) {
+  const { t } = useTranslation();
+  const count = points.filter((point) => point.anomaly?.code === "unexpected_night_voltage").length;
+  if (count === 0) return null;
+
+  return (
+    <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs text-foreground">
+      <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-amber-400" />
+      <p>
+        <span className="font-medium">{t("history.anomalyDetected", { count })}</span>{" "}
+        {t("history.unexpectedNightVoltageHint")}
+      </p>
+    </div>
   );
 }
 

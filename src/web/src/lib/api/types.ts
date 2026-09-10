@@ -64,6 +64,15 @@ export type MeasurementPoint = {
   min: number | null;
   avg: number | null;
   max: number | null;
+  anomaly: MeasurementAnomaly | null;
+};
+
+export type MeasurementAnomaly = {
+  code: "unexpected_night_voltage";
+  severity: "warning";
+  observedMaximum: number;
+  expectedMaximum: number;
+  solarElevationDegrees: number;
 };
 
 export type MeasurementsResponse = {

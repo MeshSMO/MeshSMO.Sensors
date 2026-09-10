@@ -67,13 +67,15 @@ public sealed class MeasurementHistoryEndpointsTests : IDisposable
         var sample2 = Sample(sensor.Id, 2, Minute(3));
         var sample3 = Sample(sensor.Id, 3, Minute(7));
         var sample4 = Sample(sensor.Id, 4, Minute(9));
-        dbContext.MeasurementSamples.AddRange(sample1, sample2, sample3, sample4);
+        var nightSample = Sample(sensor.Id, 5, Night);
+        dbContext.MeasurementSamples.AddRange(sample1, sample2, sample3, sample4, nightSample);
         dbContext.MeasurementValues.AddRange(
             Value(sample1.Id, sensor.Id, "temperature", 20, Minute(1)),
             Value(sample2.Id, sensor.Id, "temperature", 26, Minute(3)),
             Value(sample3.Id, sensor.Id, "temperature", 24, Minute(7)),
             Value(sample4.Id, sensor.Id, "temperature", 28, Minute(9)),
-            Value(sample2.Id, sensor.Id, "humidity", 50, Minute(3)));
+            Value(sample2.Id, sensor.Id, "humidity", 50, Minute(3)),
+            Value(nightSample.Id, sensor.Id, "solar_panel_voltage", 1.07, Night));
         dbContext.SaveChanges();
         _client = (_app.Services.GetRequiredService<IServer>() as TestServer)!.CreateClient();
     }
@@ -168,6 +170,40 @@ public sealed class MeasurementHistoryEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task Measurements_SolarPanelVoltageAtNight_MarksAnomaly()
+    {
+        var response = await _client.GetAsync(
+            MeasurementsUri("solar_panel_voltage", Night.AddMinutes(-1), Night.AddMinutes(1), "raw"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var anomaly = body.GetProperty("points")[0].GetProperty("anomaly");
+        Assert.Equal(SolarPanelAnomalyDetector.AnomalyCode, anomaly.GetProperty("code").GetString());
+        Assert.Equal("warning", anomaly.GetProperty("severity").GetString());
+        Assert.Equal(1.07, anomaly.GetProperty("observedMaximum").GetDouble());
+        Assert.Equal(
+            SolarPanelAnomalyDetector.NightVoltageThreshold,
+            anomaly.GetProperty("expectedMaximum").GetDouble());
+        Assert.True(anomaly.GetProperty("solarElevationDegrees").GetDouble() < -6);
+    }
+
+    [Fact]
+    public void SolarPanelAnomalyDetector_DaylightValue_IsNotAnomaly()
+    {
+        var point = new MeasurementHistoryPoint(From, 2.5, 2.5, 2.5, 1);
+
+        var anomaly = SolarPanelAnomalyDetector.Detect(
+            "solar_panel_voltage",
+            54.7818,
+            32.0401,
+            MeasurementResolution.Raw,
+            point);
+
+        Assert.Null(anomaly);
+        Assert.True(SolarPanelAnomalyDetector.SolarElevationDegrees(From, 54.7818, 32.0401) > 20);
+    }
+
+    [Fact]
     public async Task Measurements_UnknownOrHiddenSensor_Returns404()
     {
         Assert.Equal(
@@ -248,10 +284,10 @@ public sealed class MeasurementHistoryEndpointsTests : IDisposable
         enabled,
         visible,
         false,
-        null,
-        null,
-        null,
-        ["temperature", "humidity"],
+        54.7818,
+        32.0401,
+        "city",
+        ["temperature", "humidity", "solar_panel_voltage"],
         DateTimeOffset.UtcNow);
 
     private static MeasurementSample Sample(SensorId sensorId, long requestId, DateTimeOffset timestamp) =>
@@ -265,6 +301,8 @@ public sealed class MeasurementHistoryEndpointsTests : IDisposable
         };
 
     private static DateTimeOffset Minute(int minutes) => From.AddMinutes(minutes);
+
+    private static DateTimeOffset Night => new(2026, 9, 5, 19, 0, 0, TimeSpan.Zero);
 
     private static string MeasurementsUri(
         string metric, DateTimeOffset from, DateTimeOffset to, string resolution, string slug = "smolensk-center") =>

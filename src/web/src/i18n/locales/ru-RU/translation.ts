@@ -216,6 +216,11 @@ export const translation = {
     densityAuto: "Авто",
     densityHint:
       "Доля точек исходной частоты измерений: 100% — почти все измерения, 50% — примерно каждая вторая. Пусто — автоматическое прореживание. Чем выше плотность, тем тяжелее график.",
+    anomalyDetected_one: "Обнаружено {{count}} необычное ночное измерение.",
+    anomalyDetected_few: "Обнаружено {{count}} необычных ночных измерения.",
+    anomalyDetected_many: "Обнаружено {{count}} необычных ночных измерений.",
+    unexpectedNightVoltageHint:
+      "Напряжение появилось при Солнце ниже горизонта; возможная причина — искусственное освещение.",
     ranges: {
       "6h": "6 ч",
       "12h": "12 ч",
@@ -238,6 +243,7 @@ export const translation = {
     forecastInterval: "интервал прогноза",
     average: "среднее",
     forecast: "прогноз",
+    anomaly: "необычное ночное значение",
     summary: "{{prefix}}среднее {{average}} {{unit}} · минимум {{minimum}} · максимум {{maximum}}",
   },
   metrics: {
