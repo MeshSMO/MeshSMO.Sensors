@@ -72,6 +72,11 @@ public sealed class ForecastEndpointsTests : IDisposable
         var dbContext = scope.ServiceProvider.GetRequiredService<SensorsDbContext>();
         dbContext.Database.EnsureCreated();
         dbContext.Sensors.Add(CreateSensor("forecast-node", visible: true, "forecast-public-key"));
+        dbContext.Sensors.Add(CreateSensor(
+            "solar-node",
+            visible: true,
+            "solar-public-key",
+            "solar_panel_voltage"));
         dbContext.Sensors.Add(CreateSensor("hidden-node", visible: false, "hidden-public-key"));
         dbContext.SaveChanges();
         _client = (_app.Services.GetRequiredService<IServer>() as TestServer)!.CreateClient();
@@ -135,7 +140,23 @@ public sealed class ForecastEndpointsTests : IDisposable
         Assert.Equal("Forecast calculation timed out.", body.GetProperty("message").GetString());
     }
 
-    private static Sensor CreateSensor(string slug, bool visible, string publicKey) => new(
+    [Fact]
+    public async Task Forecast_SolarPanelVoltage_AppliesPhysicalBounds()
+    {
+        var response = await _client.GetAsync(
+            "/api/v1/sensors/solar-node/forecast?metric=solar_panel_voltage&horizon=1h");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(_forecastService.LastSeries);
+        Assert.Equal(0, _forecastService.LastSeries.Minimum);
+        Assert.Equal(5, _forecastService.LastSeries.Maximum);
+    }
+
+    private static Sensor CreateSensor(
+        string slug,
+        bool visible,
+        string publicKey,
+        string metric = "temperature") => new(
         new(Guid.NewGuid()),
         new(slug),
         slug,
@@ -151,7 +172,7 @@ public sealed class ForecastEndpointsTests : IDisposable
         null,
         null,
         null,
-        ["temperature"],
+        [metric],
         Now);
 
     public void Dispose()
@@ -187,13 +208,17 @@ public sealed class ForecastEndpointsTests : IDisposable
                 query.Unit,
                 query.PollInterval,
                 Now,
-                [new(Now.AddMinutes(-5), 20)]));
+                [new(Now.AddMinutes(-5), 20)],
+                query.Minimum,
+                query.Maximum,
+                query.MaximumMae));
     }
 
     private sealed class FakeForecastService : IForecastService
     {
         public int CallCount { get; private set; }
         public TimeSpan Delay { get; set; }
+        public ForecastSeries? LastSeries { get; private set; }
 
         public ForecastResult Forecast(
             ForecastSeries series,
@@ -204,6 +229,7 @@ public sealed class ForecastEndpointsTests : IDisposable
             if (Delay > TimeSpan.Zero)
                 Task.Delay(Delay, cancellationToken).GetAwaiter().GetResult();
             CallCount++;
+            LastSeries = series;
             var diagnostics = new ForecastDiagnostics(
                 "ssa",
                 12,

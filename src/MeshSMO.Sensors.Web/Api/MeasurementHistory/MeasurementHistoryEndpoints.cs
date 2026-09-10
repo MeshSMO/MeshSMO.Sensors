@@ -15,6 +15,7 @@ public static class MeasurementHistoryEndpoints
             DateTimeOffset? from,
             DateTimeOffset? to,
             string? resolution,
+            string? maxPoints,
             SensorsDbContext dbContext,
             MeasurementHistoryReader reader,
             CancellationToken cancellationToken) =>
@@ -40,6 +41,13 @@ public static class MeasurementHistoryEndpoints
 
             if (!MeasurementResolutionPolicy.TryParse(resolution, out var requestedResolution))
                 return Validation("resolution must be one of: auto, raw, 5m, 15m, 1h, 6h, 1d.");
+            if (!MeasurementResolutionPolicy.TryParseMaxPoints(maxPoints, out var pointBudget))
+            {
+                return Validation(
+                    $"maxPoints must be an integer between {MeasurementResolutionPolicy.MinimumMaxPoints} " +
+                    $"and {MeasurementResolutionPolicy.AbsoluteMaxPoints}.");
+            }
+
             if (string.IsNullOrWhiteSpace(metric))
                 return Validation("metric is required.");
             if (from is null || to is null)
@@ -51,12 +59,13 @@ public static class MeasurementHistoryEndpoints
 
             var range = toValue - fromValue;
             var effectiveResolution = requestedResolution ?? MeasurementResolutionPolicy.ResolveAuto(range);
-            var allowedRange = MeasurementResolutionPolicy.AllowedRange(effectiveResolution);
-            if (range > MeasurementResolutionPolicy.MaxRange || range > allowedRange)
+            if (range > MeasurementResolutionPolicy.MaxRange ||
+                range > MeasurementResolutionPolicy.AllowedRange(effectiveResolution, pointBudget))
             {
                 return Validation(
-                    $"Range is too large for resolution '{MeasurementResolutionPolicy.ToApiString(effectiveResolution)}'; " +
-                    $"the maximum is {MeasurementResolutionPolicy.AllowedRange(effectiveResolution).TotalDays:0} day(s).");
+                    $"Range is too large for resolution '{MeasurementResolutionPolicy.ToApiString(effectiveResolution)}' " +
+                    $"and maxPoints {pointBudget}; the maximum is " +
+                    $"{MeasurementResolutionPolicy.AllowedRange(effectiveResolution, pointBudget).TotalDays:0} day(s).");
             }
 
             var metricMeta = sensor.Metrics
@@ -83,6 +92,7 @@ public static class MeasurementHistoryEndpoints
                     from = fromValue,
                     to = toValue,
                     resolution = MeasurementResolutionPolicy.ToApiString(effectiveResolution),
+                    maxPoints = pointBudget,
                 },
                 points = points.Select(point => new
                 {

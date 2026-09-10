@@ -22,11 +22,13 @@ export function SensorHistory({
   metrics,
   selected,
   search,
+  pollIntervalSeconds,
 }: {
   slug: string;
   metrics: string[];
   selected: string[];
   search: SensorSearch;
+  pollIntervalSeconds?: number;
 }) {
   const { t } = useTranslation();
   const navigate = sensorRoute.useNavigate();
@@ -60,7 +62,14 @@ export function SensorHistory({
   });
 
   const customRange = { from: search.from, to: search.to };
-  const results = useMeasurementsMany(slug, selected, range, customRange);
+  const results = useMeasurementsMany(
+    slug,
+    selected,
+    range,
+    customRange,
+    search.density,
+    pollIntervalSeconds,
+  );
   const bounds = resolveRange(range, customRange);
   const series = selected.map((metricKey, index) => ({
     metricKey,
@@ -92,6 +101,7 @@ export function SensorHistory({
         mode={mode}
         forecast={search.forecast}
         forecastEnabled={forecastEnabled}
+        density={search.density}
         onToggleMetric={toggleMetric}
         onUpdate={(patch) => void updateSearch(patch)}
       />
@@ -103,7 +113,9 @@ export function SensorHistory({
             : forecastQuery.isError
               ? t("history.forecastError")
               : forecastQuery.data?.availability === "ready"
-                ? t("history.forecastReady")
+                ? t("history.forecastReady", {
+                    model: forecastModelName(forecastQuery.data.model?.kind, t),
+                  })
                 : forecastAvailabilityMessage(forecastQuery.data?.availability, t)}
         </p>
       ) : null}
@@ -133,6 +145,24 @@ export function SensorHistory({
       )}
     </section>
   );
+}
+
+function forecastModelName(
+  modelKind: string | undefined,
+  t: ReturnType<typeof useTranslation>["t"],
+): string {
+  switch (modelKind) {
+    case "ssa":
+      return t("history.forecastModels.ssa");
+    case "seasonal_median":
+      return t("history.forecastModels.seasonal_median");
+    case "seasonal_naive":
+      return t("history.forecastModels.seasonal_naive");
+    case "last_value":
+      return t("history.forecastModels.last_value");
+    default:
+      return t("history.forecastModels.unknown");
+  }
 }
 
 function forecastAvailabilityMessage(

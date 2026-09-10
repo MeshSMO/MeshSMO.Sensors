@@ -1,6 +1,6 @@
 import { queryOptions, useQueries, useQuery } from "@tanstack/react-query";
 import { apiGet, isBrowser, sensorPath, sensorPollInterval } from "./client";
-import { resolveRange, type CustomRange, type RangeKey } from "./ranges";
+import { resolveDensity, resolveRange, type CustomRange, type RangeKey } from "./ranges";
 import type {
   DashboardResponse,
   ForecastHorizon,
@@ -61,12 +61,14 @@ export const measurementsQueryOptions = (
   metric: string,
   range: RangeKey,
   custom?: CustomRange,
+  density?: number,
+  pollIntervalSeconds?: number,
 ) => {
   const bounds = resolveRange(range, custom);
   const rangeKey = range === "custom" ? `${bounds?.from ?? ""}|${bounds?.to ?? ""}` : range;
 
   return queryOptions({
-    queryKey: ["measurements", slug, metric, rangeKey] as const,
+    queryKey: ["measurements", slug, metric, rangeKey, density ?? "auto"] as const,
     queryFn: ({ signal }) => {
       const resolved = bounds ?? resolveRange("24h");
       if (!resolved) throw new Error("The default measurement range is invalid");
@@ -74,8 +76,15 @@ export const measurementsQueryOptions = (
         metric,
         from: resolved.from,
         to: resolved.to,
-        resolution: "auto",
       });
+      if (density === undefined) {
+        parameters.set("resolution", "auto");
+      } else {
+        const span = Date.parse(resolved.to) - Date.parse(resolved.from);
+        const dense = resolveDensity(density, span, pollIntervalSeconds);
+        parameters.set("resolution", dense.resolution);
+        parameters.set("maxPoints", String(dense.maxPoints));
+      }
       return apiGet<MeasurementsResponse>(
         `${sensorPath(slug)}/measurements?${parameters.toString()}`,
         signal,
@@ -132,8 +141,12 @@ export function useMeasurements(
   metric: string,
   range: RangeKey,
   custom?: CustomRange,
+  density?: number,
+  pollIntervalSeconds?: number,
 ) {
-  return useQuery(measurementsQueryOptions(slug, metric, range, custom));
+  return useQuery(
+    measurementsQueryOptions(slug, metric, range, custom, density, pollIntervalSeconds),
+  );
 }
 
 export function useMeasurementsMany(
@@ -141,9 +154,13 @@ export function useMeasurementsMany(
   metrics: string[],
   range: RangeKey,
   custom?: CustomRange,
+  density?: number,
+  pollIntervalSeconds?: number,
 ) {
   return useQueries({
-    queries: metrics.map((metric) => measurementsQueryOptions(slug, metric, range, custom)),
+    queries: metrics.map((metric) =>
+      measurementsQueryOptions(slug, metric, range, custom, density, pollIntervalSeconds),
+    ),
   });
 }
 

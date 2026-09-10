@@ -21,7 +21,7 @@ public sealed class SeriesPreparer(ForecastingOptions options)
         var staleAfter = TimeSpan.FromTicks(Math.Max(
             TimeSpan.FromMinutes(15).Ticks,
             series.PollInterval.Ticks * 3));
-        if (generatedAt - series.LastObservationAt.Value > staleAfter)
+        if (!options.LenientMode && generatedAt - series.LastObservationAt.Value > staleAfter)
         {
             return Unavailable(
                 ForecastAvailability.StaleData,
@@ -47,26 +47,29 @@ public sealed class SeriesPreparer(ForecastingOptions options)
 
         var observedBuckets = buckets.Keys.Order().ToArray();
         var segmentStart = observedBuckets[0];
-        for (var index = 1; index < observedBuckets.Length; index++)
+        if (!options.LenientMode)
         {
-            var missing = StepsBetween(observedBuckets[index - 1], observedBuckets[index], step) - 1;
-            if (missing > MaximumInterpolatedGap)
-                segmentStart = observedBuckets[index];
-        }
+            for (var index = 1; index < observedBuckets.Length; index++)
+            {
+                var missing = StepsBetween(observedBuckets[index - 1], observedBuckets[index], step) - 1;
+                if (missing > MaximumInterpolatedGap)
+                    segmentStart = observedBuckets[index];
+            }
 
-        var trailingMissing = StepsBetween(observedBuckets[^1], lastCompleteBucket, step);
-        if (trailingMissing > MaximumInterpolatedGap)
-        {
-            return Unavailable(
-                ForecastAvailability.SparseData,
-                "The latest complete portion of the series contains a long gap.",
-                generatedAt,
-                step);
+            var trailingMissing = StepsBetween(observedBuckets[^1], lastCompleteBucket, step);
+            if (trailingMissing > MaximumInterpolatedGap)
+            {
+                return Unavailable(
+                    ForecastAvailability.SparseData,
+                    "The latest complete portion of the series contains a long gap.",
+                    generatedAt,
+                    step);
+            }
         }
 
         var expectedCount = StepsBetween(segmentStart, lastCompleteBucket, step) + 1;
         var minimumCount = checked((int)(TimeSpan.FromDays(minimumHistoryDays).Ticks / step.Ticks));
-        if (expectedCount < minimumCount)
+        if (!options.LenientMode && expectedCount < minimumCount)
         {
             return Unavailable(
                 ForecastAvailability.InsufficientData,
@@ -88,7 +91,7 @@ public sealed class SeriesPreparer(ForecastingOptions options)
         }
 
         var coverage = (double)observedCount / expectedCount;
-        if (coverage < options.MinimumCoverage)
+        if (!options.LenientMode && coverage < options.MinimumCoverage)
         {
             return Unavailable(
                 ForecastAvailability.SparseData,
@@ -97,7 +100,7 @@ public sealed class SeriesPreparer(ForecastingOptions options)
                 step);
         }
 
-        var interpolated = FillSmallGaps(values);
+        var interpolated = FillSmallGaps(values, fillLargeGaps: options.LenientMode);
         if (values.Any(static value => value is null))
         {
             return Unavailable(
@@ -124,7 +127,7 @@ public sealed class SeriesPreparer(ForecastingOptions options)
             interpolated);
     }
 
-    private static int FillSmallGaps(double?[] values)
+    private static int FillSmallGaps(double?[] values, bool fillLargeGaps)
     {
         var interpolated = 0;
         var index = 0;
@@ -141,11 +144,24 @@ public sealed class SeriesPreparer(ForecastingOptions options)
                 index++;
 
             var length = index - start;
-            if (length > MaximumInterpolatedGap || start == 0)
+            if (start == 0)
+            {
+                if (!fillLargeGaps || index == values.Length)
+                    continue;
+
+                var first = values[index]!.Value;
+                for (var gapIndex = start; gapIndex < index; gapIndex++)
+                    values[gapIndex] = first;
+
+                interpolated += length;
+                continue;
+            }
+
+            if (length > MaximumInterpolatedGap && !fillLargeGaps)
                 continue;
 
             var left = values[start - 1]!.Value;
-            if (index == values.Length)
+            if (length > MaximumInterpolatedGap || index == values.Length)
             {
                 for (var gapIndex = start; gapIndex < index; gapIndex++)
                     values[gapIndex] = left;

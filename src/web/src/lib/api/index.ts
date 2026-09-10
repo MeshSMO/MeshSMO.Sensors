@@ -16,7 +16,7 @@ export {
   useSensors,
   useStatus,
 } from "./queries";
-export { ranges, resolveRange } from "./ranges";
+export { densityPercent, maxPointsAbsolute, ranges, resolveDensity, resolveRange } from "./ranges";
 export type { CustomRange, RangeKey } from "./ranges";
 export { forecastHorizons } from "./types";
 export type {

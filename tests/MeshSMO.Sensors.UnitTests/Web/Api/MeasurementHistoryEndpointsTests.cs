@@ -201,6 +201,39 @@ public sealed class MeasurementHistoryEndpointsTests : IDisposable
             (await _client.GetAsync(MeasurementsUri("temperature", Minute(0), Minute(0).AddHours(30), "raw"))).StatusCode);
     }
 
+    [Fact]
+    public async Task Measurements_RaisedMaxPoints_AllowsLongFineGrainedRange()
+    {
+        // 30 days at 5m buckets exceeds the default 5k budget but fits into maxPoints=50000.
+        var response = await _client.GetAsync(
+            MeasurementsUri("temperature", Minute(0), Minute(0).AddDays(30), "5m") + "&maxPoints=50000");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(50000, body.GetProperty("range").GetProperty("maxPoints").GetInt32());
+        Assert.Equal(2, body.GetProperty("points").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task Measurements_DefaultMaxPoints_StillCapsLongFineGrainedRange()
+    {
+        Assert.Equal(
+            HttpStatusCode.BadRequest,
+            (await _client.GetAsync(MeasurementsUri("temperature", Minute(0), Minute(0).AddDays(30), "5m"))).StatusCode);
+    }
+
+    [Fact]
+    public async Task Measurements_InvalidMaxPoints_Returns400()
+    {
+        foreach (var value in new[] { "0", "99", "50001", "abc", "-500" })
+        {
+            Assert.Equal(
+                HttpStatusCode.BadRequest,
+                (await _client.GetAsync(
+                    MeasurementsUri("temperature", Minute(0), Minute(15), "5m") + $"&maxPoints={value}")).StatusCode);
+        }
+    }
+
     private static Sensor CreateSensor(
         string slug, string displayName, bool enabled, bool visible, string publicKey) => new(
         new(Guid.NewGuid()),

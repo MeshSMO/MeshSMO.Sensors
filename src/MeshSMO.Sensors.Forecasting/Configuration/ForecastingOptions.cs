@@ -7,6 +7,16 @@ public sealed class ForecastingOptions
     public const string SectionName = "Forecasting";
 
     public bool Enabled { get; set; }
+
+    /// <summary>
+    /// Relaxed mode: data-quality and model-quality gates (staleness, gaps, coverage,
+    /// minimum history, MASE/baseline comparison, physical bounds) are skipped, so a
+    /// forecast is produced whenever the ML.NET runtime can technically produce one.
+    /// Hard constraints remain: forecasting enabled, at least one observation, at least
+    /// one full daily season in the training segment, finite model output. Diagnostics
+    /// still report the real metrics, so a lenient forecast stays distinguishable.
+    /// </summary>
+    public bool LenientMode { get; set; }
     public int StepMinutes { get; set; } = 5;
     public int TrainingWindowDays { get; set; } = 28;
     public int MinimumHistoryDays { get; set; } = 14;

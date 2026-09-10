@@ -69,7 +69,7 @@ export type MeasurementPoint = {
 export type MeasurementsResponse = {
   sensor: { slug: string; displayName: string };
   metric: { key: string; unit: string | null };
-  range: { from: string; to: string; resolution: string };
+  range: { from: string; to: string; resolution: string; maxPoints: number };
   points: MeasurementPoint[];
 };
 
@@ -101,7 +101,7 @@ export type ForecastResponse = {
   };
   model: {
     kind: string;
-    windowSize: number;
+    windowSize: number | null;
     trainingPoints: number;
     trainingFrom: string;
     trainingTo: string;

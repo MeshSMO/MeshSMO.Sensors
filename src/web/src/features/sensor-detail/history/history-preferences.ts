@@ -6,7 +6,7 @@ const preferencesKey = "meshsmo:sensor-history";
 
 type HistoryPreferences = Pick<
   SensorSearch,
-  "metrics" | "range" | "from" | "to" | "mode" | "forecast"
+  "metrics" | "range" | "from" | "to" | "mode" | "forecast" | "density"
 >;
 
 type SearchPatch = { [Key in keyof SensorSearch]?: SensorSearch[Key] | undefined };
@@ -84,12 +84,23 @@ export function useHistoryPreferences({
     if (search.to) preferences.to = search.to;
     if (mode === "combined") preferences.mode = mode;
     if (search.forecast) preferences.forecast = search.forecast;
+    if (search.density !== undefined) preferences.density = search.density;
 
     const value = JSON.stringify(preferences);
     if (lastSaved.current?.slug === slug && lastSaved.current.value === value) return;
     lastSaved.current = { slug, value };
     writePreferences(slug, preferences);
-  }, [mode, range, readySlug, search.forecast, search.from, search.to, selected, slug]);
+  }, [
+    mode,
+    range,
+    readySlug,
+    search.density,
+    search.forecast,
+    search.from,
+    search.to,
+    selected,
+    slug,
+  ]);
 }
 
 export type { SearchPatch };

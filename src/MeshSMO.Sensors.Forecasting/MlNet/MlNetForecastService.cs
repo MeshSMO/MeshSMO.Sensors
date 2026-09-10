@@ -10,6 +10,11 @@ namespace MeshSMO.Sensors.Forecasting.MlNet;
 
 public sealed class MlNetForecastService : IForecastService
 {
+    private const string LastValueModel = "last_value";
+    private const string SeasonalNaiveModel = "seasonal_naive";
+    private const string SeasonalMedianModel = "seasonal_median";
+    private const string SsaModel = "ssa";
+
     private static readonly TimeSpan[] CandidateWindows =
     [
         TimeSpan.FromHours(1),
@@ -55,7 +60,8 @@ public sealed class MlNetForecastService : IForecastService
         var horizonPoints = checked((int)(horizon.Ticks / step.Ticks));
         var initialTrainSize = prepared.Values.Count - (_options.BacktestFolds * horizonPoints);
         var seasonLength = checked((int)(TimeSpan.FromDays(1).Ticks / step.Ticks));
-        if (initialTrainSize < seasonLength * 2)
+        var minimumTrainSeasons = _options.LenientMode ? 1 : 2;
+        if (initialTrainSize < seasonLength * minimumTrainSeasons)
         {
             return ForecastResult.Unavailable(
                 ForecastAvailability.InsufficientData,
@@ -70,35 +76,25 @@ public sealed class MlNetForecastService : IForecastService
             .Where(windowSize => windowSize >= 2 && windowSize * 2 < initialTrainSize)
             .Distinct()
             .ToArray();
-        if (windowSizes.Length == 0)
-        {
-            return ForecastResult.Unavailable(
-                ForecastAvailability.InsufficientData,
-                "The series is too short for the configured SSA windows.",
-                utcNow,
-                series.LastObservationAt,
-                step);
-        }
-
-        var evaluations = new List<SsaCandidateEvaluation>(windowSizes.Length);
-        foreach (var windowSize in windowSizes)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            evaluations.Add(EvaluateCandidate(
-                prepared.Values,
-                horizonPoints,
-                seasonLength,
-                windowSize,
-                cancellationToken));
-        }
-
-        var best = evaluations
-            .OrderBy(static candidate => candidate.Mase)
+        var evaluations = EvaluateCandidates(
+            prepared.Values,
+            horizonPoints,
+            seasonLength,
+            windowSizes,
+            cancellationToken);
+        var eligibleEvaluations = _options.LenientMode
+            ? evaluations
+            : evaluations.Where(candidate =>
+                !string.Equals(candidate.ModelKind, SsaModel, StringComparison.Ordinal) ||
+                candidate.Mase <= _options.MaximumMase);
+        var best = eligibleEvaluations
+            .OrderBy(static candidate => candidate.Metrics.Mae)
             .ThenBy(static candidate => candidate.Metrics.Rmse)
+            .ThenBy(static candidate => ModelPreference(candidate.ModelKind))
             .ThenBy(static candidate => candidate.WindowSize)
             .First();
         var diagnostics = new ForecastDiagnostics(
-            "ssa",
+            best.ModelKind,
             best.WindowSize,
             prepared.Values.Count,
             prepared.TrainingFrom!.Value,
@@ -111,7 +107,7 @@ public sealed class MlNetForecastService : IForecastService
             best.Metrics.IntervalCoverage,
             _options.ConfidenceLevel);
 
-        var qualityReason = QualityReason(best, series);
+        var qualityReason = _options.LenientMode ? null : QualityReason(best, series);
         if (qualityReason is not null)
         {
             return new(
@@ -126,11 +122,14 @@ public sealed class MlNetForecastService : IForecastService
 
         cancellationToken.ThrowIfCancellationRequested();
         var outputHorizon = checked(horizonPoints + prepared.ForecastOffsetSteps);
-        var output = ForecastBySsa(prepared.Values, outputHorizon, best.WindowSize);
-        if (!HasValidOutput(output, outputHorizon) || HasMaterialBoundViolation(
-            output.Forecast.Skip(prepared.ForecastOffsetSteps).Take(horizonPoints),
-            series.Minimum,
-            series.Maximum))
+        var output = ForecastCandidate(prepared.Values, outputHorizon, seasonLength, best);
+        if (output is null ||
+            output.Length != outputHorizon ||
+            output.Any(static value => !float.IsFinite(value)) ||
+            (!_options.LenientMode && HasMaterialBoundViolation(
+                output.Skip(prepared.ForecastOffsetSteps).Take(horizonPoints),
+                series.Minimum,
+                series.Maximum)))
         {
             return new(
                 ForecastAvailability.LowQuality,
@@ -146,9 +145,9 @@ public sealed class MlNetForecastService : IForecastService
         for (var index = 0; index < horizonPoints; index++)
         {
             var outputIndex = index + prepared.ForecastOffsetSteps;
-            var predicted = Clamp(output.Forecast[outputIndex], series.Minimum, series.Maximum);
-            var lower = Clamp(output.Lower[outputIndex], series.Minimum, series.Maximum);
-            var upper = Clamp(output.Upper[outputIndex], series.Minimum, series.Maximum);
+            var predicted = Clamp(output[outputIndex], series.Minimum, series.Maximum);
+            var lower = Clamp(output[outputIndex] + best.LowerResiduals[index], series.Minimum, series.Maximum);
+            var upper = Clamp(output[outputIndex] + best.UpperResiduals[index], series.Minimum, series.Maximum);
             points[index] = new(
                 prepared.ForecastFrom + TimeSpan.FromTicks(step.Ticks * index),
                 predicted,
@@ -166,40 +165,157 @@ public sealed class MlNetForecastService : IForecastService
             points);
     }
 
-    private SsaCandidateEvaluation EvaluateCandidate(
+    private IReadOnlyList<ForecastCandidateEvaluation> EvaluateCandidates(
         IReadOnlyList<float> values,
         int horizon,
         int seasonLength,
-        int windowSize,
+        IReadOnlyList<int> windowSizes,
         CancellationToken cancellationToken)
     {
         var actual = new List<float>(_options.BacktestFolds * horizon);
-        var predicted = new List<float>(_options.BacktestFolds * horizon);
-        var lower = new List<float>(_options.BacktestFolds * horizon);
-        var upper = new List<float>(_options.BacktestFolds * horizon);
         var lastValuePredicted = new List<float>(_options.BacktestFolds * horizon);
         var seasonalPredicted = new List<float>(_options.BacktestFolds * horizon);
-
+        var seasonalMedianPredicted = new List<float>(_options.BacktestFolds * horizon);
         for (var fold = 0; fold < _options.BacktestFolds; fold++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var trainSize = values.Count - ((_options.BacktestFolds - fold) * horizon);
             var training = values.Take(trainSize).ToArray();
-            var validation = values.Skip(trainSize).Take(horizon).ToArray();
-            var output = ForecastBySsa(training, horizon, windowSize);
-            actual.AddRange(validation);
-            predicted.AddRange(output.Forecast);
-            lower.AddRange(output.Lower);
-            upper.AddRange(output.Upper);
+            actual.AddRange(values.Skip(trainSize).Take(horizon));
             lastValuePredicted.AddRange(NaiveForecasters.LastValue(training, horizon));
             seasonalPredicted.AddRange(NaiveForecasters.Seasonal(training, horizon, seasonLength));
+            seasonalMedianPredicted.AddRange(NaiveForecasters.SeasonalMedian(training, horizon, seasonLength));
+        }
+
+        var lastValueMetrics = ForecastMetrics.Evaluate(actual, lastValuePredicted);
+        var seasonalMetrics = ForecastMetrics.Evaluate(actual, seasonalPredicted);
+        var seasonalMedianMetrics = ForecastMetrics.Evaluate(actual, seasonalMedianPredicted);
+        var baselineMae = Math.Min(lastValueMetrics.Mae, Math.Min(seasonalMetrics.Mae, seasonalMedianMetrics.Mae));
+        var evaluations = new List<ForecastCandidateEvaluation>(windowSizes.Count + 3)
+        {
+            CalibrateCandidate(LastValueModel, null, actual, lastValuePredicted, baselineMae, horizon),
+            CalibrateCandidate(SeasonalNaiveModel, null, actual, seasonalPredicted, baselineMae, horizon),
+            CalibrateCandidate(SeasonalMedianModel, null, actual, seasonalMedianPredicted, baselineMae, horizon),
+        };
+
+        foreach (var windowSize in windowSizes)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var evaluation = EvaluateSsaCandidate(
+                values,
+                horizon,
+                windowSize,
+                baselineMae,
+                cancellationToken);
+            if (evaluation is not null)
+                evaluations.Add(evaluation);
+        }
+
+        return evaluations;
+    }
+
+    private ForecastCandidateEvaluation? EvaluateSsaCandidate(
+        IReadOnlyList<float> values,
+        int horizon,
+        int windowSize,
+        double baselineMae,
+        CancellationToken cancellationToken)
+    {
+        var actual = new List<float>(_options.BacktestFolds * horizon);
+        var predicted = new List<float>(_options.BacktestFolds * horizon);
+        for (var fold = 0; fold < _options.BacktestFolds; fold++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var trainSize = values.Count - ((_options.BacktestFolds - fold) * horizon);
+            var training = values.Take(trainSize).ToArray();
+            var output = ForecastBySsa(training, horizon, windowSize);
+            if (!HasValidOutput(output, horizon))
+                return null;
+
+            actual.AddRange(values.Skip(trainSize).Take(horizon));
+            predicted.AddRange(output.Forecast);
+        }
+
+        return CalibrateCandidate(SsaModel, windowSize, actual, predicted, baselineMae, horizon);
+    }
+
+    private ForecastCandidateEvaluation CalibrateCandidate(
+        string modelKind,
+        int? windowSize,
+        IReadOnlyList<float> actual,
+        IReadOnlyList<float> predicted,
+        double baselineMae,
+        int horizon)
+    {
+        var (lowerResiduals, upperResiduals) = CalibrateResiduals(actual, predicted, horizon);
+        var lower = new float[predicted.Count];
+        var upper = new float[predicted.Count];
+        for (var index = 0; index < predicted.Count; index++)
+        {
+            var lead = index % horizon;
+            lower[index] = ToFiniteFloat(predicted[index] + lowerResiduals[lead]);
+            upper[index] = ToFiniteFloat(predicted[index] + upperResiduals[lead]);
         }
 
         var metrics = ForecastMetrics.Evaluate(actual, predicted, lower, upper);
-        var lastValueMetrics = ForecastMetrics.Evaluate(actual, lastValuePredicted);
-        var seasonalMetrics = ForecastMetrics.Evaluate(actual, seasonalPredicted);
-        var baselineMae = Math.Min(lastValueMetrics.Mae, seasonalMetrics.Mae);
-        return new(windowSize, metrics, ForecastMetrics.RelativeMae(metrics.Mae, baselineMae));
+        return new(
+            modelKind,
+            windowSize,
+            metrics,
+            ForecastMetrics.RelativeMae(metrics.Mae, baselineMae),
+            lowerResiduals,
+            upperResiduals);
+    }
+
+    private (IReadOnlyList<double> Lower, IReadOnlyList<double> Upper) CalibrateResiduals(
+        IReadOnlyList<float> actual,
+        IReadOnlyList<float> predicted,
+        int horizon)
+    {
+        var foldCount = actual.Count / horizon;
+        var neighborhoodRadius = Math.Clamp(horizon / 48, 1, 6);
+        var lower = new double[horizon];
+        var upper = new double[horizon];
+        var tailProbability = (1 - _options.ConfidenceLevel) / 2;
+        for (var lead = 0; lead < horizon; lead++)
+        {
+            var firstNeighbor = Math.Max(0, lead - neighborhoodRadius);
+            var lastNeighbor = Math.Min(horizon - 1, lead + neighborhoodRadius);
+            var residuals = new List<double>(foldCount * ((lastNeighbor - firstNeighbor) + 1));
+            for (var fold = 0; fold < foldCount; fold++)
+            {
+                for (var neighbor = firstNeighbor; neighbor <= lastNeighbor; neighbor++)
+                {
+                    var index = (fold * horizon) + neighbor;
+                    residuals.Add(actual[index] - predicted[index]);
+                }
+            }
+
+            residuals.Sort();
+            lower[lead] = Quantile(residuals, tailProbability);
+            upper[lead] = Quantile(residuals, 1 - tailProbability);
+        }
+
+        return (lower, upper);
+    }
+
+    private float[]? ForecastCandidate(
+        IReadOnlyList<float> values,
+        int horizon,
+        int seasonLength,
+        ForecastCandidateEvaluation candidate) => candidate.ModelKind switch
+        {
+            LastValueModel => NaiveForecasters.LastValue(values, horizon),
+            SeasonalNaiveModel => NaiveForecasters.Seasonal(values, horizon, seasonLength),
+            SeasonalMedianModel => NaiveForecasters.SeasonalMedian(values, horizon, seasonLength),
+            SsaModel => ForecastSsaValues(values, horizon, candidate.WindowSize!.Value),
+            _ => throw new ArgumentOutOfRangeException(nameof(candidate), candidate.ModelKind, null),
+        };
+
+    private float[]? ForecastSsaValues(IReadOnlyList<float> values, int horizon, int windowSize)
+    {
+        var output = ForecastBySsa(values, horizon, windowSize);
+        return HasValidOutput(output, horizon) ? output.Forecast : null;
     }
 
     private SsaModelOutput ForecastBySsa(IReadOnlyList<float> values, int horizon, int windowSize)
@@ -223,10 +339,10 @@ public sealed class MlNetForecastService : IForecastService
         return engine.Predict();
     }
 
-    private string? QualityReason(SsaCandidateEvaluation evaluation, ForecastSeries series)
+    private string? QualityReason(ForecastCandidateEvaluation evaluation, ForecastSeries series)
     {
-        if (!double.IsFinite(evaluation.Mase) || evaluation.Mase > _options.MaximumMase)
-            return "The SSA forecast did not improve sufficiently on the naive baseline.";
+        if (!double.IsFinite(evaluation.Mase))
+            return "The forecast could not be compared with the naive baseline.";
         if (series.MaximumMae is not null && evaluation.Metrics.Mae > series.MaximumMae.Value)
             return "The forecast error exceeds the configured limit for this series.";
         if (!double.IsFinite(evaluation.Metrics.IntervalCoverage) ||
@@ -237,6 +353,30 @@ public sealed class MlNetForecastService : IForecastService
 
         return null;
     }
+
+    private static int ModelPreference(string modelKind) => modelKind switch
+    {
+        SeasonalMedianModel => 0,
+        SeasonalNaiveModel => 1,
+        LastValueModel => 2,
+        SsaModel => 3,
+        _ => int.MaxValue,
+    };
+
+    private static double Quantile(IReadOnlyList<double> sortedValues, double probability)
+    {
+        var position = (sortedValues.Count - 1) * probability;
+        var lowerIndex = (int)Math.Floor(position);
+        var upperIndex = (int)Math.Ceiling(position);
+        if (lowerIndex == upperIndex)
+            return sortedValues[lowerIndex];
+
+        var fraction = position - lowerIndex;
+        return sortedValues[lowerIndex] + ((sortedValues[upperIndex] - sortedValues[lowerIndex]) * fraction);
+    }
+
+    private static float ToFiniteFloat(double value) =>
+        (float)Math.Clamp(value, -float.MaxValue, float.MaxValue);
 
     private static double Clamp(double value, double? minimum, double? maximum)
     {

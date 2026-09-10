@@ -1,8 +1,9 @@
 import { ChevronDown, Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { forecastHorizons, ranges, type RangeKey } from "@/lib/api";
+import { densityPercent, forecastHorizons, ranges, type RangeKey } from "@/lib/api";
 import { metricLabel } from "@/lib/metrics";
 import type { ChartMode, SensorSearch } from "../route-config";
 import type { SearchPatch } from "./history-preferences";
@@ -14,6 +15,7 @@ export function HistoryControls({
   mode,
   forecast,
   forecastEnabled,
+  density,
   onToggleMetric,
   onUpdate,
 }: {
@@ -23,6 +25,7 @@ export function HistoryControls({
   mode: ChartMode;
   forecast: SensorSearch["forecast"];
   forecastEnabled: boolean;
+  density: SensorSearch["density"];
   onToggleMetric: (metric: string) => void;
   onUpdate: (patch: SearchPatch) => void;
 }) {
@@ -134,8 +137,78 @@ export function HistoryControls({
             {t(`history.ranges.${key}`)}
           </button>
         ))}
+
+        <DensityField density={density} onUpdate={onUpdate} />
       </div>
     </>
+  );
+}
+
+function DensityField({
+  density,
+  onUpdate,
+}: {
+  density: SensorSearch["density"];
+  onUpdate: (patch: SearchPatch) => void;
+}) {
+  const { t } = useTranslation();
+  const [text, setText] = useState(density === undefined ? "" : String(density));
+
+  useEffect(() => {
+    setText(density === undefined ? "" : String(density));
+  }, [density]);
+
+  const commit = (raw: string) => {
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      onUpdate({ density: undefined });
+      return;
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isInteger(parsed)) {
+      onUpdate({
+        density: Math.min(densityPercent.max, Math.max(densityPercent.min, parsed)),
+      });
+    }
+  };
+
+  return (
+    <label
+      className="ml-auto flex items-center gap-2 text-xs text-muted-foreground"
+      title={t("history.densityHint")}
+    >
+      <span>{t("history.density")}</span>
+      <span className="flex items-center rounded-md border border-border focus-within:border-accent">
+        <input
+          type="number"
+          min={densityPercent.min}
+          max={densityPercent.max}
+          step={1}
+          inputMode="numeric"
+          value={text}
+          placeholder={t("history.densityAuto")}
+          aria-label={t("history.density")}
+          onChange={(event) => setText(event.target.value)}
+          onBlur={(event) => commit(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.currentTarget.blur();
+            }
+          }}
+          className="num w-14 bg-transparent px-2 py-1.5 text-xs text-foreground outline-none"
+        />
+        <span className="pr-2">%</span>
+      </span>
+      <button
+        type="button"
+        disabled={density === undefined}
+        onClick={() => onUpdate({ density: undefined })}
+        className="rounded-md border border-border px-2 py-1.5 transition-colors hover:text-foreground disabled:cursor-default disabled:opacity-40"
+      >
+        {t("history.densityAuto")}
+      </button>
+    </label>
   );
 }
 

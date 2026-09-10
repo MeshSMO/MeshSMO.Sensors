@@ -30,5 +30,8 @@ public sealed class ForecastMetricsTests
     {
         Assert.Equal([4f, 4f, 4f], NaiveForecasters.LastValue([1, 2, 3, 4], 3));
         Assert.Equal([3f, 4f, 3f, 4f, 3f], NaiveForecasters.Seasonal([1, 2, 3, 4], 5, 2));
+        Assert.Equal(
+            [5f, 6f, 5f, 6f],
+            NaiveForecasters.SeasonalMedian([1, 2, 5, 6, 9, 10], 4, 2));
     }
 }

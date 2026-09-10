@@ -2,7 +2,7 @@ namespace MeshSMO.Sensors.Forecasting.Models;
 
 public sealed record ForecastDiagnostics(
     string ModelKind,
-    int WindowSize,
+    int? WindowSize,
     int TrainingPoints,
     DateTimeOffset TrainingFrom,
     DateTimeOffset TrainingTo,

@@ -169,9 +169,14 @@ public static class ForecastEndpoints
         string slug,
         string metric)
     {
-        var defaults = metric is "humidity" or "percentage" or "soil_moisture"
-            ? new ForecastSeriesOptions { Minimum = 0, Maximum = 100 }
-            : new ForecastSeriesOptions();
+        var defaults = metric switch
+        {
+            "humidity" or "percentage" or "soil_moisture" =>
+                new ForecastSeriesOptions { Minimum = 0, Maximum = 100 },
+            "solar_panel_voltage" =>
+                new ForecastSeriesOptions { Minimum = 0, Maximum = 5 },
+            _ => new ForecastSeriesOptions(),
+        };
         if (!options.Series.TryGetValue($"{slug}.{metric}", out var configured))
             return defaults;
 

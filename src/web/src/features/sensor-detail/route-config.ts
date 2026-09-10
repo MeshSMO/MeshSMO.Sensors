@@ -14,6 +14,7 @@ export type SensorSearch = {
   to?: string;
   mode?: "separate" | "combined";
   forecast?: ForecastHorizon;
+  density?: number;
 };
 export type ChartMode = NonNullable<SensorSearch["mode"]>;
 
@@ -25,6 +26,7 @@ export function parseSensorSearch(search: Record<string, unknown>): SensorSearch
   const to = optionalIsoDate(search["to"]);
   const mode = includes(["separate", "combined"] as const, search["mode"]);
   const forecast = includes(forecastHorizons, search["forecast"]);
+  const density = optionalDensityPercent(search["density"]);
 
   return {
     ...(metric ? { metric } : {}),
@@ -34,7 +36,14 @@ export function parseSensorSearch(search: Record<string, unknown>): SensorSearch
     ...(to ? { to } : {}),
     ...(mode ? { mode } : {}),
     ...(forecast ? { forecast } : {}),
+    ...(density !== undefined ? { density } : {}),
   };
+}
+
+function optionalDensityPercent(value: unknown): number | undefined {
+  const parsed =
+    typeof value === "number" ? Math.trunc(value) : Number.parseInt(String(value ?? ""), 10);
+  return parsed >= 1 && parsed <= 100 ? parsed : undefined;
 }
 
 function optionalText(value: unknown): string | undefined {

@@ -78,6 +78,7 @@ export function SensorPage() {
         metrics={chartableMetrics}
         selected={selectedMetrics}
         search={search}
+        pollIntervalSeconds={sensor.pollIntervalSeconds ?? 300}
       />
       <SensorDiagnostics
         slug={slug}

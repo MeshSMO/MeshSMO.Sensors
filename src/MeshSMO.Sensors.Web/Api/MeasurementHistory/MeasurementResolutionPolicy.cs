@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace MeshSMO.Sensors.Web.Api.MeasurementHistory;
 
 /// <summary>
@@ -11,6 +13,15 @@ public static class MeasurementResolutionPolicy
 
     /// <summary>Point budget per series; ranges are capped so auto resolution stays below it.</summary>
     public const int MaxPoints = 5_000;
+
+    /// <summary>
+    /// Hard ceiling for an explicit <c>maxPoints</c> query parameter; keeps payload
+    /// size and chart load bounded when the caller raises the budget above the default.
+    /// </summary>
+    public const int AbsoluteMaxPoints = 50_000;
+
+    /// <summary>Smallest accepted explicit budget; below it charts lose their shape.</summary>
+    public const int MinimumMaxPoints = 100;
 
     private static readonly (TimeSpan UpTo, MeasurementResolution Resolution)[] AutoBands =
     [
@@ -56,6 +67,29 @@ public static class MeasurementResolutionPolicy
         }
     }
 
+    /// <summary>
+    /// Parses the <c>maxPoints</c> query parameter. <c>null</c> means the default budget.
+    /// Returns false for values outside [<see cref="MinimumMaxPoints"/>, <see cref="AbsoluteMaxPoints"/>].
+    /// </summary>
+    public static bool TryParseMaxPoints(string? value, out int maxPoints)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            maxPoints = MaxPoints;
+            return true;
+        }
+
+        if (int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed) &&
+            parsed is >= MinimumMaxPoints and <= AbsoluteMaxPoints)
+        {
+            maxPoints = parsed;
+            return true;
+        }
+
+        maxPoints = MaxPoints;
+        return false;
+    }
+
     /// <summary>Short ranges stay raw; longer ones get the coarsest bucket that still charts well.</summary>
     public static MeasurementResolution ResolveAuto(TimeSpan range)
     {
@@ -68,16 +102,28 @@ public static class MeasurementResolutionPolicy
         return MeasurementResolution.OneDay;
     }
 
+    /// <inheritdoc cref="AllowedRange(MeasurementResolution, int)"/>
+    public static TimeSpan AllowedRange(MeasurementResolution resolution) =>
+        AllowedRange(resolution, MaxPoints);
+
     /// <summary>
-    /// Largest queryable range for an explicit resolution; keeps every answer
-    /// within the MaxPoints budget (spec §15) even when the caller pins the
-    /// resolution instead of using auto.
+    /// Largest queryable range for a resolution under the given point budget; keeps every
+    /// answer within the budget (spec §15) even when the caller pins the resolution.
+    /// Raw stays capped at 24 hours regardless of the budget: its row count depends on
+    /// the sensor cadence, not on bucket size.
     /// </summary>
-    public static TimeSpan AllowedRange(MeasurementResolution resolution) => resolution switch
+    public static TimeSpan AllowedRange(MeasurementResolution resolution, int maxPoints) => resolution switch
     {
         MeasurementResolution.Raw => TimeSpan.FromHours(24),
-        _ => TimeSpan.FromSeconds(BucketSeconds(resolution) * (double)MaxPoints),
+        _ => TimeSpan.FromSeconds(BucketSeconds(resolution) * (double)maxPoints),
     };
+
+    /// <summary>
+    /// Validates an explicit maxPoints request the same way <see cref="AllowedRange"/> does,
+    /// so callers can reproduce the decision without duplicating the budget arithmetic.
+    /// </summary>
+    public static bool IsRangeAllowed(MeasurementResolution resolution, TimeSpan range, int maxPoints) =>
+        range <= MaxRange && range <= AllowedRange(resolution, maxPoints);
 
     public static int BucketSeconds(MeasurementResolution resolution) => resolution switch
     {
